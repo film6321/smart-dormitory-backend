@@ -1,0 +1,60 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/* ---------- Existing Enums ---------- */
+enum Role {
+  ADMIN
+  STUDENT
+  VISITOR
+}
+
+/* ---------- Existing User Model ---------- */
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  firstName String?
+  lastName  String?
+  version   Int      @default(1) // Optimistic Concurrency Control (OCC)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  accessLogs   AccessLog[]
+  transactions Transaction[]
+}
+
+/* ---------- New AccessLog Model ---------- */
+model AccessLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  method    String
+  path      String
+  ip        String?
+  duration  Int?     
+  createdAt DateTime @default(now())
+}
+
+/* ---------- New Transaction Model ---------- */
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  amount      Decimal  @db.Decimal(10,2)
+  type        TransactionType
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+/* ---------- Transaction Type Enum ---------- */
+enum TransactionType {
+  INCOME
+  EXPENSE
+}

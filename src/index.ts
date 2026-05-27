@@ -1,0 +1,26 @@
+import app from './app';
+import { prisma } from './database/db';
+import { logger } from './logger';
+
+const PORT = process.env.PORT || 3000;
+
+const server = app.listen(PORT, () => {
+  logger.info(`Backend API Gateway is running on http://localhost:${PORT}`);
+});
+
+const shutdown = async (signal: string) => {
+  logger.info(`Received ${signal}. Shutting down gracefully...`);
+  server.close(async () => {
+    await prisma.$disconnect();
+    logger.info('HTTP server and database connections closed.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
