@@ -96,7 +96,11 @@ Use the actual codebase as the source of truth when it differs from documentatio
 
 -โปรเจ็คนี้เป็นเว็บแอป Next.js ใช้ TypeScript และ Tailwind CSS, React., Node.js, Express.js,css,html, Prisma ORM, PostgreSQL, Redis, Socket.IO, JWT, Bcrypt, python, docker, docker-compose, nginx, สำหรับโปรเจ็ค Smart-Dormitory-Management-System
 -ถามก่อนทำเสมอ
--อัพเดทสิ่งที่แก้ไขเสมอลงในไฟล์ `CHANGELOG.md`
+-ทำความเข้าใจโค้ดก่อนแก้
+-อธิบายโค้ดเน้นความเข้าใจง่าย
+-อธิบายรายระเอียดต่างๆเน้นความเข้าใจง่ายและชัดเจน
+-อธิบายสรุปเน้นใจความสำคัญและปัญหาที่ตรงจุดแบบกระชับสั้นๆ
+-อัพเดทอัตโนมัติ `CHANGELOG.md` เมื่อมีการแก้ไขโค้ดเสร็จสมบูรณ์และได้รับการยืนยันจากผู้ใช้แล้วเท่านั้น
 
 ## Commands
 
@@ -135,6 +139,8 @@ Use the actual codebase as the source of truth when it differs from documentatio
 -ตรวจสอบไฟล์ทุกไฟล์แล้วดูว่ามีส่วนไหนที่เพิ่มมาแล้วซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและขออนุญาติลบ
 -ถ้าจะเพิ่ม package ใหม่ต้องตรวจสอบก่อนว่ามี package นี้อยู่แล้วหรือไม่
 -ถ้าจะเพิ่มอะไรที่ซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและถามว่าจะเพิ่มให้ไม่หรือบอกวิธีเรียกใช้หรือหาทางเลือกอื่นที่นำมาใช้แทน
+-ตรวจสอบว่าไม่มี debug code หรือ console.log ใน product หรือทำการสร้างไฟล์มาเพื่อตรวจสอบ อย่างละเอียด
+-ตรวจสอบไฟล์ทุกไฟล์แล้วดูว่ามีส่วนไหนที่เพิ่มมาแล้วซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและขออนุญาติลบ
 
 ## Bounderies
 

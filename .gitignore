@@ -48,3 +48,6 @@ prisma/*.db-journal
 # Temporary
 tmp/
 temp/
+
+# Private uploaded files
+uploads/

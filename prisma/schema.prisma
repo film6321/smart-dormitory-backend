@@ -26,8 +26,9 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  accessLogs   AccessLog[]
-  transactions Transaction[]
+  accessLogs          AccessLog[]
+  transactions        Transaction[]
+  idCardVerifications IdCardVerification[]
 }
 
 /* ---------- New AccessLog Model ---------- */
@@ -51,6 +52,33 @@ model Transaction {
   type        TransactionType
   description String?
   createdAt   DateTime @default(now())
+}
+
+/* ---------- Sensitive Document Verification Metadata ---------- */
+model IdCardVerification {
+  id                 Int      @id @default(autoincrement())
+  userId             Int?
+  user               User?    @relation(fields: [userId], references: [id])
+  imagePath          String?
+  isThaiIdCard       Boolean
+  citizenIdMasked    String?
+  citizenIdHash      String?
+  fullNameTh         String?
+  birthDateTh        String?
+  issueDate          String?
+  expiryDate         String?
+  idDetected         Boolean  @default(false)
+  idPresent          Boolean  @default(false)
+  idChecksumValid    Boolean  @default(false)
+  reason             String?
+  ocrJobId           String?
+  processingTimeMs   Int?
+  verifiedAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  @@index([userId])
+  @@index([citizenIdHash])
+  @@index([verifiedAt])
 }
 
 /* ---------- Transaction Type Enum ---------- */
