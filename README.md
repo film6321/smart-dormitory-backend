@@ -4,7 +4,7 @@ Backend API สำหรับ Smart Dormitory Management System
 
 ## Overview
 
-- Node.js + Bun + Express + TypeScript
+- Node.js + npm + Express + TypeScript
 - Prisma ORM กับ PostgreSQL 16
 - JWT Bearer authentication
 - Modular architecture โดยแยกเป็นโมดูลใน `src/modules/`
@@ -12,7 +12,7 @@ Backend API สำหรับ Smart Dormitory Management System
 
 ## Prerequisites
 
-- Bun
+- npm
 - Docker Desktop (สำหรับ PostgreSQL/Redis)
 - Git
 
@@ -70,9 +70,9 @@ backend/
 
 ```bash
 cd backend
-bun install
-bunx prisma generate
-bun run dev
+npm install
+npmx prisma generate
+npm run dev
 ```
 
 ## Docker
@@ -84,9 +84,9 @@ docker compose up -d --build
 ## Useful Commands
 
 ```bash
-bun run lint
-bun run build
-bun run test
-bunx prisma validate
-bunx prisma generate
+npm run lint
+npm run build
+npm run test
+npmx prisma validate
+npmx prisma generate
 ```

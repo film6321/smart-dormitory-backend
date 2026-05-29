@@ -1,13 +1,9 @@
-# Dependencies
 node_modules/
-bun.lockb
+
+# Dependencies
+npm.lockb
 package-lock.json
 yarn.lock
-
-# Build
-dist/
-build/
-*.tsbuildinfo
 
 # Environment
 .env

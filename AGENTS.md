@@ -104,12 +104,12 @@ Use the actual codebase as the source of truth when it differs from documentatio
 
 ## Commands
 
--Install dependencies: bun install
--Start dev server: bun run dev
--Run lint: bun run lint
--Run build: bun run build
--Run start: bun run start
--Run test: bun run test
+-Install dependencies: npm install
+-Start dev server: npm run dev
+-Run lint: npm run lint
+-Run build: npm run build
+-Run start: npm run start
+-Run test: npm run test
 
 ## Project Structure
 
@@ -130,9 +130,9 @@ Use the actual codebase as the source of truth when it differs from documentatio
 ## Testing and Validation
 
 -ก่อนส่งงานต้องตรวจสอบ:
--bun lint
--bun run build
--bun run test
+-npm lint
+-npm run build
+-npm run test
 -ตรวจสอบว่าไม่มี TypeScript Error, ESLint Error, Prettier Error, Stylelint Error, Tailwind CSS Error, React Error, Node.js Error, Express.js Error, Prisma Error, PostgreSQL Error, Redis Error, Socket.IO Error, JWT Error, Bcrypt Error, Python Error, Docker Error, Docker Compose Error, Nginx Error, Smart-Dormitory-Management-System Error
 -ทำความเข้าใจโค้ดก่อนแก้
 -ตรวจสอบว่าไม่มี debug code หรือ console.log ใน product หรือทำการสร้างไฟล์มาเพื่อตรวจสอบ อย่างละเอียด
@@ -148,8 +148,8 @@ Use the actual codebase as the source of truth when it differs from documentatio
 -ห้ามแก้ไฟล์ โดยไม่อธิบายเหตุผลและไม่มีปรึกษา
 -ห้ามลบไฟล์สำคัญโดยไม่แจ้งก่อน
 -ห้ามเปลี่ยนโครงสร้างโปรเจ็คโดยไม่แจ้งก่อน
--ห้ามเปลี่ยน package manager จาก bun เป็น npm หรือ pnpm หรือ yarn
+-ห้ามเปลี่ยน package manager จาก npm เป็น npm หรือ pnpm หรือ yarn
 -ห้ามเปลี่ยนภาษาจาก TypeScript เป็น JavaScript
 -ห้ามแก้ไฟล์โดยไม่อ่านไฟล์อื่นก่อน
--ห้ามแก้ไขไฟล์ `bun.lock` โดยไม่ได้ไม่อธิบายเหตุผลและไม่มีปรึกษา
+-ห้ามแก้ไขไฟล์ `npm.lock` โดยไม่ได้ไม่อธิบายเหตุผลและไม่มีปรึกษา
 -ห้ามแก้ไขไฟล์ `package-lock.json` โดยไม่ได้ไม่อธิบายเหตุผลและไม่มีปรึกษา

@@ -30,7 +30,7 @@
 
 ### 2026-05-28 — OCR ID Card Verification Debugging
 
-- ตรวจสอบและแก้ไขปัญหา POST `/api/ocr/verify-id-card` โดยยืนยันว่า `localhost` บน Windows ถูกชี้ไปยัง IPv6/port ที่ไม่ใช่เซิร์ฟเวอร์ Bun ท้องถิ่น
+- ตรวจสอบและแก้ไขปัญหา POST `/api/ocr/verify-id-card` โดยยืนยันว่า `localhost` บน Windows ถูกชี้ไปยัง IPv6/port ที่ไม่ใช่เซิร์ฟเวอร์ npm ท้องถิ่น
 - ยืนยันว่าเรียก API สำเร็จเมื่อใช้ `127.0.0.1:3000` แทน `localhost:3000`
 - เพิ่ม debug log ใน `src/app.ts` เพื่อตรวจเส้นทาง request และ verify ว่า `app` โหลดโมดูล `src/app.ts` โดยตรง
 - แก้ `src/app.ts` เพื่อลด implicit `any` ใน callback ของ `router.stack.map(...)`
