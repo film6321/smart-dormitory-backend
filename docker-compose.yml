@@ -1,0 +1,40 @@
+
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: smart-dormitory-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespw}
+      POSTGRES_DB: ${POSTGRES_DB:-projectdb}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-dormitory-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3002:3000"
+    volumes:
+      - .:/app
+    command: ["npm", "run", "dev"]
+
+volumes:
+  pgdata:

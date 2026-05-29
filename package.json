@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "prisma:generate": "prisma generate",
     "test": "echo \"No backend tests yet\"",
-    "dev": "npm --watch src/index.ts",
+    "dev": "npm run prisma:generate && ts-node src/index.ts",
     "build": "tsc",
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
