@@ -1,18 +1,26 @@
 import app from './app';
 import { prisma } from './database/db';
 import { logger } from './logger';
+import { disconnectRedis } from './shared/redis';
+import { startAccessLogWorker, stopAccessLogWorker } from './workers/accessLogQueue';
+import { startOcrJobWorker, stopOcrJobWorker } from './workers/ocrJobWorker';
 
 const PORT = process.env.PORT || 3000;
 
 const server = app.listen(PORT, () => {
+  startAccessLogWorker();
+  startOcrJobWorker();
   logger.info(`Backend API Gateway is running on http://localhost:${PORT}`);
 });
 
 const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}. Shutting down gracefully...`);
   server.close(async () => {
+    await stopOcrJobWorker();
+    await stopAccessLogWorker();
+    await disconnectRedis();
     await prisma.$disconnect();
-    logger.info('HTTP server and database connections closed.');
+    logger.info('HTTP server, Redis, and database connections closed.');
     process.exit(0);
   });
 };

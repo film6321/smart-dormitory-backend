@@ -5,21 +5,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupMonitoring = void 0;
 const prom_client_1 = __importDefault(require("prom-client"));
+const logger_1 = require("../logger");
 const setupMonitoring = (app) => {
-    // บันทึกสถิติขั้นพื้นฐานของ Node (RAM, CPU, Request)
-    const collectDefaultMetrics = prom_client_1.default.collectDefaultMetrics;
-    collectDefaultMetrics({ prefix: 'dormitory_' });
-    // แขวนป้ายบอกทางให้โปรแกรมภายนอกเข้ามารับค่า
-    app.get('/metrics', async (req, res) => {
+    prom_client_1.default.collectDefaultMetrics({ prefix: 'dormitory_' });
+    app.get('/metrics', async (_req, res) => {
         try {
             res.set('Content-Type', prom_client_1.default.register.contentType);
             const metrics = await prom_client_1.default.register.metrics();
             res.status(200).send(metrics);
         }
-        catch (ex) {
-            res.status(500).send(ex);
+        catch (error) {
+            res.status(500).send(error);
         }
     });
-    console.log('✅ Prometheus Monitoring Initialized at /metrics');
+    logger_1.logger.info('Prometheus monitoring initialized at /metrics');
 };
 exports.setupMonitoring = setupMonitoring;

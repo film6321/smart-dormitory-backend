@@ -5,10 +5,19 @@
   "main": "index.js",
   "scripts": {
     "prisma:generate": "prisma generate",
-    "test": "echo \"No backend tests yet\"",
+    "prisma:validate": "prisma validate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset",
+    "test": "node --test tests/run-tests.cjs",
+    "test:typecheck": "tsc --noEmit -p tsconfig.test.json",
     "dev": "npm run prisma:generate && ts-node src/index.ts",
     "build": "tsc",
-    "lint": "eslint \"src/**/*.ts\" --fix"
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "load:k6": "k6 run tests/load/k6-smoke.js"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "keywords": [],
   "author": "",

@@ -4,8 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupSwagger = void 0;
-const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const logger_1 = require("../logger");
 const setupSwagger = (app) => {
     const options = {
         definition: {
@@ -13,7 +14,7 @@ const setupSwagger = (app) => {
             info: {
                 title: 'Smart Dormitory API',
                 version: '1.0.0',
-                description: 'ระบบจัดการหอพักอัจฉริยะ (Modular Monolith Blueprint)',
+                description: 'Smart Dormitory Management System API',
             },
             servers: [{ url: 'http://localhost:3000' }],
             components: {
@@ -26,12 +27,10 @@ const setupSwagger = (app) => {
                 },
             },
         },
-        // สแกนไฟล์ Route ทั้งหมดเพื่อสร้างเอกสาร
         apis: ['./src/modules/**/*.routes.ts'],
     };
     const specs = (0, swagger_jsdoc_1.default)(options);
-    // เปิดหน้าให้ทีมเข้ามาอ่านสเปค API
     app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(specs));
-    console.log('✅ Swagger API Docs Initialized at /api-docs');
+    logger_1.logger.info('Swagger API docs initialized at /api-docs');
 };
 exports.setupSwagger = setupSwagger;

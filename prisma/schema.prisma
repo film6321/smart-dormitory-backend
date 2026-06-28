@@ -13,6 +13,13 @@ enum Role {
   VISITOR
 }
 
+enum OcrJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 /* ---------- Existing User Model ---------- */
 model User {
   id        Int      @id @default(autoincrement())
@@ -29,6 +36,7 @@ model User {
   accessLogs          AccessLog[]
   transactions        Transaction[]
   idCardVerifications IdCardVerification[]
+  ocrJobs             OcrJob[]
 }
 
 /* ---------- New AccessLog Model ---------- */
@@ -41,6 +49,10 @@ model AccessLog {
   ip        String?
   duration  Int?     
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([path])
 }
 
 /* ---------- New Transaction Model ---------- */
@@ -52,6 +64,10 @@ model Transaction {
   type        TransactionType
   description String?
   createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 /* ---------- Sensitive Document Verification Metadata ---------- */
@@ -75,10 +91,30 @@ model IdCardVerification {
   processingTimeMs   Int?
   verifiedAt         DateTime @default(now())
   createdAt          DateTime @default(now())
+  ocrJobs            OcrJob[]  @relation("OcrJobResultVerification")
 
   @@index([userId])
   @@index([citizenIdHash])
   @@index([verifiedAt])
+}
+
+model OcrJob {
+  id                   String       @id @default(uuid())
+  userId               Int?
+  user                 User?        @relation(fields: [userId], references: [id])
+  status               OcrJobStatus @default(PENDING)
+  imagePath            String
+  resultVerificationId Int?
+  resultVerification   IdCardVerification? @relation("OcrJobResultVerification", fields: [resultVerificationId], references: [id])
+  errorMessage         String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  completedAt          DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([resultVerificationId])
 }
 
 /* ---------- Transaction Type Enum ---------- */

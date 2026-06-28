@@ -2,27 +2,40 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { prisma } from '../../database/db';
+import { logger } from '../../logger';
 import { AppError } from '../../middlewares/error-handler';
+import { deleteCacheByPattern, getJsonCache, setJsonCache } from '../../shared/cache';
 import {
   DeleteIdCardVerificationResult,
+  CreateOcrJobResult,
   IdCardVerificationDetail,
   IdCardVerificationImageResult,
   IdCardVerificationSummary,
   ListIdCardVerificationsResult,
+  OcrJobSummary,
   OcrIdCardResponse,
   VerifyIdCardOptions,
   VerifyIdCardResult,
 } from './ocr.types';
+import { enqueueOcrJob } from './ocr.queue';
 
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
-const privateUploadRoot = path.resolve(process.cwd(), 'uploads/private/id-cards');
+const uploadRoot = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/private'));
+const privateUploadRoot = path.join(uploadRoot, 'id-cards');
+const privateOcrJobRoot = path.join(uploadRoot, 'ocr-jobs');
+const idCardVerificationListCachePrefix = 'cache:ocr:id-card-verifications';
+
+const ocrCircuit = {
+  failureCount: 0,
+  openedUntil: 0,
+};
 
 interface InternalVerifyIdCardResult extends VerifyIdCardResult {
   citizenIdHash?: string;
 }
 
 const getOcrConfig = () => {
-  const baseUrl = process.env.OCR_API_BASE_URL;
+  const baseUrl = process.env.OCR_API_BASE_URL || process.env.OCR_API_URL;
   const apiKey = process.env.OCR_API_KEY;
 
   if (!baseUrl) {
@@ -37,6 +50,105 @@ const getOcrConfig = () => {
     baseUrl: normalizeBaseUrl(baseUrl),
     apiKey,
   };
+};
+
+const getNumberEnv = (key: string, fallback: number): number => {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+const sleep = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+
+const ensureOcrCircuitIsClosed = (): void => {
+  if (Date.now() < ocrCircuit.openedUntil) {
+    throw new AppError('OCR service is temporarily unavailable', 503);
+  }
+};
+
+const recordOcrSuccess = (): void => {
+  ocrCircuit.failureCount = 0;
+  ocrCircuit.openedUntil = 0;
+};
+
+const recordOcrFailure = (): void => {
+  const threshold = getNumberEnv('OCR_CIRCUIT_FAILURE_THRESHOLD', 5);
+  ocrCircuit.failureCount += 1;
+
+  if (ocrCircuit.failureCount >= threshold) {
+    const openMs = getNumberEnv('OCR_CIRCUIT_OPEN_MS', 30_000);
+    ocrCircuit.openedUntil = Date.now() + openMs;
+    logger.warn({ openMs }, 'OCR circuit breaker opened');
+  }
+};
+
+const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs: number): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const callOcrIdCardApi = async (
+  baseUrl: string,
+  apiKey: string,
+  formData: URLSearchParams,
+): Promise<{ response: Response; payload: OcrIdCardResponse }> => {
+  ensureOcrCircuitIsClosed();
+
+  const timeoutMs = getNumberEnv('OCR_TIMEOUT_MS', 10_000);
+  const retryAttempts = Math.min(getNumberEnv('OCR_RETRY_ATTEMPTS', 2), 5);
+  const retryDelayMs = getNumberEnv('OCR_RETRY_DELAY_MS', 250);
+  const maxAttempts = retryAttempts + 1;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        `${baseUrl}/api/v1/ocr/id-card`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-API-KEY': apiKey,
+          },
+          body: formData,
+        },
+        timeoutMs,
+      );
+      const payload = (await response.json().catch(() => null)) as OcrIdCardResponse | null;
+
+      if (!payload) {
+        throw new Error('OCR service returned an invalid response');
+      }
+
+      if (response.ok || response.status < 500) {
+        recordOcrSuccess();
+        return { response, payload };
+      }
+
+      throw new Error(payload.message || payload.error || 'OCR service is unavailable');
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < maxAttempts) {
+        await sleep(retryDelayMs * attempt);
+      }
+    }
+  }
+
+  recordOcrFailure();
+  logger.warn({ error: lastError }, 'OCR request failed after retries');
+  throw new AppError('OCR service is unavailable', 502);
 };
 
 const getStringValue = (value: unknown): string | undefined => {
@@ -78,13 +190,13 @@ const maskCitizenId = (citizenId: string): string => {
 
 const hashCitizenId = (citizenId: string): string => crypto.createHash('sha256').update(citizenId).digest('hex');
 
-const savePrivateIdCardImage = async (imageBase64: string, sanitizedImage: string): Promise<string> => {
+const savePrivateImage = async (root: string, imageBase64: string, sanitizedImage: string): Promise<string> => {
   const now = new Date();
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const extension = getImageExtension(imageBase64);
   const fileName = `${crypto.randomUUID()}.${extension}`;
-  const directory = path.join(privateUploadRoot, year, month);
+  const directory = path.join(root, year, month);
   const absolutePath = path.join(directory, fileName);
 
   await fs.mkdir(directory, { recursive: true });
@@ -93,8 +205,25 @@ const savePrivateIdCardImage = async (imageBase64: string, sanitizedImage: strin
   return path.relative(process.cwd(), absolutePath).replace(/\\/g, '/');
 };
 
-const resolvePrivateImagePath = (imagePath: string): string => {
+const savePrivateIdCardImage = async (imageBase64: string, sanitizedImage: string): Promise<string> =>
+  savePrivateImage(privateUploadRoot, imageBase64, sanitizedImage);
+
+const savePrivateOcrJobImage = async (imageBase64: string, sanitizedImage: string): Promise<string> =>
+  savePrivateImage(privateOcrJobRoot, imageBase64, sanitizedImage);
+
+const resolvePrivateStoredPath = (imagePath: string): string => {
   const absolutePath = path.resolve(process.cwd(), imagePath);
+  const uploadRootWithSeparator = `${uploadRoot}${path.sep}`;
+
+  if (absolutePath !== uploadRoot && !absolutePath.startsWith(uploadRootWithSeparator)) {
+    throw new AppError('Stored file path is outside private upload directory', 500);
+  }
+
+  return absolutePath;
+};
+
+const resolvePrivateImagePath = (imagePath: string): string => {
+  const absolutePath = resolvePrivateStoredPath(imagePath);
   const privateRootWithSeparator = `${privateUploadRoot}${path.sep}`;
 
   if (absolutePath !== privateUploadRoot && !absolutePath.startsWith(privateRootWithSeparator)) {
@@ -137,6 +266,13 @@ const getImageContentType = (imagePath: string): string => {
   return 'image/jpeg';
 };
 
+const readPrivateImageAsDataUrl = async (imagePath: string): Promise<string> => {
+  const absolutePath = resolvePrivateStoredPath(imagePath);
+  const image = await fs.readFile(absolutePath);
+
+  return `data:${getImageContentType(absolutePath)};base64,${image.toString('base64')}`;
+};
+
 const toSummary = (verification: {
   id: number;
   userId: number | null;
@@ -167,7 +303,138 @@ const toSummary = (verification: {
   createdAt: verification.createdAt,
 });
 
+const toOcrJobSummary = (job: {
+  id: string;
+  userId: number | null;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  resultVerificationId: number | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+}): OcrJobSummary => ({
+  id: job.id,
+  userId: job.userId,
+  status: job.status,
+  resultVerificationId: job.resultVerificationId,
+  errorMessage: job.errorMessage,
+  createdAt: job.createdAt,
+  updatedAt: job.updatedAt,
+  completedAt: job.completedAt,
+});
+
+const invalidateIdCardVerificationListCache = async (): Promise<void> => {
+  await deleteCacheByPattern(`${idCardVerificationListCachePrefix}:*`);
+};
+
 export class OcrService {
+  static async createIdCardVerificationJob(
+    imageBase64: string,
+    options: VerifyIdCardOptions = {},
+  ): Promise<CreateOcrJobResult> {
+    const sanitizedImage = stripDataUrlPrefix(imageBase64).trim();
+
+    if (!sanitizedImage) {
+      throw new AppError('imageBase64 is required', 400);
+    }
+
+    const imagePath = await savePrivateOcrJobImage(imageBase64, sanitizedImage);
+    const job = await prisma.ocrJob.create({
+      data: {
+        userId: options.userId,
+        imagePath,
+      },
+    });
+
+    try {
+      await enqueueOcrJob(job.id);
+    } catch (error) {
+      await prisma.ocrJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: 'Failed to enqueue OCR job',
+          completedAt: new Date(),
+        },
+      });
+      logger.warn({ error, jobId: job.id }, 'Failed to enqueue OCR job');
+      throw new AppError('Failed to enqueue OCR job', 503);
+    }
+
+    return toOcrJobSummary(job);
+  }
+
+  static async getIdCardVerificationJob(jobId: string): Promise<OcrJobSummary> {
+    const job = await prisma.ocrJob.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        resultVerificationId: true,
+        errorMessage: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
+      },
+    });
+
+    if (!job) {
+      throw new AppError('OCR job not found', 404);
+    }
+
+    return toOcrJobSummary(job);
+  }
+
+  static async processIdCardVerificationJob(jobId: string): Promise<void> {
+    const job = await prisma.ocrJob.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        status: true,
+        imagePath: true,
+        userId: true,
+      },
+    });
+
+    if (!job || job.status !== 'PENDING') {
+      return;
+    }
+
+    await prisma.ocrJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'PROCESSING',
+        errorMessage: null,
+      },
+    });
+
+    try {
+      const imageBase64 = await readPrivateImageAsDataUrl(job.imagePath);
+      const result = await this.verifyIdCard(imageBase64, { userId: job.userId ?? undefined });
+
+      await prisma.ocrJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          resultVerificationId: result.verificationId,
+          completedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown OCR job error';
+      await prisma.ocrJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: message,
+          completedAt: new Date(),
+        },
+      });
+      logger.warn({ error, jobId: job.id }, 'OCR job failed');
+    }
+  }
+
   static async verifyIdCard(imageBase64: string, options: VerifyIdCardOptions = {}): Promise<VerifyIdCardResult> {
     const { baseUrl, apiKey } = getOcrConfig();
     const sanitizedImage = stripDataUrlPrefix(imageBase64).trim();
@@ -179,20 +446,7 @@ export class OcrService {
     const formData = new URLSearchParams();
     formData.set('image_base64', sanitizedImage);
 
-    const response = await fetch(`${baseUrl}/api/v1/ocr/id-card`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-API-KEY': apiKey,
-      },
-      body: formData,
-    });
-
-    const payload = (await response.json().catch(() => null)) as OcrIdCardResponse | null;
-
-    if (!payload) {
-      throw new AppError('OCR service returned an invalid response', 502);
-    }
+    const { response, payload } = await callOcrIdCardApi(baseUrl, apiKey, formData);
 
     if (!response.ok && response.status >= 500) {
       throw new AppError(payload.message || payload.error || 'OCR service is unavailable', 502);
@@ -262,7 +516,7 @@ export class OcrService {
     imagePath?: string,
     userId?: number,
   ) {
-    return prisma.idCardVerification.create({
+    const verification = await prisma.idCardVerification.create({
       data: {
         userId,
         imagePath,
@@ -281,6 +535,10 @@ export class OcrService {
         processingTimeMs: result.processingTimeMs,
       },
     });
+
+    await invalidateIdCardVerificationListCache();
+
+    return verification;
   }
 
   static async deleteIdCardVerification(id: number): Promise<DeleteIdCardVerificationResult> {
@@ -302,6 +560,8 @@ export class OcrService {
       where: { id },
     });
 
+    await invalidateIdCardVerificationListCache();
+
     return {
       id,
       imageDeleted,
@@ -312,6 +572,12 @@ export class OcrService {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
     const skip = (safePage - 1) * safeLimit;
+    const cacheKey = `${idCardVerificationListCachePrefix}:${safePage}:${safeLimit}`;
+    const cached = await getJsonCache<ListIdCardVerificationsResult>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
 
     const [items, total] = await prisma.$transaction([
       prisma.idCardVerification.findMany({
@@ -337,7 +603,7 @@ export class OcrService {
       prisma.idCardVerification.count(),
     ]);
 
-    return {
+    const result = {
       items: items.map(toSummary),
       pagination: {
         page: safePage,
@@ -346,6 +612,10 @@ export class OcrService {
         totalPages: Math.ceil(total / safeLimit),
       },
     };
+
+    await setJsonCache(cacheKey, result, 30);
+
+    return result;
   }
 
   static async getIdCardVerification(id: number): Promise<IdCardVerificationDetail> {

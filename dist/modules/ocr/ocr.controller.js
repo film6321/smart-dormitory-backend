@@ -4,6 +4,38 @@ exports.OcrController = void 0;
 const api_response_1 = require("../../shared/api-response");
 const ocr_service_1 = require("./ocr.service");
 class OcrController {
+    static async createIdCardVerificationJob(req, res, next) {
+        try {
+            const { imageBase64 } = req.body;
+            const uploadedFile = req.file ?? getUploadedFileFromFields(req.files);
+            const inputImageBase64 = uploadedFile
+                ? `data:${uploadedFile.mimetype};base64,${uploadedFile.buffer.toString('base64')}`
+                : imageBase64;
+            if (!inputImageBase64 || typeof inputImageBase64 !== 'string') {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'imageBase64 or file is required'));
+            }
+            const data = await ocr_service_1.OcrService.createIdCardVerificationJob(inputImageBase64, {
+                userId: req.user?.id,
+            });
+            return res.status(202).json((0, api_response_1.createResponse)(202, 'OCR verification job accepted', data));
+        }
+        catch (error) {
+            return next(error);
+        }
+    }
+    static async getIdCardVerificationJob(req, res, next) {
+        try {
+            const { jobId } = req.params;
+            if (!jobId || typeof jobId !== 'string') {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid OCR job id'));
+            }
+            const data = await ocr_service_1.OcrService.getIdCardVerificationJob(jobId);
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'OCR verification job retrieved', data));
+        }
+        catch (error) {
+            return next(error);
+        }
+    }
     static async verifyIdCard(req, res, next) {
         try {
             const { imageBase64 } = req.body;

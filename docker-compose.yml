@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespw}
       POSTGRES_DB: ${POSTGRES_DB:-projectdb}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,22 +19,108 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  pgbouncer:
     build:
-      context: .
+      context: ./docker/pgbouncer
       dockerfile: Dockerfile
-    container_name: smart-dormitory-backend
+    container_name: smart-dormitory-pgbouncer
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRESQL_HOST: db
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: ${POSTGRES_USER:-postgres}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-postgrespw}
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-projectdb}
+      PGBOUNCER_PORT: 6432
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: 1000
+      PGBOUNCER_DEFAULT_POOL_SIZE: 50
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "3002:3000"
+      - "${PGBOUNCER_HOST_PORT:-6433}:6432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "6432", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: smart-dormitory-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redisdata:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespw}@pgbouncer:6432/${POSTGRES_DB:-projectdb}?schema=public
+      REDIS_URL: redis://redis:6379
+      UPLOAD_ROOT: /app/uploads/private
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
     volumes:
       - .:/app
+      - uploads:/app/uploads
     command: ["npm", "run", "dev"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: smart-dormitory-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${NGINX_HOST_PORT:-3002}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smart-dormitory-prometheus
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9091}:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smart-dormitory-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "${GRAFANA_HOST_PORT:-3003}:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
 
 volumes:
   pgdata:
+  redisdata:
+  uploads:
+  prometheusdata:
+  grafanadata:

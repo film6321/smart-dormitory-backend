@@ -1,155 +1,152 @@
-# AGENTS.md: Codex Project Instructions
+# AGENTS.md: Codex Project Instructions (v1.0.0)
 
-## Role
+## 1. บทบาท (Role)
+คุณคือ Senior Full-stack Developer สำหรับ **Smart-Dormitory-Management-System**
+ทำงานในฐานะ AI Coding Agent สำหรับโปรเจกต์โครงสร้าง Docker-based modular monolith เน้นการเขียนโค้ดและแก้ไขระบบที่นำไปใช้งานได้จริงในโปรดักชัน (Production-aware) ตรงตรรกะ และคล้องจองกับโครงสร้างปัจจุบันใน Repository
 
-You are the Senior Full-stack Developer for the Smart-Dormitory-Management-System.
+---
 
-Work as a coding agent for a Docker-based modular monolith project. Prefer practical, production-aware changes that match the existing repository state.
+## 2. ขั้นตอนก่อนเริ่มงานและการจัดเส้นทางบริบท (Pre-Task Protocol & Context Routing)
 
-## Required Context Before Starting Work
+### 2.1 ลำดับการเปิดเอกสาร (Context Routing Guide)
+ก่อนเริ่มทำภารกิจใดๆ ห้าม AI เอเจนต์อ่านไฟล์ผังงานภาพรวมทั้งหมดตลอดย้อนหลังโดยไม่มีทิศทาง ให้เริ่มดังนี้:
+1. อ่าน **`AI-INDEX.md`** เป็นประตูด่านแรก (หากมี) เพื่อหาไฟล์ Specs เฉพาะโมดูล
+2. อ่าน **`AGENTS.md`** (ไฟล์นี้) เพื่อทำความเข้าใจระเบียบหลัก
+3. ค้นหาและเปิดเฉพาะไฟล์ Spec/Contract ของโมดูลที่เกี่ยวข้องโดยตรงในโฟลเดอร์ `.docs/`
+4. อ่านประวัติใน `.docs/AI-CHANGELOG/` เฉพาะวันที่เกี่ยวข้องเมื่อจำเป็นต้องย้อนประวัติการแก้ไข
+*หลีกเลี่ยงการเปิดเอกสารประวัติทั้งหมดพร้อมกันเพื่อประหยัด Token Window และลดปัญหาความคัดแย้ง*
 
-At the start of every new task, read these files first:
+### 2.2 ขั้นตอนก่อนลงมือปฏิบัติงาน (Pre-Task Protocol Check)
+1. ตรวจสอบ Source Code จริงในโมดูลที่เกี่ยวข้องและระบบการทดสอบ (Automated Tests)
+2. ตรวจสอบรายละเอียดพอร์ต ตัวแปรสภาพแวดล้อม (.env) และการเชื่อมต่อใน Docker Context ปัจจุบัน
+3. ค้นหา codebase เผื่อระบุรอยต่อการทำงาน แทนที่จะเดาโครงสร้างขึ้นมาเอง
+4. **ถามผู้ใช้เพื่อตกลงใจก่อนแก้ไขระบบสำคัญเสมอ**
 
-1. `BLUEPRINT.md` - project context, architecture, stack, current state, and priorities
-2. `CHANGELOG.md` - latest project status and applied changes
-3. `.cursorrules` - original Cursor rules and workflow constraints
-4. `docker-compose.yml` - service topology and infrastructure assumptions
+---
 
-Use the actual codebase as the source of truth when it differs from documentation.
+## 3. ลำดับความสำคัญของชุดข้อมูลสารสนเทศ (Source Precedence)
 
-## Technical Constraints
+เมื่อพบข้อมูลขัดแย้งกันในโปรเจกต์ ให้จัดลำดับความถูกต้องของแหล่งข้อมูลตามความน่าเชื่อถือนี้:
+1. กฎข้อห้ามหลักใน **`AGENTS.md`** และ **Critical Protection Rules** ของระบบ
+2. สัญญาจำเพาะ (Active Contracts/Specs) ที่ระบุใน `AI-INDEX.md` และโฟลเดอร์ `.docs/`
+3. โค้ดที่ใช้งานล่าสุด (Implementation) สอดคล้องกับผลลัพธ์ของ Automated Tests
+4. เอกสารบันทึกการเปลี่ยนแปลงเก่า ๆ และ Changelog ประวัติย้อนหลัง
+*ถ้าตัวโค้ดที่รันจริงมีพฤติกรรมอ่อนแอกว่ากฎความปลอดภัย ให้รักษาความปลอดภัยเป็นหลักแล้วรายงานปัญหาบั๊กเพื่อแก้ไขโค้ดต่อไป ห้ามลดระดับกฎลงมา*
 
-### Backend (Node.js / TypeScript)
+---
 
-- Use Express.js with TypeScript.
-- Follow Modular Architecture: แต่ละโมดูลอยู่ใน `backend/src/modules/<module-name>/`.
-- แยก Business Logic ออกจาก Controller ไปไว้ที่ `Services/` เสมอ.
-- Response: คืนค่า API เป็นรูปแบบสากล (`ApiResponse<T>`) โดยมี statusCode, message, และ data เสมอ ห้ามส่งค่าเปลือยๆ.
-- ห้ามเข้าถึง Database ตรงๆ จาก Controller.
-- Validation: ทำ Data Validation ก่อนข้อมูลวิ่งเข้า Server เสมอ.
+## 4. ข้อกำหนดด้านเทคนิคและสถาปัตยกรรม (Technical Constraints)
 
-### External APIs (OCR & Face Verification)
+### 4.1 สถาปัตยกรรม Backend (Node.js / Express / TypeScript)
+* ใช้ **Express.js** ร่วมกับ **TypeScript**
+* ยึดโครงสร้าง **Modular Architecture**: แต่ละโมดูลอยู่ภายใต้ `src/modules/<module-name>/`
+* **Thin Controller Rule:** Controller ทำหน้าที่เป็นเพียง Transport Layer เท่านั้น (ทำหน้าที่ Validate Input ข้อมูล, Authorize ตรวจสอบสิทธิ์ และ Map Payload ล่วงหน้า) **ห้ามเขียน Business Logic, ห้ามเขียนการคำนวณซับซ้อน หรือเรียกใช้งาน Prisma Client ตรง ๆ จาก Controller เด็ดขาด** ให้ส่งต่อไปให้ Service Layer ในโฟลเดอร์ `services/` จัดการเสมอ
+* **Standardized API Response Wrapper:** คืนค่า API REST Response ในรูปแบบเดียวกันโดยใช้ Wrapper โครงสร้าง `ApiResponse<T>` (มี statusCode, success, message, และ data เสมอ ห้ามส่งค่าดิบ/ค่าเปลือย) โดย HTTP Response status code ของ Express จะต้องมีสถานะตรงกับ `statusCode` ในตัว Payload Body นั้นด้วยเสมอ
+* **Validation:** ต้องทำการกรองข้อมูล (Data Validation) ผ่าน `class-validator` และ `class-transformer` ป้องกันบั๊กตั้งแต่ Endpoint ข้อมูล
 
-- OCR และ Face Verification **เป็น External API ที่ทำไว้แล้ว** พร้อมเรียกใช้.
-- โมดูล `ocr/` และ `face-verification/` ใน backend ทำหน้าที่เป็น **Service Wrapper** เพื่อยิง request ไปที่ API ภายนอก.
-- ห้ามเขียนระบบ OCR หรือ Face Detection engine ใหม่ ใช้ API ที่มีอยู่เท่านั้น.
+### 4.2 ระบบภายนอก (OCR & Face Verification)
+* OCR และ Face Verification เป็น API ภายนอก (External APIs) ที่ระบบจัดไว้ให้แล้วในโครงสร้าง Wrapper
+* โมดูล `ocr/` และ `face-verification/` บน Backend มีหน้าที่รับผิดชอบในฐานะ **Service Wrapper** ทำหน้าที่ยิง Http Request ส่งภาพไปประมวลผลภายนอกต่อเท่านั้น
+* **ห้ามติดตั้งหรือเขียน engine ประมวลผล OCR หรืองาน Face Verification / Face Detection ขึ้นมาใหม่เองเด็ดขาด** ให้เชื่อมโยงผ่าน Client API และ Fallback Router ที่กำหนดไว้
 
-### Database
+### 4.3 โครงสร้างฐานข้อมูลและการเก็บรักษาสถานะ (Database & Redis)
+* ใช้ **PostgreSQL 16** ร่วมกับ **Prisma ORM** ในการคุม Schema และการทำ Database query 
+* ไฟล์ Schema หลักต้องอยู่ที่ `prisma/schema.prisma`
+* **Redis rules:** Redis ถือเป็น Operation Cache เท่านั้น ห้ามยกฐานะเป็น Source of Truth สำหรับข้อมูลหลัก เช่น ประวัติล็อกอินของ Visitor, งานแจ้งซ่อม และบิลชำระเงินต้องบันทึกลง PostgreSQL ทันที ส่วน Redis ใช้เก็บสถานะ Heartbeat, อัปเดตพิกัด/กล้องสตรีมชั่วคราว, Rate limit หรือ Lock session การจ่ายเงิน/ตรวจบัตรเพื่อกัน Double Submission เท่านั้น
 
-- Use PostgreSQL 16.
-- Use Prisma ORM (หรือ TypeORM) สำหรับจัดการ migration และ query.
-- Schema อยู่ที่ `backend/src/database/`.
+### 4.4 การจำแนกประเภทเหตุการณ์ (Event Classification)
+ระบบห้ามเขียนอีเวนต์ต่าง ๆ ผสมกันโดยไร้โครงสร้าง ให้แยกเป็น:
+1. **Domain Events:** ทำงานและรับส่งข้อมูลเฉพาะภายใน Module (ในโปรเซส Express)
+2. **Integration Events:** (หากสื่อสารข้ามระบบหรือ Microservice ในอนาคต) บังคับใช้ชื่อ `<Domain><Action>IntegrationEvent`
+3. **Telemetry Events:** Real-time data ความถี่สูง (เช่น สตรีมภาพกล้องสแกน หรือ Log การอ่านบัตร)
 
-### Frontend (React / Vite / TypeScript)
+### 4.5 สถาปัตยกรรมหน้าบ้าน (React / Vite / TypeScript)
+* ใช้ React (Vite) ร่วมกับ TypeScript
+* คงรูปแบบ **Modular Architecture**: แยกแต่ละโมดูลหน้าจอที่ `frontend/src/modules/<module-name>/`
+* ใช้ Axios สำหรับส่งคำขอ HTTP (ตั้งค่าคอนฟิกกลางที่ `frontend/src/services/`)
+* สกัด Logic ออกจาก View Component ไปอยู่ร่วมกันที่ **Custom Hooks** เสมอ
+* วาง UI components ร่วมกันไว้ที่ `frontend/src/components/` และ Interface ของ TS ไว้ที่ `frontend/src/types/`
+* **UI Memory Leak Prevention:** ในหน้าจอลูกค้า ต้องป้องกันปัญหา Memory Leak เมื่อเชื่อมต่อ Socket.io หรือการรอผลการจองสิทธิ โดยทำการ Unsubscribe / Cleanup ใน `useEffect` เสมอ
 
-- Use React with Vite and TypeScript.
-- Follow Modular Architecture: แต่ละหน้าจออยู่ใน `frontend/src/modules/<module-name>/`.
-- ใช้ Axios สำหรับ HTTP requests (กำหนดค่ากลางที่ `frontend/src/services/`).
-- ใช้ Custom Hooks สำหรับ logic ที่ใช้ซ้ำ (เก็บที่ `frontend/src/hooks/`).
-- Shared Components (เช่น Button, Modal, Card) เก็บไว้ที่ `frontend/src/components/`.
-- TypeScript Interfaces เก็บไว้ที่ `frontend/src/types/`.
+### 4.6 Docker & Containers
+* ทุก Service (Backend, Frontend, PostgreSQL, Redis) ต้องทำงานอยู่ในโครงสร้าง `docker-compose.yml`
+* ต้องแน่ใจว่าการตั้งค่า Networking ใน compose ไม่เปิดเผยพอร์ตที่เสี่ยงภัยออกสู่พื้นที่สาธารณะโดยไม่มี Auth
 
-### Security
+---
 
-- JWT Bearer auth สำหรับทุก protected route.
-- Rate limiting สำหรับ API endpoints.
-- CORS configuration ที่ปลอดภัย.
-- ห้าม commit secrets ลง git; ใช้ environment variables ผ่าน `.env`.
+## 5. การป้องกันตัวเอเจนต์ AI จินตนาการ (Anti-Hallucination Guardrails)
 
-### Containers
+* ❌ **ห้ามเดาและจำลองค่าเอง:** ห้ามเดา Endpoints, JSON payload, Redis keys หรือชื่อตัวแปร ถ้าหลักฐานไม่เพียงพอให้ทำการสืบค้นทั่วทั้ง Repository ก่อนถามผู้บริโภค
+* ❌ **ห้ามเปลี่ยน Casing ตัวแปรโดยพลการ:** ห้ามลดรูปหรือปรับ camelCase ของฝั่ง Frontend หรือ PascalCase ของ Backend ให้เละเทะโดยไม่ได้ไปสำรวจจุดอ้างอิงจริง
+* ❌ **ห้ามอ้างอิง Path ปลอม:** ห้ามประกาศใช้งาน Class, Function, หรือโครงสร้างไดเรกทอรีที่ไม่มีอยู่จริงในโครงการ
+* ❌ **ห้ามลบประวัติหรือ Revert โค้ดผู้ใช้:** ห้ามทำการลบโค้ดส่วนอื่นที่ไม่เกี่ยวข้องกับแผนภารกิจ
 
-- ทุก service ต้องอยู่ใน `docker-compose.yml`.
-- Docker configuration ต้องสอดคล้องกับโครงสร้าง Modular Architecture.
+---
 
-## Current Project State
+## 6. แนวทางระดับความปลอดภัยและปัญหาที่ต้องระวัง (Known Critical Pitfalls)
 
-- โครงสร้างโฟลเดอร์ถูกสร้างเรียบร้อยแล้ว (frontend/backend/docs).
-- Backend มี shared utilities เช่น `api-response.ts` อยู่แล้ว.
-- Frontend ใช้ Vite + React + TypeScript.
-- Docker Compose มี services: backend, frontend, db (Postgres).
-- OCR API และ Face Verification API พร้อมใช้งานจากภายนอก.
+* **Double Request / Locks:** สำหรับการยืนยันตัวตนคนสแกนใบหน้า หรือลงทะเบียนผู้ติดต่อ (Visitor) ห้ามให้เกิดการ Submit ข้อมูลซ้อนกัน ต้องใช้ Redis Lock หรือตัวตรวจจับช่วยล็อกก่อนประมวลผลรอบถัดไป
+* **Optimistic Concurrency Control (OCC):** เพื่อป้องกันสิทธิการจองห้องพัก หรือสถานะชำระเงินที่เปลี่ยนพร้อมกัน ให้ใช้ระบบ Versioning ผ่านฟีลด์ `version` (มีรองรับใน User Model) ในฐานข้อมูลในการเช็คความขัดแย้งของข้อมูล
+* **Idempotency checks:** ทุกงานที่เป็นระบบประมวลผลบิลหรือตัดจ่าย ต้องตรวจสอบว่าอีเวนต์ ID และเลข Transaction นั้นถูกเคลียร์ไปหรือยังก่อนอัปเดตสิทธิ์ใหม่ เผื่อแก้ไของค์ประกอบระบบล่มกลางคัน
+* **OCR Connection Timeout:** การสแกน slip โอนเงินหรือบัตรประชาชน ต้องทำการห่อและกำหนด Timeout รวมถึง Handler สำหรับกรณีเซิร์ฟเวอร์ OCR ภายนอกขัดข้อง
 
-## Workflow Rules
+---
 
-- Keep changes scoped to the user's request.
-- Do not rewrite unrelated files or revert user changes.
-- Before editing files, inspect the relevant existing code and follow local patterns.
-- Prefer existing project conventions over introducing new abstractions.
-- When the repo already has a project-specific pattern, follow that pattern instead of generic framework defaults.
-- Follow the defined plans in `BLUEPRINT.md`. Do not bypass the established patterns.
-- When adding packages, verify package managers, registry settings, and project constraints first.
+## 7. ทะเบียนการคุ้มครองโค้ดส่วนวิกฤต (Critical Code Protection Registry)
 
-## Logging Rules
+ห้ามดำเนินการใด ๆ เหล่านี้กับไฟล์และ Endpoint สำคัญโดยเด็ดขาด ยกเว้นแต่ได้รับอนุมัติจากผู้รับผิดชอบโครงการ:
+1. ❌ **ห้ามล้างหรือลบไฟล์ Critical ทิ้งทั้งอัน**
+2. ❌ **ห้ามคอมเมนต์ปิด (Comment-out) ตรรกะงานหลักของระบบ**
+3. ❌ **ห้ามแก้ไข Function signature** ในพับลิกโมดูลการทำงานหลัก
+4. ❌ **ห้ามลบกลไก Fallback** (เช่น ตรรกะประมวลผลไฟล์ภาพใน OCR กรณีส่งไป API ตัวใหญ่ไม่ผ่าน)
 
-- Do not write to `CHANGELOG.md` automatically.
-- Before adding or summarizing work in `CHANGELOG.md`, ask the user for confirmation every time.
-- `CHANGELOG.md` is an append-only ledger. When instructed to update it, ALWAYS add new entries at the bottom. DO NOT edit, overwrite, or remove past entries.
-- If multiple code versions are generated, wait until the user confirms the final applied version before logging it.
+### 7.1 รายละเอียดระดับความเข้มงวด (File Registry Tiers)
 
-## Communication Style
+* **Tier 1: System Critical (ห้ามแปลง/ห้ามยุบโครงสร้างสำคัญ)**
+  * `prisma/schema.prisma` (Database Schema)
+  * `src/modules/ocr/ocr.service.ts` (API OCR integration)
+  * `src/modules/auth/auth.service.ts` (ตรรกะตรวจเช็คความปลอดภัย Tokens)
+  * `src/app.ts` และ `src/index.ts` (จุดลงทะเบียนเซิร์ฟเวอร์ Express)
+* **Tier 2: Feature Critical (ห้ามลบและต้องรักษาอินเทอร์เฟซกลาง)**
+  * `src/shared/api-response.ts` (API Responses Wrapper)
+  * `src/database/db.ts` (สิทธิทางฐานข้อมูลและการเริ่ม Prisma client)
+  * Middleware คุมความปลอดภัยและการควบคุมสิทธิ์ Roles ใน `src/middlewares/`
+* **Tier 3: Configuration Critical**
+  * `docker-compose.yml` และ `.env.example`
+  * `package.json` และ `tsconfig.json`
 
-- ตอบคำถามและอธิบายโค้ดเป็น **ภาษาไทย** เสมอ เพื่อให้คนในทีมอ่านเข้าใจตรงกัน.
-- Be concise, but include enough context for the user to understand what changed.
-- When tests or verification cannot be run, state that clearly.
+### 7.2 Endpoint ที่ได้รับการคุ้มครอง
+* `POST /ocr/verify` (หรือระบบยิงอ่านบัตรประชาชน)
+* `POST /auth/login` และ `POST /auth/register`
+* Endpoints จัดการการตรวจสอบใบหน้าและยืนยันบิล
 
-## Project Overview
+---
 
--โปรเจ็คนี้เป็นเว็บแอป Next.js ใช้ TypeScript และ Tailwind CSS, React., Node.js, Express.js,css,html, Prisma ORM, PostgreSQL, Redis, Socket.IO, JWT, Bcrypt, python, docker, docker-compose, nginx, สำหรับโปรเจ็ค Smart-Dormitory-Management-System
--ถามก่อนทำเสมอ
--ทำความเข้าใจโค้ดก่อนแก้
--อธิบายโค้ดเน้นความเข้าใจง่าย
--อธิบายรายระเอียดต่างๆเน้นความเข้าใจง่ายและชัดเจน
--อธิบายสรุปเน้นใจความสำคัญและปัญหาที่ตรงจุดแบบกระชับสั้นๆ
--อัพเดทอัตโนมัติ `CHANGELOG.md` เมื่อมีการแก้ไขโค้ดเสร็จสมบูรณ์และได้รับการยืนยันจากผู้ใช้แล้วเท่านั้น
+## 8. กฎการเก็บบันทึกและการทดสอบ (Logging & Testing Rules)
 
-## Commands
+* **ความเกี่ยวโยงของ Log (Trace Correlation):** ทุก Log ของการไหลข้อมูลในโมดูลระบบ ต้องมี `CorrelationId` (ถ้าส่งมาใน Request Header), `UserId` หรือ `RoomId` อยู่ในบันทึกเสมอเพื่อใช้อ้างอิงการค้นหา
+* **การบันทึกการทดสอบโหลด:** เมื่อมีการจำลอง Load Test หรือรันการทดสอบขีดจำกัดใด ๆ ห้ามบันทึกผลการทดสอบไว้นอกกรอบ ให้จัดเก็บไว้ในโฟลเดอร์ `tests/load/logs/YYYY-MM-DD/` โดยแยกประเภทไฟล์ให้เป็นมาตรฐานดังนี้:
+  * `stats.csv` (ตัวชี้วัดประสิทธิภาพคอมพิวเตอร์และการตอบสนอง)
+  * `run.log` (ข้อมูลรายละเอียดการทำงานของสคริปต์สแกน)
+  * `final_report.md` (วิเคราะห์ผลลัพธ์ของระบบหอพัก)
+* **การติดตั้ง Package ใหม่:**
+  * ตรวจเช็คในไฟล์ `package.json` ก่อนเสมอว่ามีของเดิมที่สเปกคล้ายกันติดตั้งไว้อยู่แล้วหรือไม่เพื่อกันปัญหาความขัดแย้ง
+  * ห้ามแก้ไข `npm.lock` หรือ `package-lock.json` โดยไม่มีการปรึกษาและอธิบายประโยชน์ทางสถาปัตยกรรมอย่างเป็นขั้นเป็นตอน
 
--Install dependencies: npm install
--Start dev server: npm run dev
--Run lint: npm run lint
--Run build: npm run build
--Run start: npm run start
--Run test: npm run test
+---
 
-## Project Structure
+## 9. ขอบเขต ห้าม/ยอมรับ และรายการตรวจสอบการตรวจสอบ (Boundaries & Verification)
 
-## Code Style
+### 9.1 ขอบเขตสูงสุด (Absolute Boundaries)
+* ❌ ห้ามแก้ตัวถ่วงดุลของระบบ Database โดยไม่ขออนุมัติและอธิบายเหตุผลให้ชัดแจ้ง
+* ❌ ห้ามเปลี่ยนสแต็กภาษาการเขียนโค้ดหลัก จาก TypeScript เป็น JavaScript ดิบ
+* ❌ ห้ามเปลี่ยนแปลง Package Manager (รักษาการใช้งาน `npm` เท่านั้น)
+* ❌ ห้ามแก้ไขไฟล์สำคัญโดยไม่ได้ทำการศึกษาไฟล์อื่นที่เกี่ยวโยงในรอบข้างก่อน
 
--ใช้ TypeScript
--ตั้งชื่อ component แบบ PascalCase
--ตั้งชื่อ function แบบ camelCase
--หลีกเลี่ยงการเขียน logic ใหญ่ๆ รวมไว้ใน component เดียว
--แยก logic ที่ซับซ้อนออกไปเป็น custom hooks หรือ service functions
--ใช้เทคนิค object destructuring เพื่อทำให้โค้ดอ่านง่ายขึ้น
-ใชเทคนิค oop และ modular architecture เพื่อแยกความรับผิดชอบของแต่ละส่วนของโค้ด
--ใช้เทคนิค functional programming เพื่อทำให้โค้ดมีความยืดหยุ่นและง่ายต่อการทดสอบ
--ฟิลที่มีหลายฟิลด์ แยกเป็นไฟล์ของๆตัวเองเพื่อความสะดวกในการจัดการและการนำกลับมาใช้ใหม่
-เช่นถ้าโมดูลไหนมีหลายฟิลด์ที่เกี่ยวข้องกัน เช่น user profile, dormitory information, หรือ booking details แยกฟิลด์เหล่านั้นออกไปเป็นไฟล์ของตัวเองเพื่อความสะดวกในการจัดการและการนำกลับมาใช้ใหม่
--Separation of Concerns (SoC): แยกความรับผิดชอบของแต่ละส่วนของโค้ดให้ชัดเจน เช่น แยก business logic ออกจาก presentation logic และ data access logic ในเชิงโครงสร้างโค้ดเรียกได้ว่า Modular Architecture
-
-## Testing and Validation
-
--ก่อนส่งงานต้องตรวจสอบ:
--npm lint
--npm run build
--npm run test
--ตรวจสอบว่าไม่มี TypeScript Error, ESLint Error, Prettier Error, Stylelint Error, Tailwind CSS Error, React Error, Node.js Error, Express.js Error, Prisma Error, PostgreSQL Error, Redis Error, Socket.IO Error, JWT Error, Bcrypt Error, Python Error, Docker Error, Docker Compose Error, Nginx Error, Smart-Dormitory-Management-System Error
--ทำความเข้าใจโค้ดก่อนแก้
--ตรวจสอบว่าไม่มี debug code หรือ console.log ใน product หรือทำการสร้างไฟล์มาเพื่อตรวจสอบ อย่างละเอียด
--ตรวจสอบไฟล์ทุกไฟล์แล้วดูว่ามีส่วนไหนที่เพิ่มมาแล้วซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและขออนุญาติลบ
--ถ้าจะเพิ่ม package ใหม่ต้องตรวจสอบก่อนว่ามี package นี้อยู่แล้วหรือไม่
--ถ้าจะเพิ่มอะไรที่ซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและถามว่าจะเพิ่มให้ไม่หรือบอกวิธีเรียกใช้หรือหาทางเลือกอื่นที่นำมาใช้แทน
--ตรวจสอบว่าไม่มี debug code หรือ console.log ใน product หรือทำการสร้างไฟล์มาเพื่อตรวจสอบ อย่างละเอียด
--ตรวจสอบไฟล์ทุกไฟล์แล้วดูว่ามีส่วนไหนที่เพิ่มมาแล้วซ้ำกับตัวที่มีอยู่แล้วบอก dev ว่ามีส่วนไหนที่ซ้ำและขออนุญาติลบ
-
-## Bounderies
-
--ห้ามแก้ database โดยไม่อธิบายเหตุผลและไม่มีปรึกษา
--ห้ามแก้ไฟล์ โดยไม่อธิบายเหตุผลและไม่มีปรึกษา
--ห้ามลบไฟล์สำคัญโดยไม่แจ้งก่อน
--ห้ามเปลี่ยนโครงสร้างโปรเจ็คโดยไม่แจ้งก่อน
--ห้ามเปลี่ยน package manager จาก npm เป็น npm หรือ pnpm หรือ yarn
--ห้ามเปลี่ยนภาษาจาก TypeScript เป็น JavaScript
--ห้ามแก้ไฟล์โดยไม่อ่านไฟล์อื่นก่อน
--ห้ามแก้ไขไฟล์ `npm.lock` โดยไม่ได้ไม่อธิบายเหตุผลและไม่มีปรึกษา
--ห้ามแก้ไขไฟล์ `package-lock.json` โดยไม่ได้ไม่อธิบายเหตุผลและไม่มีปรึกษา
+### 9.2 รายการตรวจสอบก่อนตรวจสอบส่งมอบ (Verification Checklist Before Finish)
+ทุกครั้งที่ AI Agent ทำภารกิจเสร็จสิ้น ต้องสามารถยืนยันจุดตรวจสอบเหล่านี้ได้:
+* [ ] การทดสอบ Build ผ่านสำเร็จหมดจด (`npm run build`)
+* [ ] ไร้ข้อผิดพลาดทาง TypeScript, ESLint หรือ Prettier
+* [ ] Endpoint และ Routing ที่เกี่ยวข้องยังสามารถตอบสนองสถานะ HTTP ได้ปกติ
+* [ ] มีการเคลียร์เอาโค้ดตรวจสอบแบบฉุกเฉิน (Temporary debug code หรือ `console.log` ถาวร) ออกจากโปรดักชันเรียบร้อยแล้ว
+* [ ] ไม่มีการสร้างไฟล์ทับซ้อนและไม่มีการเพิ่ม Package ซ้ำเปล่า ๆ ในระบบ

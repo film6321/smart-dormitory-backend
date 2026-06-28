@@ -1,21 +1,19 @@
 import { Express, Request, Response } from 'express';
 import promClient from 'prom-client';
+import { logger } from '../logger';
 
 export const setupMonitoring = (app: Express) => {
-  // บันทึกสถิติขั้นพื้นฐานของ Node (RAM, CPU, Request)
-  const collectDefaultMetrics = promClient.collectDefaultMetrics;
-  collectDefaultMetrics({ prefix: 'dormitory_' });
+  promClient.collectDefaultMetrics({ prefix: 'dormitory_' });
 
-  // แขวนป้ายบอกทางให้โปรแกรมภายนอกเข้ามารับค่า
-  app.get('/metrics', async (req: Request, res: Response) => {
+  app.get('/metrics', async (_req: Request, res: Response) => {
     try {
       res.set('Content-Type', promClient.register.contentType);
       const metrics = await promClient.register.metrics();
       res.status(200).send(metrics);
-    } catch (ex) {
-      res.status(500).send(ex);
+    } catch (error) {
+      res.status(500).send(error);
     }
   });
 
-  console.log('✅ Prometheus Monitoring Initialized at /metrics');
+  logger.info('Prometheus monitoring initialized at /metrics');
 };

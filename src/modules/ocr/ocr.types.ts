@@ -92,3 +92,16 @@ export interface IdCardVerificationImageResult {
   absolutePath: string;
   contentType: string;
 }
+
+export interface OcrJobSummary {
+  id: string;
+  userId?: number | null;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  resultVerificationId?: number | null;
+  errorMessage?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date | null;
+}
+
+export interface CreateOcrJobResult extends OcrJobSummary {}

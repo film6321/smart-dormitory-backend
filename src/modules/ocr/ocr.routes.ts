@@ -3,11 +3,13 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import { requireRole, verifyToken } from '../../middlewares/auth-jwt';
 import { AppError } from '../../middlewares/error-handler';
+import { createRateLimitStore } from '../../shared/rate-limit-store';
 import { OcrController } from './ocr.controller';
 
 const router = Router();
 
 const verifyIdCardLimiter = rateLimit({
+  store: createRateLimitStore('rl:ocr:verify-id-card:'),
   windowMs: 60 * 1000,
   max: 10,
   message: { statusCode: 429, message: 'Too many OCR verification requests, please try again later' },
@@ -48,6 +50,8 @@ const uploadIdCardImage = (req: Request, res: Response, next: NextFunction) => {
 };
 
 router.post('/verify-id-card', verifyIdCardLimiter, uploadIdCardImage, OcrController.verifyIdCard);
+router.post('/verify-id-card/jobs', verifyIdCardLimiter, uploadIdCardImage, OcrController.createIdCardVerificationJob);
+router.get('/verify-id-card/jobs/:jobId', verifyIdCardLimiter, OcrController.getIdCardVerificationJob);
 router.get(
   '/id-card-verifications',
   verifyToken,

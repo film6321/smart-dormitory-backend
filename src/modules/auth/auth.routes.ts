@@ -2,12 +2,14 @@ import { Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthenticatedRequest, requireRole, verifyToken } from '../../middlewares/auth-jwt';
 import { createResponse } from '../../shared/api-response';
+import { createRateLimitStore } from '../../shared/rate-limit-store';
 import { AuthController } from './auth.controller';
 
 const router = Router();
 
 // ตั้งค่า Rate Limiter ที่เข็มแข็งสำหรับ Login (ป้องกัน Brute Force)
 const loginLimiter = rateLimit({
+  store: createRateLimitStore('rl:auth:login:'),
   windowMs: 5 * 60 * 1000, // 5 นาที
   max: 5, // จำกัด 5 ครั้ง
   message: { status: 429, message: 'Too many login attempts, please try again in 5 minutes' },
@@ -18,6 +20,7 @@ const loginLimiter = rateLimit({
 
 // ตั้งค่า Rate Limiter สำหรับ Register
 const registerLimiter = rateLimit({
+  store: createRateLimitStore('rl:auth:register:'),
   windowMs: 60 * 60 * 1000, // 1 ชั่วโมง
   max: 3, // จำกัด 3 ครั้ง
   message: { status: 429, message: 'Too many registration attempts, please try again later' },

@@ -28,6 +28,8 @@ app.use(accessLog_1.accessLog);
 app.use('/health', health_1.default);
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/ocr', ocr_routes_1.default);
+// Temporary health check for /api prefix
+app.get('/api/ping', (_req, res) => res.status(200).send('pong'));
 // Error handling
 app.use(error_handler_1.errorHandler);
 exports.default = app;
