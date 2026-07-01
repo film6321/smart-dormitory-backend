@@ -1,0 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_jwt_1 = require("../../middlewares/auth-jwt");
+const users_controller_1 = require("./users.controller");
+const router = (0, express_1.Router)();
+router.get('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.listUsers);
+router.get('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.getUserById);
+exports.default = router;

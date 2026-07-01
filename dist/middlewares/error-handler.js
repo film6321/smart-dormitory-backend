@@ -5,9 +5,11 @@ const api_response_1 = require("../shared/api-response");
 const logger_1 = require("../logger");
 class AppError extends Error {
     statusCode;
-    constructor(message, statusCode) {
+    details;
+    constructor(message, statusCode, details) {
         super(message);
         this.statusCode = statusCode;
+        this.details = details;
         Error.captureStackTrace(this, this.constructor);
     }
 }

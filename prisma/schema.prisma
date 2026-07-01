@@ -6,7 +6,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-/* ---------- Existing Enums ---------- */
+/**
+ * ---------- Existing Enums ----------
+ */
 enum Role {
   ADMIN
   STUDENT
@@ -20,7 +22,9 @@ enum OcrJobStatus {
   FAILED
 }
 
-/* ---------- Existing User Model ---------- */
+/**
+ * ---------- Existing User Model ----------
+ */
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -37,9 +41,12 @@ model User {
   transactions        Transaction[]
   idCardVerifications IdCardVerification[]
   ocrJobs             OcrJob[]
+  tenant              Tenant?
 }
 
-/* ---------- New AccessLog Model ---------- */
+/**
+ * ---------- New AccessLog Model ----------
+ */
 model AccessLog {
   id        Int      @id @default(autoincrement())
   userId    Int?
@@ -47,7 +54,7 @@ model AccessLog {
   method    String
   path      String
   ip        String?
-  duration  Int?     
+  duration  Int?
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -55,43 +62,47 @@ model AccessLog {
   @@index([path])
 }
 
-/* ---------- New Transaction Model ---------- */
+/**
+ * ---------- New Transaction Model ----------
+ */
 model Transaction {
-  id          Int      @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   userId      Int
-  user        User     @relation(fields: [userId], references: [id])
-  amount      Decimal  @db.Decimal(10,2)
+  user        User            @relation(fields: [userId], references: [id])
+  amount      Decimal         @db.Decimal(10, 2)
   type        TransactionType
   description String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime        @default(now())
 
   @@index([userId])
   @@index([type])
   @@index([createdAt])
 }
 
-/* ---------- Sensitive Document Verification Metadata ---------- */
+/**
+ * ---------- Sensitive Document Verification Metadata ----------
+ */
 model IdCardVerification {
-  id                 Int      @id @default(autoincrement())
-  userId             Int?
-  user               User?    @relation(fields: [userId], references: [id])
-  imagePath          String?
-  isThaiIdCard       Boolean
-  citizenIdMasked    String?
-  citizenIdHash      String?
-  fullNameTh         String?
-  birthDateTh        String?
-  issueDate          String?
-  expiryDate         String?
-  idDetected         Boolean  @default(false)
-  idPresent          Boolean  @default(false)
-  idChecksumValid    Boolean  @default(false)
-  reason             String?
-  ocrJobId           String?
-  processingTimeMs   Int?
-  verifiedAt         DateTime @default(now())
-  createdAt          DateTime @default(now())
-  ocrJobs            OcrJob[]  @relation("OcrJobResultVerification")
+  id               Int      @id @default(autoincrement())
+  userId           Int?
+  user             User?    @relation(fields: [userId], references: [id])
+  imagePath        String?
+  isThaiIdCard     Boolean
+  citizenIdMasked  String?
+  citizenIdHash    String?
+  fullNameTh       String?
+  birthDateTh      String?
+  issueDate        String?
+  expiryDate       String?
+  idDetected       Boolean  @default(false)
+  idPresent        Boolean  @default(false)
+  idChecksumValid  Boolean  @default(false)
+  reason           String?
+  ocrJobId         String?
+  processingTimeMs Int?
+  verifiedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  ocrJobs          OcrJob[] @relation("OcrJobResultVerification")
 
   @@index([userId])
   @@index([citizenIdHash])
@@ -99,16 +110,16 @@ model IdCardVerification {
 }
 
 model OcrJob {
-  id                   String       @id @default(uuid())
+  id                   String              @id @default(uuid())
   userId               Int?
-  user                 User?        @relation(fields: [userId], references: [id])
-  status               OcrJobStatus @default(PENDING)
+  user                 User?               @relation(fields: [userId], references: [id])
+  status               OcrJobStatus        @default(PENDING)
   imagePath            String
   resultVerificationId Int?
   resultVerification   IdCardVerification? @relation("OcrJobResultVerification", fields: [resultVerificationId], references: [id])
   errorMessage         String?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
   completedAt          DateTime?
 
   @@index([userId])
@@ -117,8 +128,175 @@ model OcrJob {
   @@index([resultVerificationId])
 }
 
-/* ---------- Transaction Type Enum ---------- */
+/**
+ * ---------- Transaction Type Enum ----------
+ */
 enum TransactionType {
   INCOME
   EXPENSE
+}
+
+/**
+ * ---------- Dormitory Domain Enums ----------
+ */
+enum BillStatus {
+  UNPAID
+  VERIFYING
+  PAID
+  OVERDUE
+  FAILED
+}
+
+enum MaintenanceStatus {
+  PENDING
+  APPROVED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+  CLOSED
+}
+
+enum MaintenanceCategory {
+  PLUMBING
+  ELECTRICAL
+  CLEANING
+  SECURITY
+  OTHER
+}
+
+enum VisitorStatus {
+  REGISTERED
+  VERIFYING
+  APPROVED
+  REJECTED
+  CHECKED_IN
+  CHECKED_OUT
+  EXPIRED
+}
+
+/**
+ * ---------- Core Dormitory Models ----------
+ */
+model Room {
+  id          Int      @id @default(autoincrement())
+  roomNumber  String   @unique
+  floor       Int?
+  status      String   @default("AVAILABLE")
+  capacity    Int      @default(1)
+  monthlyRent Decimal  @db.Decimal(10, 2)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant             Tenant?
+  bills              Bill[]
+  maintenanceTickets MaintenanceTicket[]
+  visitors           Visitor[]
+
+  @@index([roomNumber])
+  @@index([status])
+}
+
+model Tenant {
+  id               Int       @id @default(autoincrement())
+  userId           Int?      @unique
+  user             User?     @relation(fields: [userId], references: [id])
+  roomId           Int?      @unique
+  room             Room?     @relation(fields: [roomId], references: [id])
+  fullName         String?
+  phone            String?
+  emergencyContact String?
+  checkInDate      DateTime?
+  checkOutDate     DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  bills              Bill[]
+  maintenanceTickets MaintenanceTicket[]
+  visitors           Visitor[]
+
+  @@index([userId])
+  @@index([roomId])
+  @@index([isActive])
+}
+
+model Bill {
+  id          Int        @id @default(autoincrement())
+  tenantId    Int
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  roomId      Int?
+  room        Room?      @relation(fields: [roomId], references: [id])
+  amount      Decimal    @db.Decimal(10, 2)
+  dueDate     DateTime
+  status      BillStatus @default(UNPAID)
+  version     Int        @default(1)
+  description String?
+  slipHash    String?
+  reason      String?
+  paidAt      DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model MaintenanceTicket {
+  id                   Int                 @id @default(autoincrement())
+  tenantId             Int
+  tenant               Tenant              @relation(fields: [tenantId], references: [id])
+  roomId               Int?
+  room                 Room?               @relation(fields: [roomId], references: [id])
+  category             MaintenanceCategory @default(OTHER)
+  description          String
+  contactTime          DateTime?
+  status               MaintenanceStatus   @default(PENDING)
+  assignedTechnicianId Int?
+  note                 String?
+  resolvedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Visitor {
+  id                Int           @id @default(autoincrement())
+  tenantId          Int?
+  tenant            Tenant?       @relation(fields: [tenantId], references: [id])
+  roomId            Int?
+  room              Room?         @relation(fields: [roomId], references: [id])
+  guestName         String
+  purpose           String?
+  expectedEntryTime DateTime?
+  status            VisitorStatus @default(REGISTERED)
+  checkedInAt       DateTime?
+  checkedOutAt      DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  logs VisitorLog[]
+
+  @@index([tenantId])
+  @@index([roomId])
+  @@index([status])
+  @@index([expectedEntryTime])
+}
+
+model VisitorLog {
+  id        Int      @id @default(autoincrement())
+  visitorId Int
+  visitor   Visitor  @relation(fields: [visitorId], references: [id])
+  eventType String
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([visitorId])
+  @@index([createdAt])
 }

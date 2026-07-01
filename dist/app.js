@@ -17,6 +17,10 @@ const accessLog_1 = require("./middlewares/accessLog");
 const error_handler_1 = require("./middlewares/error-handler");
 const auth_routes_1 = __importDefault(require("./modules/auth/auth.routes"));
 const ocr_routes_1 = __importDefault(require("./modules/ocr/ocr.routes"));
+const users_routes_1 = __importDefault(require("./modules/users/users.routes"));
+const billing_routes_1 = __importDefault(require("./modules/billing/billing.routes"));
+const maintenance_routes_1 = __importDefault(require("./modules/maintenance/maintenance.routes"));
+const visitor_routes_1 = __importDefault(require("./modules/visitor/visitor.routes"));
 const health_1 = __importDefault(require("./routes/health"));
 const app = (0, express_1.default)();
 // Initialize system components
@@ -28,6 +32,10 @@ app.use(accessLog_1.accessLog);
 app.use('/health', health_1.default);
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/ocr', ocr_routes_1.default);
+app.use('/api/users', users_routes_1.default);
+app.use('/api/billing', billing_routes_1.default);
+app.use('/api/maintenance', maintenance_routes_1.default);
+app.use('/api/visitor', visitor_routes_1.default);
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));
 // Error handling

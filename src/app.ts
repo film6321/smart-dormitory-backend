@@ -15,6 +15,10 @@ import { accessLog } from './middlewares/accessLog';
 import { errorHandler } from './middlewares/error-handler';
 import authRoutes from './modules/auth/auth.routes';
 import ocrRoutes from './modules/ocr/ocr.routes';
+import usersRoutes from './modules/users/users.routes';
+import billingRoutes from './modules/billing/billing.routes';
+import maintenanceRoutes from './modules/maintenance/maintenance.routes';
+import visitorRoutes from './modules/visitor/visitor.routes';
 import healthRoutes from './routes/health';
 
 const app = express();
@@ -29,6 +33,10 @@ app.use(accessLog);
 app.use('/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/visitor', visitorRoutes);
 
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));

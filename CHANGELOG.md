@@ -87,3 +87,10 @@
 - Added lightweight Express integration tests for `errorHandler` to verify `AppError` and unknown error response formats.
 - Updated ESLint configuration to include `tests/**/*.ts` in lint coverage.
 - Verified the new test foundation with `npm test`, `npm run test:typecheck`, `npm run build`, and `npx eslint "src/**/*.ts" "tests/**/*.ts"`.
+
+### 2026-07-02 — AI Context and Anti-Bloat Guardrails
+
+- Added anti-bloat and complexity control rules to `AGENTS.md` to prevent unnecessary file creation, abstractions, and package additions.
+- Added AI context documents for anti-bloat guidance and a pre-dormitory checklist under `.docs/ai-context/`.
+- Strengthened frontend/backend alignment guidance so future AI agents stay focused on the dormitory MVP scope and avoid speculative features.
+- Recorded the July 2 AI documentation updates in `.docs/AI-CHANGELOG/2026-07-02.md`.

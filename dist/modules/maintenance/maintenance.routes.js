@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_jwt_1 = require("../../middlewares/auth-jwt");
+const dto_validation_1 = require("../shared/dto-validation");
+const maintenance_controller_1 = require("./maintenance.controller");
+const maintenance_dto_1 = require("./maintenance.dto");
+const router = (0, express_1.Router)();
+router.post('/', auth_jwt_1.verifyToken, (0, dto_validation_1.validateDto)(maintenance_dto_1.createMaintenanceTicketSchema), maintenance_controller_1.MaintenanceController.createTicket);
+router.get('/', auth_jwt_1.verifyToken, maintenance_controller_1.MaintenanceController.listTickets);
+router.patch('/:id/status', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), (0, dto_validation_1.validateDto)(maintenance_dto_1.updateMaintenanceStatusSchema), maintenance_controller_1.MaintenanceController.updateTicketStatus);
+exports.default = router;
