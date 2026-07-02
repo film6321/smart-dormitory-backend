@@ -94,3 +94,13 @@
 - Added AI context documents for anti-bloat guidance and a pre-dormitory checklist under `.docs/ai-context/`.
 - Strengthened frontend/backend alignment guidance so future AI agents stay focused on the dormitory MVP scope and avoid speculative features.
 - Recorded the July 2 AI documentation updates in `.docs/AI-CHANGELOG/2026-07-02.md`.
+
+### 2026-07-03 — Notifications System (DB + Service + Worker)
+
+- **Prisma schema updated:** Added `NotificationProvider`, `NotificationTemplate`, `Notification`, `NotificationPreference` and enums `NotificationChannel`, `NotificationType`, `NotificationStatus` to `prisma/schema.prisma` to support SMS/EMAIL notification flows.
+- **Migration applied:** Created and applied migration `20260702194412_add_notifications` and regenerated Prisma Client (`npx prisma generate`).
+- **Notification module (backend):** Added a minimal `NotificationService` implementing scheduling and send flow with preference checks.
+- **Provider stub:** Created a lightweight provider stub at `src/modules/notifications/provider/simpleProvider.ts` to simulate sending (keeps tests and local runs simple).
+- **Worker:** Added `src/workers/notificationWorker.ts` to process pending/scheduled notifications and mark status/results in DB.
+- **Tests:** Added `tests/unit/notification.test.ts` (mock DB) and verified full test suite (`npm test`) passes locally.
+- **Notes:** DB reset/migrate was performed during implementation — this drops development data. Use caution on shared environments.

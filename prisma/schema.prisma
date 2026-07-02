@@ -300,3 +300,102 @@ model VisitorLog {
   @@index([visitorId])
   @@index([createdAt])
 }
+
+/**
+ * ---------- Notification System Models ----------
+ */
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+}
+
+enum NotificationType {
+  RENT_DUE
+  RENT_OVERDUE
+  MAINTENANCE_COMPLETED
+  VISITOR_ARRIVAL
+  GENERIC
+}
+
+enum NotificationStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model NotificationProvider {
+  id        Int                 @id @default(autoincrement())
+  name      String              @unique
+  channel   NotificationChannel
+  config    String // JSON string with provider-specific config (apiKey, senderId, etc.)
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  notifications Notification[]
+
+  @@index([name])
+  @@index([channel])
+}
+
+model NotificationTemplate {
+  id        Int                 @id @default(autoincrement())
+  name      String              @unique
+  channel   NotificationChannel
+  type      NotificationType
+  subject   String?
+  body      String // templated body, e.g. "สวัสดี {{name}} ..."
+  variables String? // JSON array of variable names used in template
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  notifications Notification[]
+
+  @@index([channel])
+  @@index([type])
+}
+
+model Notification {
+  id                Int                   @id @default(autoincrement())
+  providerId        Int?
+  provider          NotificationProvider? @relation(fields: [providerId], references: [id])
+  templateId        Int?
+  template          NotificationTemplate? @relation(fields: [templateId], references: [id])
+  tenantId          Int?
+  userId            Int?
+  channel           NotificationChannel
+  type              NotificationType
+  recipientPhone    String? // E.164 format for SMS
+  recipientEmail    String? // optional for EMAIL
+  payload           String? // JSON payload with variables filled or metadata
+  status            NotificationStatus    @default(PENDING)
+  providerMessageId String?
+  attempts          Int                   @default(0)
+  lastError         String?
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model NotificationPreference {
+  id        Int                 @id @default(autoincrement())
+  tenantId  Int?
+  userId    Int?
+  channel   NotificationChannel
+  optedOut  Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([channel])
+}
