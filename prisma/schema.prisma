@@ -380,10 +380,36 @@ model Notification {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
+  auditLogs   NotificationAuditLog[]
+  deadLetters NotificationDeadLetter[]
+
   @@index([tenantId])
   @@index([userId])
   @@index([status])
   @@index([scheduledAt])
+}
+
+model NotificationAuditLog {
+  id             Int          @id @default(autoincrement())
+  notificationId Int
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  eventType      String
+  payload        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([notificationId])
+  @@index([eventType])
+}
+
+model NotificationDeadLetter {
+  id             Int          @id @default(autoincrement())
+  notificationId Int          @unique
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  reason         String
+  details        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([reason])
 }
 
 model NotificationPreference {

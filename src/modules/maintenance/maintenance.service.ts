@@ -1,4 +1,5 @@
 import { prisma } from '../../database/db';
+import NotificationService from '../notifications/notification.service';
 
 export class MaintenanceService {
   static async getTicketById(id: number) {
@@ -6,7 +7,7 @@ export class MaintenanceService {
   }
 
   static async createTicket(data: { tenantId: number; roomId?: number; category: string; description: string; contactTime?: Date }) {
-    return prisma.maintenanceTicket.create({
+    const ticket = await prisma.maintenanceTicket.create({
       data: {
         tenantId: data.tenantId,
         roomId: data.roomId,
@@ -15,6 +16,16 @@ export class MaintenanceService {
         contactTime: data.contactTime,
       },
     });
+
+    const notificationService = new NotificationService();
+    await notificationService.scheduleNotification({
+      tenantId: ticket.tenantId,
+      channel: 'SMS',
+      type: 'MAINTENANCE_COMPLETED',
+      payload: JSON.stringify({ message: `Maintenance ticket ${ticket.id} created`, category: ticket.category }),
+    });
+
+    return ticket;
   }
 
   static async listTickets(userId?: number, role?: string) {

@@ -1,4 +1,5 @@
 import { prisma } from '../../database/db';
+import NotificationService from '../notifications/notification.service';
 
 export class VisitorService {
   static async getVisitorById(id: number) {
@@ -6,7 +7,7 @@ export class VisitorService {
   }
 
   static async registerVisitor(data: { guestName: string; purpose?: string; roomId?: number; tenantId?: number; expectedEntryTime?: Date }) {
-    return prisma.visitor.create({
+    const visitor = await prisma.visitor.create({
       data: {
         guestName: data.guestName,
         purpose: data.purpose,
@@ -16,6 +17,16 @@ export class VisitorService {
         status: 'REGISTERED',
       },
     });
+
+    const notificationService = new NotificationService();
+    await notificationService.scheduleNotification({
+      tenantId: visitor.tenantId ?? undefined,
+      channel: 'SMS',
+      type: 'VISITOR_ARRIVAL',
+      payload: JSON.stringify({ message: `Visitor ${visitor.guestName} registered`, visitorId: visitor.id }),
+    });
+
+    return visitor;
   }
 
   static async listVisitors() {

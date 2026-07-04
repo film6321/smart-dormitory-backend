@@ -19,6 +19,8 @@ import usersRoutes from './modules/users/users.routes';
 import billingRoutes from './modules/billing/billing.routes';
 import maintenanceRoutes from './modules/maintenance/maintenance.routes';
 import visitorRoutes from './modules/visitor/visitor.routes';
+import notificationRoutes from './modules/notifications/notification.routes';
+import notificationPreferencesRoutes from './modules/notifications/notification-preferences.routes';
 import healthRoutes from './routes/health';
 
 const app = express();
@@ -37,6 +39,8 @@ app.use('/api/users', usersRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/visitor', visitorRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications/preferences', notificationPreferencesRoutes);
 
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));

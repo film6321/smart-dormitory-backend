@@ -1,5 +1,6 @@
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
+import NotificationService from '../notifications/notification.service';
 
 export class BillingService {
   static async listBills(userId?: number, role?: string) {
@@ -39,7 +40,7 @@ export class BillingService {
   }
 
   static async updateBillStatus(billId: number, status: string, reason?: string) {
-    return prisma.bill.update({
+    const updated = await prisma.bill.update({
       where: { id: billId },
       data: {
         status: status as any,
@@ -47,5 +48,17 @@ export class BillingService {
         version: { increment: 1 },
       },
     });
+
+    if (status === 'OVERDUE') {
+      const notificationService = new NotificationService();
+      await notificationService.scheduleNotification({
+        tenantId: updated.tenantId,
+        channel: 'SMS',
+        type: 'RENT_OVERDUE',
+        payload: JSON.stringify({ message: `Bill ${updated.id} is overdue`, amount: updated.amount.toString() }),
+      });
+    }
+
+    return updated;
   }
 }
