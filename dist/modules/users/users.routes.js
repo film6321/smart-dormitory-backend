@@ -6,4 +6,7 @@ const users_controller_1 = require("./users.controller");
 const router = (0, express_1.Router)();
 router.get('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.listUsers);
 router.get('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.getUserById);
+router.post('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.createUser);
+router.patch('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.updateUser);
+router.delete('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), users_controller_1.UsersController.deleteUser);
 exports.default = router;

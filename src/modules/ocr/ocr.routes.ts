@@ -50,7 +50,9 @@ const uploadIdCardImage = (req: Request, res: Response, next: NextFunction) => {
 };
 
 router.post('/verify-id-card', verifyIdCardLimiter, uploadIdCardImage, OcrController.verifyIdCard);
+router.post('/verify', verifyIdCardLimiter, uploadIdCardImage, OcrController.verifyIdCard); // Alias route for SYSTEM-BLOCK-DIAGRAM.md
 router.post('/verify-id-card/jobs', verifyIdCardLimiter, uploadIdCardImage, OcrController.createIdCardVerificationJob);
+router.get('/jobs/:jobId', verifyIdCardLimiter, OcrController.getIdCardVerificationJob); // Alias route for SYSTEM-BLOCK-DIAGRAM.md
 router.get('/verify-id-card/jobs/:jobId', verifyIdCardLimiter, OcrController.getIdCardVerificationJob);
 router.get(
   '/id-card-verifications',

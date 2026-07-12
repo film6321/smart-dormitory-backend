@@ -48,7 +48,9 @@ const uploadIdCardImage = (req, res, next) => {
     });
 };
 router.post('/verify-id-card', verifyIdCardLimiter, uploadIdCardImage, ocr_controller_1.OcrController.verifyIdCard);
+router.post('/verify', verifyIdCardLimiter, uploadIdCardImage, ocr_controller_1.OcrController.verifyIdCard); // Alias route for SYSTEM-BLOCK-DIAGRAM.md
 router.post('/verify-id-card/jobs', verifyIdCardLimiter, uploadIdCardImage, ocr_controller_1.OcrController.createIdCardVerificationJob);
+router.get('/jobs/:jobId', verifyIdCardLimiter, ocr_controller_1.OcrController.getIdCardVerificationJob); // Alias route for SYSTEM-BLOCK-DIAGRAM.md
 router.get('/verify-id-card/jobs/:jobId', verifyIdCardLimiter, ocr_controller_1.OcrController.getIdCardVerificationJob);
 router.get('/id-card-verifications', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), ocr_controller_1.OcrController.listIdCardVerifications);
 router.get('/id-card-verifications/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), ocr_controller_1.OcrController.getIdCardVerification);

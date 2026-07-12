@@ -29,5 +29,40 @@ class UsersController {
             next(error);
         }
     }
+    static async createUser(req, res, next) {
+        try {
+            const user = await users_service_1.UsersService.createUser(req.body);
+            return res.status(201).json((0, api_response_1.createResponse)(201, 'User created successfully', user));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    static async updateUser(req, res, next) {
+        try {
+            const id = Number(req.params.id);
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid user id'));
+            }
+            const user = await users_service_1.UsersService.updateUser(id, req.body);
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'User updated successfully', user));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    static async deleteUser(req, res, next) {
+        try {
+            const id = Number(req.params.id);
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid user id'));
+            }
+            await users_service_1.UsersService.deleteUser(id);
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'User deleted successfully'));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
 }
 exports.UsersController = UsersController;

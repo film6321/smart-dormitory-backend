@@ -8,6 +8,7 @@ const router = Router();
 
 router.get('/', verifyToken, BillingController.listBills);
 router.post('/:id/upload-slip', verifyToken, validateDto(uploadSlipSchema), BillingController.uploadSlip);
+router.post('/:id/upload', verifyToken, validateDto(uploadSlipSchema), BillingController.uploadSlip); // Alias route for SYSTEM-BLOCK-DIAGRAM.md
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateBillStatusSchema), BillingController.updateBillStatus);
 
 export default router;

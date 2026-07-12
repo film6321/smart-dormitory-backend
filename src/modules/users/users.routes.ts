@@ -6,5 +6,8 @@ const router = Router();
 
 router.get('/', verifyToken, requireRole(['ADMIN']), UsersController.listUsers);
 router.get('/:id', verifyToken, requireRole(['ADMIN']), UsersController.getUserById);
+router.post('/', verifyToken, requireRole(['ADMIN']), UsersController.createUser);
+router.patch('/:id', verifyToken, requireRole(['ADMIN']), UsersController.updateUser);
+router.delete('/:id', verifyToken, requireRole(['ADMIN']), UsersController.deleteUser);
 
 export default router;

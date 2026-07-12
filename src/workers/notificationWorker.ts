@@ -7,7 +7,7 @@ const getDbClient = (dbClient?: any) => {
   }
 
   try {
-    // eslint-disable-next-line global-require
+     
     const { prisma } = require('../database/db');
     return prisma;
   } catch (error) {
@@ -62,7 +62,7 @@ export async function processPendingNotifications(dbClient?: any) {
     const svc = new NotificationService(db);
     for (const notification of pending) {
       try {
-        // eslint-disable-next-line no-await-in-loop
+         
         await svc.sendNotification(notification.id);
         processedCount += 1;
       } catch (err) {

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-07-10 — Repository refactor & Notification service alignment
+
+- แยก Repository layer (users, auth, notifications) เพื่อย้าย Prisma calls ออกจาก Service และรักษา "Thin Controller" / "Service business logic" pattern
+- ปรับ `NotificationService` ให้เรียก `NotificationRepository` แบบ static และเพิ่ม `getDb()` คืนค่า `prisma as any` เพื่อบรรเทา TypeScript mismatch ชั่วคราว
+- ปรับ `users.repository.ts` และ `auth.repository.ts` ให้ cast payloads/prisma client เป็น `any` ภายในเมธอดเป็นชั่วคราวจนกว่า `prisma generate` จะรันและ signatures จะถูกทำให้ตรงกัน
+- ข้อเสนอถัดไป: รัน `npx prisma generate` → `npm run test:typecheck` → แปลง payloads เป็น Prisma input types (`connect`/`create` shapes) ตามความจำเป็น
+
 ### 2026-06-29 — AI Governance and Enterprise Architecture Documentation Bootstrap
 
 - **AI Index & Context Routing:** Created `AI-INDEX.md` as the master context router mapping files to their specific domain context.

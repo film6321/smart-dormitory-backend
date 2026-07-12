@@ -1,156 +1,86 @@
 import { logger } from '../../logger';
+import { prisma } from '../../database/db';
+import { NotificationRepository } from './notification.repository';
+import { Prisma } from '@prisma/client';
 
 export class NotificationService {
+  // Service uses static repository methods on NotificationRepository
   private db: any;
 
-  constructor(dbClient?: any) {
-    this.db = dbClient;
+  constructor(db?: any) {
+    this.db = db ?? (prisma as any);
   }
 
   private async resolveRecipientPhone(data: any) {
-    const db = this.getDb();
-    if (data.recipientPhone) {
-      return data.recipientPhone;
-    }
+    if (data.recipientPhone) return data.recipientPhone;
 
     if (data.tenantId) {
-      const tenant = await db.tenant.findUnique({ where: { id: data.tenantId }, include: { user: true } });
-      if (tenant?.phone) {
-        return tenant.phone;
-      }
-      if (tenant?.user?.phone) {
-        return tenant.user.phone;
-      }
+      const tenant = await NotificationRepository.findTenantById(data.tenantId, this.db);
+      if (tenant?.phone) return tenant.phone;
+      if (tenant?.user?.phone) return tenant.user.phone;
     }
 
     if (data.userId) {
-      const user = await db.user.findUnique({ where: { id: data.userId } });
-      if (user?.phone) {
-        return user.phone;
-      }
+      const user = await NotificationRepository.findUserById(data.userId, this.db);
+      if (user?.phone) return user.phone;
     }
 
     return null;
   }
 
-  private getDb() {
-    if (!this.db) {
-      // lazy-load prisma to avoid requiring DB during unit tests
-      // eslint-disable-next-line global-require
-      const { prisma } = require('../../database/db');
-      this.db = prisma;
-    }
-    return this.db;
-  }
-
   async listNotifications(userId?: number) {
-    return this.getDb().notification.findMany({
-      where: userId ? { userId } : undefined,
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+    return NotificationRepository.listNotifications(userId, this.db);
   }
 
   async scheduleNotification(data: any) {
     const recipientPhone = await this.resolveRecipientPhone(data);
     const payload = { ...data, recipientPhone };
-    return this.getDb().notification.create({ data: payload });
+    return NotificationRepository.createNotification(payload as Prisma.NotificationCreateInput, this.db);
   }
 
   async listPreferences(userId?: number) {
-    const db = this.getDb();
-    return db.notificationPreference.findMany({
-      where: userId ? { userId } : undefined,
-      orderBy: { createdAt: 'desc' },
-    });
+    return NotificationRepository.listPreferences(userId, this.db);
   }
 
   async listDeadLetters() {
-    return this.getDb().notificationDeadLetter.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: { notification: true },
-    });
+    return NotificationRepository.listDeadLetters(this.db);
   }
 
   async listAuditLogs(notificationId?: number) {
-    return this.getDb().notificationAuditLog.findMany({
-      where: notificationId ? { notificationId } : undefined,
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+    return NotificationRepository.listAuditLogs(notificationId, this.db);
   }
 
   async retryDeadLetter(deadLetterId: number) {
-    const db = this.getDb();
-    const deadLetter = await db.notificationDeadLetter.findUnique({ where: { id: deadLetterId }, include: { notification: true } });
+    const deadLetter = await NotificationRepository.findDeadLetterById(deadLetterId, this.db);
     if (!deadLetter?.notification) {
       throw new Error('Dead letter not found');
     }
-
-    await db.notificationDeadLetter.delete({ where: { id: deadLetterId } });
-    await db.notification.update({ where: { id: deadLetter.notification.id }, data: { status: 'PENDING', lastError: null } });
-    await this.createAuditLog(db, deadLetter.notification.id, 'DEAD_LETTER_RETRIED', { deadLetterId });
+    await NotificationRepository.deleteDeadLetter(deadLetterId, this.db);
+    await NotificationRepository.updateNotification(deadLetter.notification.id, { status: 'PENDING', lastError: null }, this.db);
+    await NotificationRepository.createAuditLog(deadLetter.notification.id, 'DEAD_LETTER_RETRIED', { deadLetterId }, this.db);
 
     return this.sendNotification(deadLetter.notification.id);
   }
 
   async deleteDeadLetter(deadLetterId: number) {
-    const db = this.getDb();
-    const deadLetter = await db.notificationDeadLetter.findUnique({ where: { id: deadLetterId } });
+    const deadLetter = await NotificationRepository.findDeadLetterById(deadLetterId, this.db);
     if (!deadLetter) {
       throw new Error('Dead letter not found');
     }
-
-    await db.notificationDeadLetter.delete({ where: { id: deadLetterId } });
+    await NotificationRepository.deleteDeadLetter(deadLetterId, this.db);
     return { deleted: true, id: deadLetterId };
   }
 
   async upsertPreference(data: { userId?: number; channel: string; type?: string; optedOut: boolean }) {
-    const db = this.getDb();
-    const existing = await db.notificationPreference.findFirst({
-      where: {
-        userId: data.userId,
-        channel: data.channel as any,
-        ...(data.type ? { type: data.type as any } : {}),
-      },
-    });
-    if (existing) {
-      return db.notificationPreference.update({ where: { id: existing.id }, data: { optedOut: data.optedOut } });
-    }
-    return db.notificationPreference.create({
-      data: {
-        userId: data.userId,
-        channel: data.channel as any,
-        optedOut: data.optedOut,
-        ...(data.type ? { type: data.type as any } : {}),
-      },
-    });
+    return NotificationRepository.upsertPreference(data, this.db);
   }
 
-  private async createAuditLog(db: any, notificationId: number, eventType: string, payload: Record<string, unknown>) {
-    return db.notificationAuditLog?.create({
-      data: {
-        notificationId,
-        eventType,
-        payload: JSON.stringify(payload),
-      },
-    });
+  private async createAuditLog(notificationId: number, eventType: string, payload: Record<string, unknown>) {
+    return NotificationRepository.createAuditLog(notificationId, eventType, payload, this.db);
   }
 
-  private async createDeadLetter(db: any, notificationId: number, reason: string, details: Record<string, unknown>) {
-    const existing = await db.notificationDeadLetter?.findFirst({ where: { notificationId } });
-    if (existing) {
-      return existing;
-    }
-
-    return db.notificationDeadLetter?.create({
-      data: {
-        notificationId,
-        reason,
-        details: JSON.stringify(details),
-      },
-    });
+  private async createDeadLetter(notificationId: number, reason: string, details: Record<string, unknown>) {
+    return NotificationRepository.createDeadLetter(notificationId, reason, details, this.db);
   }
 
   private async sendWithRetry(notif: any, providerModule: any, provider: any) {
@@ -177,7 +107,7 @@ export class NotificationService {
 
   // Send a single notification by id. Uses a simple provider stub.
   async sendNotification(notificationId: number) {
-    const db = this.getDb();
+    const db = this.db;
     const notif = await db.notification.findUnique({ where: { id: notificationId } });
     if (!notif) throw new Error('Notification not found');
 
@@ -204,15 +134,15 @@ export class NotificationService {
     try {
       const result = await this.sendWithRetry({ ...notif, body }, providerModule, provider);
       await db.notification.update({ where: { id: notificationId }, data: { status: 'SENT', providerMessageId: result.id, attempts: (notif.attempts ?? 0) + 1, sentAt: new Date() } });
-      await this.createAuditLog(db, notificationId, 'DELIVERY_SENT', { providerMessageId: result.id, status: 'SENT' });
+      await this.createAuditLog(notificationId, 'DELIVERY_SENT', { providerMessageId: result.id, status: 'SENT' });
       return result;
     } catch (err: any) {
       const nextAttempts = (notif.attempts ?? 0) + 1;
       await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: String(err?.message ?? err), attempts: nextAttempts } });
-      await this.createAuditLog(db, notificationId, 'DELIVERY_FAILED', { error: String(err?.message ?? err), attempts: nextAttempts });
+      await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: String(err?.message ?? err), attempts: nextAttempts });
 
       if (nextAttempts >= 3) {
-        await this.createDeadLetter(db, notificationId, 'max_retries_exceeded', { error: String(err?.message ?? err), attempts: nextAttempts });
+        await this.createDeadLetter(notificationId, 'max_retries_exceeded', { error: String(err?.message ?? err), attempts: nextAttempts });
       }
 
       throw err;
@@ -220,7 +150,7 @@ export class NotificationService {
   }
 
   async handleProviderWebhook(payload: Record<string, any>) {
-    const db = this.getDb();
+    const db = this.db;
     const notification = await db.notification.findFirst({ where: { providerMessageId: payload.MessageSid ?? payload.messageSid } });
     if (!notification) {
       return null;
@@ -238,10 +168,10 @@ export class NotificationService {
 
     const newStatus = statusMap[status] ?? 'FAILED';
     await db.notification.update({ where: { id: notification.id }, data: { status: newStatus } });
-    await this.createAuditLog(db, notification.id, 'PROVIDER_WEBHOOK', { status, payload });
+    await this.createAuditLog(notification.id, 'PROVIDER_WEBHOOK', { status, payload });
 
     if (newStatus === 'FAILED') {
-      await this.createDeadLetter(db, notification.id, status, { payload });
+      await this.createDeadLetter(notification.id, status, { payload });
     }
 
     return { id: notification.id, status: newStatus };

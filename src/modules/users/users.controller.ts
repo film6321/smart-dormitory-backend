@@ -29,4 +29,41 @@ export class UsersController {
       next(error);
     }
   }
+
+  static async createUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await UsersService.createUser(req.body);
+      return res.status(201).json(createResponse(201, 'User created successfully', user));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json(createResponse(400, 'Invalid user id'));
+      }
+
+      const user = await UsersService.updateUser(id, req.body);
+      return res.status(200).json(createResponse(200, 'User updated successfully', user));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json(createResponse(400, 'Invalid user id'));
+      }
+
+      await UsersService.deleteUser(id);
+      return res.status(200).json(createResponse(200, 'User deleted successfully'));
+    } catch (error) {
+      next(error);
+    }
+  }
 }

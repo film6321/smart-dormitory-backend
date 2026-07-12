@@ -77,6 +77,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      face_recognition:
+        condition: service_started
     expose:
       - "3000"
     volumes:
@@ -117,6 +119,24 @@ services:
       - "${GRAFANA_HOST_PORT:-3003}:3000"
     volumes:
       - grafanadata:/var/lib/grafana
+
+  face_recognition:
+    build:
+      context: C:\\Users\\raphi\\Documents\\Face_Recognition
+    container_name: smart-dormitory-face-recognition
+    restart: unless-stopped
+    environment:
+      API_KEY: ${FACE_RECOGNITION_API_KEY:-localdev}
+    # Do not publish ports publicly; backend will communicate via Docker network
+    expose:
+      - "8000"
+    volumes:
+      - C:\\Users\\raphi\\Documents\\Face_Recognition:/app:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:

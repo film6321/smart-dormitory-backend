@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_jwt_1 = require("../../middlewares/auth-jwt");
+const tenants_controller_1 = require("./tenants.controller");
+const router = (0, express_1.Router)();
+router.get('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.listTenants);
+router.get('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.getTenantById);
+router.post('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.createTenant);
+router.patch('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.updateTenant);
+router.delete('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.deleteTenant);
+exports.default = router;

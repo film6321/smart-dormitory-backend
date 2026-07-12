@@ -1,8 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillingService = void 0;
 const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
+const notification_service_1 = __importDefault(require("../notifications/notification.service"));
 class BillingService {
     static async listBills(userId, role) {
         const where = role === 'ADMIN'
@@ -36,7 +40,7 @@ class BillingService {
         });
     }
     static async updateBillStatus(billId, status, reason) {
-        return db_1.prisma.bill.update({
+        const updated = await db_1.prisma.bill.update({
             where: { id: billId },
             data: {
                 status: status,
@@ -44,6 +48,16 @@ class BillingService {
                 version: { increment: 1 },
             },
         });
+        if (status === 'OVERDUE') {
+            const notificationService = new notification_service_1.default();
+            await notificationService.scheduleNotification({
+                tenantId: updated.tenantId,
+                channel: 'SMS',
+                type: 'RENT_OVERDUE',
+                payload: JSON.stringify({ message: `Bill ${updated.id} is overdue`, amount: updated.amount.toString() }),
+            });
+        }
+        return updated;
     }
 }
 exports.BillingService = BillingService;

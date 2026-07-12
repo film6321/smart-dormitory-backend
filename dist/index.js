@@ -9,10 +9,12 @@ const logger_1 = require("./logger");
 const redis_1 = require("./shared/redis");
 const accessLogQueue_1 = require("./workers/accessLogQueue");
 const ocrJobWorker_1 = require("./workers/ocrJobWorker");
+const notificationWorker_1 = require("./workers/notificationWorker");
 const PORT = process.env.PORT || 3000;
 const server = app_1.default.listen(PORT, () => {
     (0, accessLogQueue_1.startAccessLogWorker)();
     (0, ocrJobWorker_1.startOcrJobWorker)();
+    (0, notificationWorker_1.startNotificationWorker)();
     logger_1.logger.info(`Backend API Gateway is running on http://localhost:${PORT}`);
 });
 const shutdown = async (signal) => {
@@ -20,6 +22,7 @@ const shutdown = async (signal) => {
     server.close(async () => {
         await (0, ocrJobWorker_1.stopOcrJobWorker)();
         await (0, accessLogQueue_1.stopAccessLogWorker)();
+        await (0, notificationWorker_1.stopNotificationWorker)();
         await (0, redis_1.disconnectRedis)();
         await db_1.prisma.$disconnect();
         logger_1.logger.info('HTTP server, Redis, and database connections closed.');

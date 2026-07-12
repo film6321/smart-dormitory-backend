@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { prisma } from '../../database/db';
 import { logger } from '../../logger';
 import { AppError } from '../../middlewares/error-handler';
 import { deleteCacheByPattern, getJsonCache, setJsonCache } from '../../shared/cache';
+import { OcrRepository } from './ocr.repository';
 import {
   DeleteIdCardVerificationResult,
   CreateOcrJobResult,
@@ -18,6 +18,7 @@ import {
   VerifyIdCardResult,
 } from './ocr.types';
 import { enqueueOcrJob } from './ocr.queue';
+import { Prisma } from '@prisma/client';
 
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
 const uploadRoot = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/private'));
@@ -339,23 +340,17 @@ export class OcrService {
     }
 
     const imagePath = await savePrivateOcrJobImage(imageBase64, sanitizedImage);
-    const job = await prisma.ocrJob.create({
-      data: {
-        userId: options.userId,
-        imagePath,
-      },
-    });
+    const createData: Prisma.OcrJobCreateInput = { imagePath } as unknown as Prisma.OcrJobCreateInput;
+    if (options.userId) (createData as any).user = { connect: { id: options.userId } };
+    const job = await OcrRepository.createOcrJob(createData);
 
     try {
       await enqueueOcrJob(job.id);
     } catch (error) {
-      await prisma.ocrJob.update({
-        where: { id: job.id },
-        data: {
-          status: 'FAILED',
-          errorMessage: 'Failed to enqueue OCR job',
-          completedAt: new Date(),
-        },
+      await OcrRepository.updateOcrJob(job.id, {
+        status: 'FAILED',
+        errorMessage: 'Failed to enqueue OCR job',
+        completedAt: new Date(),
       });
       logger.warn({ error, jobId: job.id }, 'Failed to enqueue OCR job');
       throw new AppError('Failed to enqueue OCR job', 503);
@@ -365,19 +360,7 @@ export class OcrService {
   }
 
   static async getIdCardVerificationJob(jobId: string): Promise<OcrJobSummary> {
-    const job = await prisma.ocrJob.findUnique({
-      where: { id: jobId },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        resultVerificationId: true,
-        errorMessage: true,
-        createdAt: true,
-        updatedAt: true,
-        completedAt: true,
-      },
-    });
+    const job = await OcrRepository.findOcrJobById(jobId);
 
     if (!job) {
       throw new AppError('OCR job not found', 404);
@@ -387,50 +370,25 @@ export class OcrService {
   }
 
   static async processIdCardVerificationJob(jobId: string): Promise<void> {
-    const job = await prisma.ocrJob.findUnique({
-      where: { id: jobId },
-      select: {
-        id: true,
-        status: true,
-        imagePath: true,
-        userId: true,
-      },
-    });
+    const job = await OcrRepository.findOcrJobById(jobId);
 
     if (!job || job.status !== 'PENDING') {
       return;
     }
 
-    await prisma.ocrJob.update({
-      where: { id: job.id },
-      data: {
-        status: 'PROCESSING',
-        errorMessage: null,
-      },
+    await OcrRepository.updateOcrJob(job.id, {
+      status: 'PROCESSING',
+      errorMessage: null,
     });
 
     try {
       const imageBase64 = await readPrivateImageAsDataUrl(job.imagePath);
       const result = await this.verifyIdCard(imageBase64, { userId: job.userId ?? undefined });
 
-      await prisma.ocrJob.update({
-        where: { id: job.id },
-        data: {
-          status: 'COMPLETED',
-          resultVerificationId: result.verificationId,
-          completedAt: new Date(),
-        },
-      });
+      await OcrRepository.updateOcrJob(job.id, { status: 'COMPLETED', resultVerification: { connect: { id: result.verificationId } }, completedAt: new Date() });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown OCR job error';
-      await prisma.ocrJob.update({
-        where: { id: job.id },
-        data: {
-          status: 'FAILED',
-          errorMessage: message,
-          completedAt: new Date(),
-        },
-      });
+      await OcrRepository.updateOcrJob(job.id, { status: 'FAILED', errorMessage: message, completedAt: new Date() });
       logger.warn({ error, jobId: job.id }, 'OCR job failed');
     }
   }
@@ -516,25 +474,25 @@ export class OcrService {
     imagePath?: string,
     userId?: number,
   ) {
-    const verification = await prisma.idCardVerification.create({
-      data: {
-        userId,
-        imagePath,
-        isThaiIdCard: result.isThaiIdCard,
-        citizenIdMasked: result.citizenIdMasked,
-        citizenIdHash: result.citizenIdHash,
-        fullNameTh: result.fullNameTh,
-        birthDateTh: result.birthDateTh,
-        issueDate: result.issueDate,
-        expiryDate: result.expiryDate,
-        idDetected: result.confidence.idDetected,
-        idPresent: result.confidence.idPresent,
-        idChecksumValid: result.confidence.idChecksumValid,
-        reason: result.reason,
-        ocrJobId: result.jobId,
-        processingTimeMs: result.processingTimeMs,
-      },
-    });
+    const createVerification: Prisma.IdCardVerificationCreateInput = {
+      imagePath,
+      isThaiIdCard: result.isThaiIdCard,
+      citizenIdMasked: result.citizenIdMasked,
+      citizenIdHash: result.citizenIdHash,
+      fullNameTh: result.fullNameTh,
+      birthDateTh: result.birthDateTh,
+      issueDate: result.issueDate,
+      expiryDate: result.expiryDate,
+      idDetected: result.confidence.idDetected,
+      idPresent: result.confidence.idPresent,
+      idChecksumValid: result.confidence.idChecksumValid,
+      reason: result.reason,
+      ocrJobId: result.jobId,
+      processingTimeMs: result.processingTimeMs,
+    } as unknown as Prisma.IdCardVerificationCreateInput;
+    if (userId) (createVerification as any).user = { connect: { id: userId } };
+
+    const verification = await OcrRepository.createIdCardVerification(createVerification);
 
     await invalidateIdCardVerificationListCache();
 
@@ -542,13 +500,7 @@ export class OcrService {
   }
 
   static async deleteIdCardVerification(id: number): Promise<DeleteIdCardVerificationResult> {
-    const verification = await prisma.idCardVerification.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        imagePath: true,
-      },
-    });
+    const verification = await OcrRepository.findIdCardVerificationById(id);
 
     if (!verification) {
       throw new AppError('Id card verification record not found', 404);
@@ -556,9 +508,7 @@ export class OcrService {
 
     const imageDeleted = await deletePrivateImageIfExists(verification.imagePath);
 
-    await prisma.idCardVerification.delete({
-      where: { id },
-    });
+    await OcrRepository.deleteIdCardVerification(id);
 
     await invalidateIdCardVerificationListCache();
 
@@ -579,29 +529,9 @@ export class OcrService {
       return cached;
     }
 
-    const [items, total] = await prisma.$transaction([
-      prisma.idCardVerification.findMany({
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: safeLimit,
-        select: {
-          id: true,
-          userId: true,
-          imagePath: true,
-          isThaiIdCard: true,
-          citizenIdMasked: true,
-          fullNameTh: true,
-          birthDateTh: true,
-          idDetected: true,
-          idPresent: true,
-          idChecksumValid: true,
-          reason: true,
-          verifiedAt: true,
-          createdAt: true,
-        },
-      }),
-      prisma.idCardVerification.count(),
-    ]);
+    const listResult = await OcrRepository.listIdCardVerifications(safePage, safeLimit);
+    const items = listResult.items;
+    const total = listResult.total;
 
     const result = {
       items: items.map(toSummary),
@@ -619,28 +549,7 @@ export class OcrService {
   }
 
   static async getIdCardVerification(id: number): Promise<IdCardVerificationDetail> {
-    const verification = await prisma.idCardVerification.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        userId: true,
-        imagePath: true,
-        isThaiIdCard: true,
-        citizenIdMasked: true,
-        fullNameTh: true,
-        birthDateTh: true,
-        issueDate: true,
-        expiryDate: true,
-        idDetected: true,
-        idPresent: true,
-        idChecksumValid: true,
-        reason: true,
-        ocrJobId: true,
-        processingTimeMs: true,
-        verifiedAt: true,
-        createdAt: true,
-      },
-    });
+    const verification = await OcrRepository.findIdCardVerificationById(id);
 
     if (!verification) {
       throw new AppError('Id card verification record not found', 404);
@@ -656,12 +565,7 @@ export class OcrService {
   }
 
   static async getIdCardVerificationImage(id: number): Promise<IdCardVerificationImageResult> {
-    const verification = await prisma.idCardVerification.findUnique({
-      where: { id },
-      select: {
-        imagePath: true,
-      },
-    });
+    const verification = await OcrRepository.findIdCardVerificationById(id);
 
     if (!verification) {
       throw new AppError('Id card verification record not found', 404);

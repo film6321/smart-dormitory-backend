@@ -1,20 +1,19 @@
-import { prisma } from '../../database/db';
 import NotificationService from '../notifications/notification.service';
+import { MaintenanceRepository } from './maintenance.repository';
+import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
 
 export class MaintenanceService {
   static async getTicketById(id: number) {
-    return prisma.maintenanceTicket.findUnique({ where: { id } });
+    return MaintenanceRepository.getTicketById(id);
   }
 
   static async createTicket(data: { tenantId: number; roomId?: number; category: string; description: string; contactTime?: Date }) {
-    const ticket = await prisma.maintenanceTicket.create({
-      data: {
-        tenantId: data.tenantId,
-        roomId: data.roomId,
-        category: data.category as any,
-        description: data.description,
-        contactTime: data.contactTime,
-      },
+    const ticket = await MaintenanceRepository.createTicket({
+      tenant: { connect: { id: data.tenantId } },
+      room: data.roomId ? { connect: { id: data.roomId } } : undefined,
+      category: data.category as unknown as MaintenanceCategory,
+      description: data.description,
+      contactTime: data.contactTime,
     });
 
     const notificationService = new NotificationService();
@@ -29,24 +28,13 @@ export class MaintenanceService {
   }
 
   static async listTickets(userId?: number, role?: string) {
-    const where = role === 'ADMIN'
-      ? {}
-      : { tenant: { userId } };
-
-    return prisma.maintenanceTicket.findMany({
-      where,
-      include: { tenant: true, room: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    return MaintenanceRepository.listTickets(userId, role);
   }
 
   static async updateTicketStatus(id: number, status: string, note?: string) {
-    return prisma.maintenanceTicket.update({
-      where: { id },
-      data: {
-        status: status as any,
-        note,
-      },
+    return MaintenanceRepository.updateTicketStatus(id, {
+      status: status as unknown as MaintenanceStatus,
+      note,
     });
   }
 }

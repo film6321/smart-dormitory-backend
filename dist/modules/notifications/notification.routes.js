@@ -1,0 +1,20 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_jwt_1 = require("../../middlewares/auth-jwt");
+const dto_validation_1 = require("../shared/dto-validation");
+const notification_controller_1 = __importDefault(require("./notification.controller"));
+const notification_dto_1 = require("./notification.dto");
+const router = (0, express_1.Router)();
+router.get('/', auth_jwt_1.verifyToken, notification_controller_1.default.listNotifications);
+router.get('/dead-letters', auth_jwt_1.verifyToken, notification_controller_1.default.listDeadLetters);
+router.get('/audit-logs', auth_jwt_1.verifyToken, notification_controller_1.default.listAuditLogs);
+router.post('/dead-letters/:id/retry', auth_jwt_1.verifyToken, notification_controller_1.default.retryDeadLetter);
+router.delete('/dead-letters/:id', auth_jwt_1.verifyToken, notification_controller_1.default.deleteDeadLetter);
+router.post('/', auth_jwt_1.verifyToken, (0, dto_validation_1.validateDto)(notification_dto_1.createNotificationSchema), notification_controller_1.default.createNotification);
+router.post('/:id/send', auth_jwt_1.verifyToken, notification_controller_1.default.sendNotification);
+router.post('/webhook/provider', notification_controller_1.default.handleProviderWebhook);
+exports.default = router;
