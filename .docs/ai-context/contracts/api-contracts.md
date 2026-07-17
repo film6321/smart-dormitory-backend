@@ -145,7 +145,54 @@ POST /api/visitor/:id/checkout     — สแกนออก (CHECKED_IN → CHE
 
 ---
 
-## 7. HTTP Error Status Codes
+## 7. Face Verification & FaceGate.Edge — `/api/face-verification`
+
+### 7.1 Web Dashboard (JWT Auth)
+
+```text
+POST /api/face-verification/register          — ADMIN: ลงทะเบียนใบหน้า (Multipart: file/image)
+POST /api/face-verification/verify            — Rate limit: 20/นาที, ตรวจเทียบใบหน้า (Multipart)
+GET  /api/face-verification/:templateId       — ADMIN: ดูข้อมูล embedding
+PUT  /api/face-verification/:templateId       — ADMIN: อัปเดตใบหน้า (Multipart)
+DELETE /api/face-verification/:templateId     — ADMIN: ลบ template
+```
+
+### 7.2 C# FaceGate.Edge (Bearer Token: FACE_API_KEY)
+
+```text
+GET  /api/face-verification/embeddings                   — ดึง embedding ทั้งหมด (?since=ISO8601)
+GET  /api/face-verification/enrollment/pending            — รายชื่อที่รอสร้าง embedding
+GET  /api/face-verification/enrollment/photo/:id          — สตรีมไฟล์รูป enroll
+POST /api/face-verification/enrollment/:studentId/embeddings — รับ embedding จาก Edge
+POST /api/face-verification/attendance/scan               — รับผลสแกนจาก Edge
+POST /api/face-verification/devices/heartbeat             — heartbeat กล้อง
+POST /api/face-verification/devices/live-frame            — เฟรมสดจากกล้อง
+```
+
+**Scan Request:**
+```json
+{
+  "student_code": "user_99",
+  "direction": "IN",
+  "confidence": 0.95,
+  "scanned_at": "2026-07-18T12:00:00Z",
+  "device_code": "CAMERA_01",
+  "snapshot_base64": "optional_base64_string"
+}
+```
+
+**Store Embeddings Request:**
+```json
+{
+  "model_version": "buffalo_l",
+  "embeddings": [[0.1, 0.2, ...]],
+  "quality_scores": [0.95]
+}
+```
+
+---
+
+## 8. HTTP Error Status Codes
 
 | Code | ความหมาย |
 | ---: | :--- |
@@ -157,3 +204,4 @@ POST /api/visitor/:id/checkout     — สแกนออก (CHECKED_IN → CHE
 | 429 | เกิน Rate Limit |
 | 500 | Server Error ที่ไม่คาดคิด |
 | 503 | External API (OCR/Face) ไม่พร้อมใช้งาน |
+

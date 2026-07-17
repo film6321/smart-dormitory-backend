@@ -30,7 +30,7 @@ src/
     billing/          ← สร้างบิลและตรวจสลิป
     maintenance/      ← คิวและสถานะงานซ่อม
     ocr/              ← Wrapper ยิง External OCR API
-    face-verification/ ← Wrapper ยิง External Face API
+    face-verification/ ← FaceGate.Edge integration (embeddings, scan, enrollment)
   shared/
     api-response.ts   ← Wrapper response กลาง
     middlewares/      ← Auth, Rate limiter, Trace, Validation

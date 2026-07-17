@@ -8,6 +8,21 @@ import { FaceVerificationController } from './face-verification.controller';
 
 const router = Router();
 
+// Token check middleware specifically for FaceGate Edge or fallback to user JWTs
+const verifyFaceGateToken = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  const expectedToken = process.env.FACE_API_KEY || 'face-recognition-secret-key-change-me-in-production';
+
+  if (token && token === expectedToken) {
+    (req as any).user = { id: 0, role: 'ADMIN' };
+    return next();
+  }
+
+  // Fallback to standard admin check
+  verifyToken(req as any, res, next);
+};
+
 const faceLimiter = rateLimit({
   store: createRateLimitStore('rl:face:lock:'),
   windowMs: 60 * 1000,
@@ -47,11 +62,20 @@ const uploadFaceImage = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-// Endpoints
+// ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
-router.get('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);
-router.put('/:templateId', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.updateTemplate);
-router.delete('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.deleteTemplate);
+router.get('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);
+router.put('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.updateTemplate);
+router.delete('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), FaceVerificationController.deleteTemplate);
+
+// ── C# FaceGate.Edge Integration Endpoints ──
+router.get('/embeddings', verifyFaceGateToken, FaceVerificationController.embeddings);
+router.get('/enrollment/pending', verifyFaceGateToken, FaceVerificationController.pending);
+router.get('/enrollment/photo/:id', verifyFaceGateToken, FaceVerificationController.photo);
+router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, FaceVerificationController.storeEmbeddings);
+router.post('/attendance/scan', verifyFaceGateToken, FaceVerificationController.scan);
+router.post('/devices/heartbeat', verifyFaceGateToken, FaceVerificationController.heartbeat);
+router.post('/devices/live-frame', verifyFaceGateToken, FaceVerificationController.liveFrame);
 
 export default router;

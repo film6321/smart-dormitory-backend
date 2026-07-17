@@ -1,39 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoomsService = void 0;
-const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
+const rooms_repository_1 = require("./rooms.repository");
 class RoomsService {
-    static async listRooms(prismaClient = db_1.prisma) {
-        return prismaClient.room.findMany({
-            include: { tenant: true, bills: true },
-            orderBy: { roomNumber: 'asc' },
-        });
+    static async listRooms() {
+        return rooms_repository_1.RoomsRepository.listRooms();
     }
-    static async getRoomById(id, prismaClient = db_1.prisma) {
-        return prismaClient.room.findUnique({
-            where: { id },
-            include: { tenant: true, bills: true },
-        });
+    static async getRoomById(id) {
+        return rooms_repository_1.RoomsRepository.getRoomById(id);
     }
-    static async createRoom(data, prismaClient = db_1.prisma) {
+    static async createRoom(data, db) {
         const roomNumber = data.roomNumber.trim().toUpperCase();
-        const existing = await prismaClient.room.findUnique({ where: { roomNumber } });
+        const existing = await rooms_repository_1.RoomsRepository.findByNumber(roomNumber, db);
         if (existing) {
             throw new error_handler_1.AppError('Room number already exists', 409);
         }
-        return prismaClient.room.create({
-            data: {
-                roomNumber,
-                floor: data.floor ?? null,
-                status: data.status ?? 'AVAILABLE',
-                capacity: data.capacity ?? 1,
-                monthlyRent: Number(data.monthlyRent),
-                description: data.description?.trim() ?? null,
-            },
-        });
+        return rooms_repository_1.RoomsRepository.createRoom({
+            roomNumber,
+            floor: data.floor ?? null,
+            status: data.status ?? 'AVAILABLE',
+            capacity: data.capacity ?? 1,
+            monthlyRent: Number(data.monthlyRent),
+            description: data.description?.trim() ?? null,
+        }, db);
     }
-    static async updateRoom(id, data, prismaClient = db_1.prisma) {
+    static async updateRoom(id, data) {
         const payload = {};
         if (data.roomNumber) {
             payload.roomNumber = data.roomNumber.trim().toUpperCase();
@@ -48,10 +40,10 @@ class RoomsService {
             payload.monthlyRent = Number(data.monthlyRent);
         if (data.description !== undefined)
             payload.description = data.description?.trim() ?? null;
-        return prismaClient.room.update({ where: { id }, data: payload });
+        return rooms_repository_1.RoomsRepository.updateRoom(id, payload);
     }
-    static async deleteRoom(id, prismaClient = db_1.prisma) {
-        return prismaClient.room.delete({ where: { id } });
+    static async deleteRoom(id) {
+        return rooms_repository_1.RoomsRepository.deleteRoom(id);
     }
 }
 exports.RoomsService = RoomsService;

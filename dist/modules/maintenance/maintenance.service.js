@@ -4,21 +4,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MaintenanceService = void 0;
-const db_1 = require("../../database/db");
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
+const maintenance_repository_1 = require("./maintenance.repository");
 class MaintenanceService {
     static async getTicketById(id) {
-        return db_1.prisma.maintenanceTicket.findUnique({ where: { id } });
+        return maintenance_repository_1.MaintenanceRepository.getTicketById(id);
     }
     static async createTicket(data) {
-        const ticket = await db_1.prisma.maintenanceTicket.create({
-            data: {
-                tenantId: data.tenantId,
-                roomId: data.roomId,
-                category: data.category,
-                description: data.description,
-                contactTime: data.contactTime,
-            },
+        const ticket = await maintenance_repository_1.MaintenanceRepository.createTicket({
+            tenant: { connect: { id: data.tenantId } },
+            room: data.roomId ? { connect: { id: data.roomId } } : undefined,
+            category: data.category,
+            description: data.description,
+            contactTime: data.contactTime,
         });
         const notificationService = new notification_service_1.default();
         await notificationService.scheduleNotification({
@@ -30,22 +28,12 @@ class MaintenanceService {
         return ticket;
     }
     static async listTickets(userId, role) {
-        const where = role === 'ADMIN'
-            ? {}
-            : { tenant: { userId } };
-        return db_1.prisma.maintenanceTicket.findMany({
-            where,
-            include: { tenant: true, room: true },
-            orderBy: { createdAt: 'desc' },
-        });
+        return maintenance_repository_1.MaintenanceRepository.listTickets(userId, role);
     }
     static async updateTicketStatus(id, status, note) {
-        return db_1.prisma.maintenanceTicket.update({
-            where: { id },
-            data: {
-                status: status,
-                note,
-            },
+        return maintenance_repository_1.MaintenanceRepository.updateTicketStatus(id, {
+            status: status,
+            note,
         });
     }
 }

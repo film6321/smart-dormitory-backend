@@ -4,23 +4,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VisitorService = void 0;
-const db_1 = require("../../database/db");
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
+const visitor_repository_1 = require("./visitor.repository");
 class VisitorService {
     static async getVisitorById(id) {
-        return db_1.prisma.visitor.findUnique({ where: { id } });
+        return visitor_repository_1.VisitorRepository.getVisitorById(id);
     }
     static async registerVisitor(data) {
-        const visitor = await db_1.prisma.visitor.create({
-            data: {
-                guestName: data.guestName,
-                purpose: data.purpose,
-                roomId: data.roomId,
-                tenantId: data.tenantId,
-                expectedEntryTime: data.expectedEntryTime,
-                status: 'REGISTERED',
-            },
-        });
+        const createData = {
+            guestName: data.guestName,
+            purpose: data.purpose,
+            expectedEntryTime: data.expectedEntryTime,
+            status: 'REGISTERED',
+        };
+        if (data.roomId !== undefined && data.roomId !== null)
+            createData.room = { connect: { id: data.roomId } };
+        if (data.tenantId !== undefined && data.tenantId !== null)
+            createData.tenant = { connect: { id: data.tenantId } };
+        const visitor = await visitor_repository_1.VisitorRepository.registerVisitor(createData);
         const notificationService = new notification_service_1.default();
         await notificationService.scheduleNotification({
             tenantId: visitor.tenantId ?? undefined,
@@ -31,17 +32,11 @@ class VisitorService {
         return visitor;
     }
     static async listVisitors() {
-        return db_1.prisma.visitor.findMany({
-            include: { logs: true },
-            orderBy: { createdAt: 'desc' },
-        });
+        return visitor_repository_1.VisitorRepository.listVisitors();
     }
     static async updateVisitorStatus(id, status) {
-        return db_1.prisma.visitor.update({
-            where: { id },
-            data: {
-                status: status,
-            },
+        return visitor_repository_1.VisitorRepository.updateVisitorStatus(id, {
+            status: status,
         });
     }
 }

@@ -24,7 +24,6 @@ import maintenanceRoutes from './modules/maintenance/maintenance.routes';
 import visitorRoutes from './modules/visitor/visitor.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import notificationPreferencesRoutes from './modules/notifications/notification-preferences.routes';
-import faceRecognitionRoutes from './modules/faceRecognition/faceRecognition.routes';
 import healthRoutes from './routes/health';
 
 const app = express();
@@ -48,7 +47,6 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/visitor', visitorRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notifications/preferences', notificationPreferencesRoutes);
-app.use('/api/face-recognition', faceRecognitionRoutes);
 
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));

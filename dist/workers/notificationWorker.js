@@ -14,7 +14,6 @@ const getDbClient = (dbClient) => {
         return dbClient;
     }
     try {
-        // eslint-disable-next-line global-require
         const { prisma } = require('../database/db');
         return prisma;
     }
@@ -62,7 +61,6 @@ async function processPendingNotifications(dbClient) {
         const svc = new notification_service_1.default(db);
         for (const notification of pending) {
             try {
-                // eslint-disable-next-line no-await-in-loop
                 await svc.sendNotification(notification.id);
                 processedCount += 1;
             }

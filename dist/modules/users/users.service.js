@@ -5,40 +5,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
-const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
+const users_repository_1 = require("./users.repository");
 class UsersService {
-    static async listUsers(prismaClient = db_1.prisma) {
-        return prismaClient.user.findMany({
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+    static async listUsers(db) {
+        return users_repository_1.UsersRepository.listUsers(db);
     }
-    static async getUserById(id, prismaClient = db_1.prisma) {
-        return prismaClient.user.findUnique({
-            where: { id },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
+    static async getUserById(id, db) {
+        return users_repository_1.UsersRepository.getUserById(id, db);
     }
-    static async createUser(data, prismaClient = db_1.prisma) {
+    static async createUser(data, db) {
         const email = data.email.trim().toLowerCase();
-        const existing = await prismaClient.user.findUnique({ where: { email } });
+        const existing = await users_repository_1.UsersRepository.findByEmail(email, db);
         if (existing) {
             throw new error_handler_1.AppError('Email already exists', 409);
         }
@@ -46,25 +24,15 @@ class UsersService {
             throw new error_handler_1.AppError('Password must be at least 8 characters', 400);
         }
         const hashedPassword = await bcrypt_1.default.hash(data.password, 10);
-        return prismaClient.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                firstName: data.firstName?.trim() ?? null,
-                lastName: data.lastName?.trim() ?? null,
-                role: (data.role ?? 'STUDENT').toUpperCase(),
-            },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                password: true,
-            },
-        });
+        return users_repository_1.UsersRepository.createUser({
+            email,
+            password: hashedPassword,
+            firstName: data.firstName?.trim() ?? null,
+            lastName: data.lastName?.trim() ?? null,
+            role: (data.role ?? 'STUDENT').toUpperCase(),
+        }, db);
     }
-    static async updateUser(id, data, prismaClient = db_1.prisma) {
+    static async updateUser(id, data, db) {
         const payload = {};
         if (data.email)
             payload.email = data.email.trim().toLowerCase();
@@ -77,10 +45,10 @@ class UsersService {
         if (data.password) {
             payload.password = await bcrypt_1.default.hash(data.password, 10);
         }
-        return prismaClient.user.update({ where: { id }, data: payload });
+        return users_repository_1.UsersRepository.updateUser(id, payload, db);
     }
-    static async deleteUser(id, prismaClient = db_1.prisma) {
-        return prismaClient.user.delete({ where: { id } });
+    static async deleteUser(id, db) {
+        return users_repository_1.UsersRepository.deleteUser(id, db);
     }
 }
 exports.UsersService = UsersService;

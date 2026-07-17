@@ -1,6 +1,8 @@
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
 process.env.DISABLE_REDIS_RATE_LIMITS =
   process.env.DISABLE_REDIS_RATE_LIMITS || "true";
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL || "postgresql://test:test@localhost:5432/test?schema=public";
 process.env.TS_NODE_PROJECT = "tsconfig.test.json";
 
 require("ts-node/register");

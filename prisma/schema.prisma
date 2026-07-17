@@ -37,11 +37,13 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  accessLogs          AccessLog[]
-  transactions        Transaction[]
-  idCardVerifications IdCardVerification[]
-  ocrJobs             OcrJob[]
-  tenant              Tenant?
+  accessLogs           AccessLog[]
+  transactions         Transaction[]
+  idCardVerifications  IdCardVerification[]
+  ocrJobs              OcrJob[]
+  tenant               Tenant?
+  faceEmbeddings       FaceEmbedding[]
+  faceEnrollmentPhotos FaceEnrollmentPhoto[]
 }
 
 /**
@@ -277,11 +279,13 @@ model Visitor {
   expectedEntryTime DateTime?
   status            VisitorStatus @default(REGISTERED)
   checkedInAt       DateTime?
-  checkedOutAt      DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  checkedOutAt         DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
-  logs VisitorLog[]
+  logs                 VisitorLog[]
+  faceEmbeddings       FaceEmbedding[]
+  faceEnrollmentPhotos FaceEnrollmentPhoto[]
 
   @@index([tenantId])
   @@index([roomId])
@@ -424,4 +428,33 @@ model NotificationPreference {
   @@index([tenantId])
   @@index([userId])
   @@index([channel])
+}
+
+model FaceEmbedding {
+  id           Int      @id @default(autoincrement())
+  userId       Int?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitorId    Int?
+  visitor      Visitor? @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  vector       Float[]
+  modelVersion String   @map("model_version")
+  qualityScore Float?   @map("quality_score")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([visitorId])
+}
+
+model FaceEnrollmentPhoto {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitorId Int?
+  visitor   Visitor? @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  photoPath String   @map("photo_path")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([visitorId])
 }

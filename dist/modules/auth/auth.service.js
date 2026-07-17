@@ -6,9 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
 const env_1 = require("../../shared/env");
+const auth_repository_1 = require("./auth.repository");
 // ฟังก์ชันตรวจสอบความเข็มแข็งของรหัสผ่าน
 const validatePassword = (password) => {
     if (!password || password.length < 8) {
@@ -26,7 +26,7 @@ const validatePassword = (password) => {
 };
 class AuthService {
     static async login(email, passwordString) {
-        const user = await db_1.prisma.user.findUnique({ where: { email } });
+        const user = await auth_repository_1.AuthRepository.findByEmail(email);
         if (!user) {
             throw new error_handler_1.AppError('อีเมลหรือรหัสผ่านไม่ถูกต้อง', 401);
         }
@@ -50,7 +50,7 @@ class AuthService {
     static async register(data) {
         const { email, password, firstName, lastName, role } = data;
         // ตรวจสอบว่าอีเมลซ้ำไหม
-        const existing = await db_1.prisma.user.findUnique({ where: { email } });
+        const existing = await auth_repository_1.AuthRepository.findByEmail(email);
         if (existing) {
             throw new error_handler_1.AppError('อีเมลนี้ถูกใช้งานแล้ว', 400);
         }
@@ -58,14 +58,12 @@ class AuthService {
         validatePassword(password);
         // แฮชรหัสผ่านเพื่อความปลอดภัยก่อนบันทึกลง Database
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
-        const user = await db_1.prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                firstName,
-                lastName,
-                role: role || 'STUDENT'
-            }
+        const user = await auth_repository_1.AuthRepository.createUser({
+            email,
+            password: hashedPassword,
+            firstName,
+            lastName,
+            role: role || 'STUDENT'
         });
         return { id: user.id, email: user.email, role: user.role };
     }

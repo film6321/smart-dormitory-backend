@@ -11,6 +11,18 @@ const error_handler_1 = require("../../middlewares/error-handler");
 const rate_limit_store_1 = require("../../shared/rate-limit-store");
 const face_verification_controller_1 = require("./face-verification.controller");
 const router = (0, express_1.Router)();
+// Token check middleware specifically for FaceGate Edge or fallback to user JWTs
+const verifyFaceGateToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    const expectedToken = process.env.FACE_API_KEY || 'face-recognition-secret-key-change-me-in-production';
+    if (token && token === expectedToken) {
+        req.user = { id: 0, role: 'ADMIN' };
+        return next();
+    }
+    // Fallback to standard admin check
+    (0, auth_jwt_1.verifyToken)(req, res, next);
+};
 const faceLimiter = (0, express_rate_limit_1.default)({
     store: (0, rate_limit_store_1.createRateLimitStore)('rl:face:lock:'),
     windowMs: 60 * 1000,
@@ -45,10 +57,18 @@ const uploadFaceImage = (req, res, next) => {
         next(error);
     });
 };
-// Endpoints
+// ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
-router.get('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);
-router.put('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.updateTemplate);
-router.delete('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.deleteTemplate);
+router.get('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);
+router.put('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.updateTemplate);
+router.delete('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.deleteTemplate);
+// ── C# FaceGate.Edge Integration Endpoints ──
+router.get('/embeddings', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.embeddings);
+router.get('/enrollment/pending', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.pending);
+router.get('/enrollment/photo/:id', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.photo);
+router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.storeEmbeddings);
+router.post('/attendance/scan', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.scan);
+router.post('/devices/heartbeat', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.heartbeat);
+router.post('/devices/live-frame', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.liveFrame);
 exports.default = router;
