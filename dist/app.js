@@ -35,6 +35,7 @@ const app = (0, express_1.default)();
 // API routes
 app.use(accessLog_1.accessLog);
 app.use('/health', health_1.default);
+app.use('/api/health', health_1.default);
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/ocr', ocr_routes_1.default);
 app.use('/api/face-verification', face_verification_routes_1.default);

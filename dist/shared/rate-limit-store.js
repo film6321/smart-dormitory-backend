@@ -5,7 +5,8 @@ const express_rate_limit_1 = require("express-rate-limit");
 const rate_limit_redis_1 = require("rate-limit-redis");
 const logger_1 = require("../logger");
 const redis_1 = require("./redis");
-const useRedisRateLimitStore = () => process.env.NODE_ENV !== 'test' && process.env.DISABLE_REDIS_RATE_LIMITS !== 'true';
+const useRedisRateLimitStore = () => process.env.DISABLE_REDIS_RATE_LIMITS !== 'true' &&
+    (process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_STORE === 'redis');
 const createRateLimitStore = (prefix) => {
     if (!useRedisRateLimitStore()) {
         logger_1.logger.info({ prefix }, 'Using in-memory rate limit store for tests or disabled Redis rate limiting');

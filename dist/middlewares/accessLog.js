@@ -4,7 +4,7 @@ exports.accessLog = void 0;
 const db_1 = require("../database/db");
 const logger_1 = require("../logger");
 const accessLogQueue_1 = require("../workers/accessLogQueue");
-const ignoredPaths = ['/health', '/metrics'];
+const ignoredPaths = ['/health', '/api/health', '/metrics'];
 const shouldSkipAccessLog = (path) => ignoredPaths.some((ignoredPath) => path.startsWith(ignoredPath));
 const persistAccessLogFallback = async (log) => {
     try {

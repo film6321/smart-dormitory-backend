@@ -65,9 +65,6 @@ const uploadFaceImage = (req: Request, res: Response, next: NextFunction) => {
 // ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
-router.get('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);
-router.put('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.updateTemplate);
-router.delete('/:templateId(\\d+)', verifyToken, requireRole(['ADMIN']), FaceVerificationController.deleteTemplate);
 
 // ── C# FaceGate.Edge Integration Endpoints ──
 router.get('/embeddings', verifyFaceGateToken, FaceVerificationController.embeddings);
@@ -77,5 +74,10 @@ router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, FaceVerifi
 router.post('/attendance/scan', verifyFaceGateToken, FaceVerificationController.scan);
 router.post('/devices/heartbeat', verifyFaceGateToken, FaceVerificationController.heartbeat);
 router.post('/devices/live-frame', verifyFaceGateToken, FaceVerificationController.liveFrame);
+
+// ── Template Management Endpoints ──
+router.get('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);
+router.put('/:templateId', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.updateTemplate);
+router.delete('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.deleteTemplate);
 
 export default router;

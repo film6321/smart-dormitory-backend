@@ -16,16 +16,16 @@ const getRedisPort = () => {
 const getRedisClient = () => {
     if (!redisClient) {
         const redisUrl = getRedisUrl();
+        const redisOptions = {
+            enableOfflineQueue: process.env.REDIS_ENABLE_OFFLINE_QUEUE !== 'false',
+            maxRetriesPerRequest: 1,
+        };
         redisClient = redisUrl
-            ? new ioredis_1.default(redisUrl, {
-                enableOfflineQueue: false,
-                maxRetriesPerRequest: 1,
-            })
+            ? new ioredis_1.default(redisUrl, redisOptions)
             : new ioredis_1.default({
                 host: getRedisHost(),
                 port: getRedisPort(),
-                enableOfflineQueue: false,
-                maxRetriesPerRequest: 1,
+                ...redisOptions,
             });
         redisClient.on('error', (error) => {
             logger_1.logger.warn({ error }, 'Redis connection error');

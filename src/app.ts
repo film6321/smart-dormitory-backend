@@ -36,6 +36,7 @@ setupSwagger(app);
 // API routes
 app.use(accessLog);
 app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/face-verification', faceVerificationRoutes);

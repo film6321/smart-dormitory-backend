@@ -5,7 +5,8 @@ import { logger } from '../logger';
 import { getRedisClient } from './redis';
 
 const useRedisRateLimitStore = (): boolean =>
-  process.env.NODE_ENV !== 'test' && process.env.DISABLE_REDIS_RATE_LIMITS !== 'true';
+  process.env.DISABLE_REDIS_RATE_LIMITS !== 'true' &&
+  (process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_STORE === 'redis');
 
 export const createRateLimitStore = (prefix: string) => {
   if (!useRedisRateLimitStore()) {

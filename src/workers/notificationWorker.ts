@@ -16,6 +16,18 @@ const getDbClient = (dbClient?: any) => {
   }
 };
 
+const isDatabaseConnectionError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const typedError = error as { code?: unknown; message?: unknown };
+  const code = typedError.code;
+  const message = typeof typedError.message === 'string' ? typedError.message : '';
+
+  return code === 'ECONNREFUSED' || message.includes('Can\'t reach database server') || message.includes('connect ECONNREFUSED');
+};
+
 let workerTimer: NodeJS.Timeout | undefined;
 let isProcessing = false;
 let processedCount = 0;
@@ -70,6 +82,13 @@ export async function processPendingNotifications(dbClient?: any) {
         logger.warn({ notificationId: notification.id, err }, 'Notification worker failed to process a notification');
       }
     }
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      logger.warn({ error }, 'Notification worker skipped because database is unavailable');
+      return;
+    }
+
+    logger.error({ error }, 'Notification worker failed unexpectedly');
   } finally {
     isProcessing = false;
   }

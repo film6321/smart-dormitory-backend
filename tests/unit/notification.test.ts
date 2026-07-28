@@ -70,10 +70,10 @@ describe('NotificationService (unit)', () => {
       }
     };
 
-    const svc = new NotificationService(mockDb);
     const simpleProvider = await import('../../src/modules/notifications/provider/simpleProvider');
-    const originalSend = simpleProvider.send;
-    simpleProvider.send = async () => {
+    const providerModule: any = simpleProvider.default ?? simpleProvider;
+    const originalSend = providerModule.send;
+    providerModule.send = async () => {
       attemptCount += 1;
       if (attemptCount < 2) {
         throw new Error('temporary failure');
@@ -81,12 +81,14 @@ describe('NotificationService (unit)', () => {
       return { id: 'ok', status: 'ok' };
     };
 
+    const svc = new NotificationService(mockDb, providerModule);
+
     try {
       await svc.sendNotification(2);
       assert.equal(attemptCount, 2);
       assert.equal(updates.at(-1)?.data?.status, 'SENT');
     } finally {
-      simpleProvider.send = originalSend;
+      providerModule.send = originalSend;
     }
   });
 

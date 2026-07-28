@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-07-27 — Backend/Frontend connectivity alignment
+
+- ปรับ CORS fallback ให้อนุญาต origin จาก frontend gateway และ localhost ports ที่ใช้งานจริง เพื่อกัน browser แสดง `Network Error`
+- ทำให้ backend runtime และ docker-compose ใช้พอร์ต `3000` ตรงกันทั้ง `.env`, `.env.example`, `Dockerfile`, และ `docker-compose.yml`
+- เพิ่ม alias `GET /api/health` ให้ตรงกับ frontend dashboard และข้าม access log สำหรับ health route
+- ปรับ rate-limit store ให้ dev/test ใช้ in-memory เป็นค่าเริ่มต้น ลดปัญหา request ล้มเมื่อ Redis ยังไม่พร้อม
+- เพิ่ม unit test สำหรับยืนยันว่า origin ของ gateway ผ่าน CORS ได้
+- ตรวจยืนยันด้วย `npm test` และ `npm run build` ผ่านสำเร็จ
+
 ### 2026-07-10 — Repository refactor & Notification service alignment
 
 - แยก Repository layer (users, auth, notifications) เพื่อย้าย Prisma calls ออกจาก Service และรักษา "Thin Controller" / "Service business logic" pattern

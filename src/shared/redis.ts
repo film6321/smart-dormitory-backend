@@ -15,16 +15,17 @@ const getRedisPort = (): number => {
 export const getRedisClient = (): Redis => {
   if (!redisClient) {
     const redisUrl = getRedisUrl();
+    const redisOptions = {
+      enableOfflineQueue: process.env.REDIS_ENABLE_OFFLINE_QUEUE !== 'false',
+      maxRetriesPerRequest: 1,
+    };
+
     redisClient = redisUrl
-      ? new Redis(redisUrl, {
-          enableOfflineQueue: false,
-          maxRetriesPerRequest: 1,
-        })
+      ? new Redis(redisUrl, redisOptions)
       : new Redis({
           host: getRedisHost(),
           port: getRedisPort(),
-          enableOfflineQueue: false,
-          maxRetriesPerRequest: 1,
+          ...redisOptions,
         });
 
     redisClient.on('error', (error) => {

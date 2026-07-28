@@ -8,11 +8,21 @@ import { createRateLimitStore } from '../shared/rate-limit-store';
 export const setupSecurity = (app: Express) => {
   app.use(helmet());
 
-  const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
+  const configuredOrigins = [process.env.FRONTEND_URL, process.env.CORS_ORIGIN].filter(Boolean) as string[];
+  const nginxHostPort = process.env.NGINX_HOST_PORT || '3002';
+  const fallbackOrigins = [
     'http://localhost:3000',
+    `http://localhost:${nginxHostPort}`,
     'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:3000',
+    `http://127.0.0.1:${nginxHostPort}`,
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
   ];
+  const allowedOrigins = Array.from(new Set([...configuredOrigins, ...fallbackOrigins]));
 
   app.use(
     cors({

@@ -6,9 +6,11 @@ import { Prisma } from '@prisma/client';
 export class NotificationService {
   // Service uses static repository methods on NotificationRepository
   private db: any;
+  private providerModule?: any;
 
-  constructor(db?: any) {
+  constructor(db?: any, providerModule?: any) {
     this.db = db ?? (prisma as any);
+    this.providerModule = providerModule;
   }
 
   private async resolveRecipientPhone(data: any) {
@@ -83,6 +85,13 @@ export class NotificationService {
     return NotificationRepository.createDeadLetter(notificationId, reason, details, this.db);
   }
 
+  private async getProviderModule() {
+    if (this.providerModule) return this.providerModule;
+    return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
+      ? require('./provider/twilioProvider')
+      : require('./provider/simpleProvider');
+  }
+
   private async sendWithRetry(notif: any, providerModule: any, provider: any) {
     const maxAttempts = 3;
     let lastError: unknown;
@@ -128,9 +137,7 @@ export class NotificationService {
       body = tmpl?.body ?? '';
     }
 
-    const providerModule = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
-      ? require('./provider/twilioProvider')
-      : require('./provider/simpleProvider');
+    const providerModule = await this.getProviderModule();
     try {
       const result = await this.sendWithRetry({ ...notif, body }, providerModule, provider);
       await db.notification.update({ where: { id: notificationId }, data: { status: 'SENT', providerMessageId: result.id, attempts: (notif.attempts ?? 0) + 1, sentAt: new Date() } });

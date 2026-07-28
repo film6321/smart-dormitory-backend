@@ -7,8 +7,10 @@ const notification_repository_1 = require("./notification.repository");
 class NotificationService {
     // Service uses static repository methods on NotificationRepository
     db;
-    constructor(db) {
+    providerModule;
+    constructor(db, providerModule) {
         this.db = db ?? db_1.prisma;
+        this.providerModule = providerModule;
     }
     async resolveRecipientPhone(data) {
         if (data.recipientPhone)
@@ -71,6 +73,13 @@ class NotificationService {
     async createDeadLetter(notificationId, reason, details) {
         return notification_repository_1.NotificationRepository.createDeadLetter(notificationId, reason, details, this.db);
     }
+    async getProviderModule() {
+        if (this.providerModule)
+            return this.providerModule;
+        return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
+            ? require('./provider/twilioProvider')
+            : require('./provider/simpleProvider');
+    }
     async sendWithRetry(notif, providerModule, provider) {
         const maxAttempts = 3;
         let lastError;
@@ -112,9 +121,7 @@ class NotificationService {
             const tmpl = await db.notificationTemplate.findUnique({ where: { id: notif.templateId } });
             body = tmpl?.body ?? '';
         }
-        const providerModule = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
-            ? require('./provider/twilioProvider')
-            : require('./provider/simpleProvider');
+        const providerModule = await this.getProviderModule();
         try {
             const result = await this.sendWithRetry({ ...notif, body }, providerModule, provider);
             await db.notification.update({ where: { id: notificationId }, data: { status: 'SENT', providerMessageId: result.id, attempts: (notif.attempts ?? 0) + 1, sentAt: new Date() } });

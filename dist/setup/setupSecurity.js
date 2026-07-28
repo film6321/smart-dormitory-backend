@@ -12,11 +12,21 @@ const logger_1 = require("../logger");
 const rate_limit_store_1 = require("../shared/rate-limit-store");
 const setupSecurity = (app) => {
     app.use((0, helmet_1.default)());
-    const allowedOrigins = [
-        process.env.FRONTEND_URL || 'http://localhost:5173',
+    const configuredOrigins = [process.env.FRONTEND_URL, process.env.CORS_ORIGIN].filter(Boolean);
+    const nginxHostPort = process.env.NGINX_HOST_PORT || '3002';
+    const fallbackOrigins = [
         'http://localhost:3000',
+        `http://localhost:${nginxHostPort}`,
         'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://127.0.0.1:3000',
+        `http://127.0.0.1:${nginxHostPort}`,
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://127.0.0.1:5175',
     ];
+    const allowedOrigins = Array.from(new Set([...configuredOrigins, ...fallbackOrigins]));
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
             if (!origin || allowedOrigins.includes(origin)) {

@@ -4,7 +4,7 @@ import { logger } from '../logger';
 import { enqueueAccessLog, AccessLogJob } from '../workers/accessLogQueue';
 import { AuthenticatedRequest } from './auth-jwt';
 
-const ignoredPaths = ['/health', '/metrics'];
+const ignoredPaths = ['/health', '/api/health', '/metrics'];
 
 const shouldSkipAccessLog = (path: string): boolean => ignoredPaths.some((ignoredPath) => path.startsWith(ignoredPath));
 

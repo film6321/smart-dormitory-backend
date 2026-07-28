@@ -60,9 +60,6 @@ const uploadFaceImage = (req, res, next) => {
 // ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
-router.get('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);
-router.put('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.updateTemplate);
-router.delete('/:templateId(\\d+)', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.deleteTemplate);
 // ── C# FaceGate.Edge Integration Endpoints ──
 router.get('/embeddings', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.embeddings);
 router.get('/enrollment/pending', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.pending);
@@ -71,4 +68,8 @@ router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, face_verif
 router.post('/attendance/scan', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.scan);
 router.post('/devices/heartbeat', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.heartbeat);
 router.post('/devices/live-frame', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.liveFrame);
+// ── Template Management Endpoints ──
+router.get('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);
+router.put('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.updateTemplate);
+router.delete('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.deleteTemplate);
 exports.default = router;
