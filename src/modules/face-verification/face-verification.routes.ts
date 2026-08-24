@@ -26,7 +26,7 @@ const verifyFaceGateToken = (req: Request, res: Response, next: NextFunction) =>
 const faceLimiter = rateLimit({
   store: createRateLimitStore('rl:face:lock:'),
   windowMs: 60 * 1000,
-  max: 20, // 20 requests per minute
+  max: 100, // 100 requests per minute to support frequent camera captures
   message: { statusCode: 429, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -65,6 +65,7 @@ const uploadFaceImage = (req: Request, res: Response, next: NextFunction) => {
 // ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
+router.post('/verify-image', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
 
 // ── C# FaceGate.Edge Integration Endpoints ──
 router.get('/embeddings', verifyFaceGateToken, FaceVerificationController.embeddings);
@@ -73,7 +74,14 @@ router.get('/enrollment/photo/:id', verifyFaceGateToken, FaceVerificationControl
 router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, FaceVerificationController.storeEmbeddings);
 router.post('/attendance/scan', verifyFaceGateToken, FaceVerificationController.scan);
 router.post('/devices/heartbeat', verifyFaceGateToken, FaceVerificationController.heartbeat);
+router.post('/door-command', verifyToken, requireRole(['ADMIN']), FaceVerificationController.doorCommand);
 router.post('/devices/live-frame', verifyFaceGateToken, FaceVerificationController.liveFrame);
+// Generic detections endpoint (from custom detectors like YOLO)
+router.post('/detections', verifyFaceGateToken, FaceVerificationController.detections);
+router.get('/live-stream', FaceVerificationController.liveStream);
+router.get('/devices', verifyToken, requireRole(['ADMIN']), FaceVerificationController.devices);
+router.get('/scan-history', verifyToken, requireRole(['ADMIN']), FaceVerificationController.scanHistory);
+router.get('/events', verifyToken, requireRole(['ADMIN']), FaceVerificationController.events);
 
 // ── Template Management Endpoints ──
 router.get('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);

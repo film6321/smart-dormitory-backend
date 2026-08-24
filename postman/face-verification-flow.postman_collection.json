@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "Smart Dormitory - Face Verification Flow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Local QA flow: login -> register face photo -> verify image -> read monitor -> unlock/lock door. Registration and monitor endpoints require an ADMIN token."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:3000" },
+    { "key": "adminEmail", "value": "admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123" },
+    { "key": "userId", "value": "99" },
+    { "key": "deviceCode", "value": "CAMERA_01" },
+    { "key": "registerImagePath", "value": "" },
+    { "key": "verifyImagePath", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "registerPhotoId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Login as admin",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('login returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.data.token).to.be.a('string').and.not.empty;",
+            "pm.expect(body.data.user.role).to.eql('ADMIN');",
+            "pm.collectionVariables.set('adminToken', body.data.token);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "2. Register face photo",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "userId", "value": "{{userId}}", "type": "text" },
+            { "key": "file", "type": "file", "src": "{{registerImagePath}}" }
+          ]
+        },
+        "url": "{{baseUrl}}/api/face-verification/register"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('registration returns 201', function () { pm.response.to.have.status(201); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.data.user_id.toString()).to.eql(pm.collectionVariables.get('userId'));",
+            "pm.collectionVariables.set('registerPhotoId', body.data.id);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "3. Verify image",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": "{{verifyImagePath}}" },
+            { "key": "threshold", "value": "0.65", "type": "text" }
+          ]
+        },
+        "url": "{{baseUrl}}/api/face-verification/verify-image"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('verification returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.data).to.have.property('matched');",
+            "pm.expect(body.data).to.have.property('similarity');",
+            "console.log('matched:', body.data.matched, 'similarity:', body.data.similarity, 'user_id:', body.data.user_id);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "4. Monitor devices",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/face-verification/devices"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": ["pm.test('devices returns 200', function () { pm.response.to.have.status(200); });"] }
+      }]
+    },
+    {
+      "name": "5. Monitor scan history",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/face-verification/scan-history"
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": ["pm.test('scan history returns 200', function () { pm.response.to.have.status(200); });"] }
+      }]
+    },
+    {
+      "name": "6. Door unlock",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"device_code\": \"{{deviceCode}}\",\n  \"action\": \"unlock\",\n  \"timestamp\": \"{{$isoTimestamp}}\"\n}" },
+        "url": "{{baseUrl}}/api/face-verification/door-command"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('unlock returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.data.action).to.eql('unlock');",
+            "pm.expect(body.data.status).to.eql('opened');"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "7. Door lock",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"device_code\": \"{{deviceCode}}\",\n  \"action\": \"lock\",\n  \"timestamp\": \"{{$isoTimestamp}}\"\n}" },
+        "url": "{{baseUrl}}/api/face-verification/door-command"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('lock returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.data.action).to.eql('lock');",
+            "pm.expect(body.data.status).to.eql('locked');"
+          ]
+        }
+      }]
+    }
+  ]
+}

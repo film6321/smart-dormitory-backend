@@ -26,7 +26,7 @@ const verifyFaceGateToken = (req, res, next) => {
 const faceLimiter = (0, express_rate_limit_1.default)({
     store: (0, rate_limit_store_1.createRateLimitStore)('rl:face:lock:'),
     windowMs: 60 * 1000,
-    max: 20, // 20 requests per minute
+    max: 100, // 100 requests per minute to support frequent camera captures
     message: { statusCode: 429, message: 'Too many requests, please try again later' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -60,6 +60,7 @@ const uploadFaceImage = (req, res, next) => {
 // ── Web Dashboard/Legacy API Endpoints ──
 router.post('/register', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
+router.post('/verify-image', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
 // ── C# FaceGate.Edge Integration Endpoints ──
 router.get('/embeddings', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.embeddings);
 router.get('/enrollment/pending', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.pending);
@@ -67,7 +68,14 @@ router.get('/enrollment/photo/:id', verifyFaceGateToken, face_verification_contr
 router.post('/enrollment/:studentId/embeddings', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.storeEmbeddings);
 router.post('/attendance/scan', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.scan);
 router.post('/devices/heartbeat', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.heartbeat);
+router.post('/door-command', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.doorCommand);
 router.post('/devices/live-frame', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.liveFrame);
+// Generic detections endpoint (from custom detectors like YOLO)
+router.post('/detections', verifyFaceGateToken, face_verification_controller_1.FaceVerificationController.detections);
+router.get('/live-stream', face_verification_controller_1.FaceVerificationController.liveStream);
+router.get('/devices', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.devices);
+router.get('/scan-history', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.scanHistory);
+router.get('/events', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.events);
 // ── Template Management Endpoints ──
 router.get('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);
 router.put('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.updateTemplate);

@@ -1,5 +1,3 @@
-
-
 services:
   db:
     image: postgres:16-alpine
@@ -41,7 +39,8 @@ services:
     ports:
       - "${PGBOUNCER_HOST_PORT:-6433}:6432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "6432", "-U", "postgres"]
+      test:
+        ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "6432", "-U", "postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -73,6 +72,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespw}@pgbouncer:6432/${POSTGRES_DB:-projectdb}?schema=public
       REDIS_URL: redis://redis:6379
       UPLOAD_ROOT: /app/uploads/private
+      OCR_API_URL: http://host.docker.internal:8000
+      OCR_API_BASE_URL: http://host.docker.internal:8000
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -83,6 +84,8 @@ services:
     volumes:
       - .:/app
       - uploads:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["npm", "run", "dev"]
 
   nginx:
@@ -92,7 +95,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${NGINX_HOST_PORT:-3002}:80"
+      - "${NGINX_HOST_PORT:-3000}:80"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
@@ -115,10 +118,9 @@ services:
     depends_on:
       - prometheus
     ports:
-      - "${GRAFANA_HOST_PORT:-3003}:3000"
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
     volumes:
       - grafanadata:/var/lib/grafana
-
 
 volumes:
   pgdata:

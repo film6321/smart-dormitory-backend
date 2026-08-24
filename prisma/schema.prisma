@@ -190,7 +190,7 @@ model Room {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant             Tenant?
+  tenants            Tenant[]
   bills              Bill[]
   maintenanceTickets MaintenanceTicket[]
   visitors           Visitor[]
@@ -203,11 +203,26 @@ model Tenant {
   id               Int       @id @default(autoincrement())
   userId           Int?      @unique
   user             User?     @relation(fields: [userId], references: [id])
-  roomId           Int?      @unique
+  roomId           Int?
   room             Room?     @relation(fields: [roomId], references: [id])
   fullName         String?
   phone            String?
+  email            String?
+  studentId        String?
+  course           String?
+  yearLevel        String?
+  citizenId        String?
+  address          String?
+  birthDate        String?
   emergencyContact String?
+  emergencyName    String?
+  emergencyRelation String?
+  preferredRoomType String?
+  notes            String?
+  contractData     String?   // JSON string storing full contract details
+  idCardImagePath  String?
+  paymentSlipPath  String?
+  status           String    @default("PENDING")
   checkInDate      DateTime?
   checkOutDate     DateTime?
   isActive         Boolean   @default(true)

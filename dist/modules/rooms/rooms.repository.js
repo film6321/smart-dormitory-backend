@@ -5,14 +5,14 @@ const db_1 = require("../../database/db");
 class RoomsRepository {
     static async listRooms(db = db_1.prisma) {
         return db.room.findMany({
-            include: { tenant: true, bills: true },
+            include: { tenants: true, bills: true },
             orderBy: { roomNumber: 'asc' },
         });
     }
     static async getRoomById(id, db = db_1.prisma) {
         return db.room.findUnique({
             where: { id },
-            include: { tenant: true, bills: true },
+            include: { tenants: true, bills: true },
         });
     }
     static async findByNumber(roomNumber, db = db_1.prisma) {

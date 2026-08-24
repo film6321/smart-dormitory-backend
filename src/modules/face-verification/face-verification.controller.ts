@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import { createResponse } from '../../shared/api-response';
 import { FaceVerificationService } from './face-verification.service';
 import { logger } from '../../logger';
+import { faceVerificationMonitoringBus } from './face-verification-monitoring';
+import { faceVerificationStream } from './face-verification-stream';
 
 export class FaceVerificationController {
   // ── Existing Endpoints (for backward-compatibility with current frontend) ──
@@ -190,6 +192,17 @@ export class FaceVerificationController {
         snapshot_base64
       );
 
+      faceVerificationMonitoringBus.recordScan({
+        id: `${student_code}-${scanned_at}`,
+        student_code,
+        direction,
+        confidence: confidence !== undefined ? Number(confidence) : 1.0,
+        scanned_at,
+        device_code,
+        action: result.action,
+        student: result.student,
+      });
+
       return res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -203,8 +216,36 @@ export class FaceVerificationController {
         return res.status(400).json({ status: 'ignored', reason: 'missing_device_code' });
       }
 
+      faceVerificationMonitoringBus.recordHeartbeat(device_code);
       logger.info({ deviceCode: device_code }, 'Device heartbeat verified');
       return res.status(200).json({ status: 'ok' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async doorCommand(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { device_code, action, timestamp } = req.body ?? {};
+      const normalizedAction = typeof action === 'string' ? action.toLowerCase() : '';
+
+      if (!device_code) {
+        return res.status(400).json(createResponse(400, 'device_code is required'));
+      }
+
+      if (!['lock', 'unlock'].includes(normalizedAction)) {
+        return res.status(400).json(createResponse(400, 'action must be either lock or unlock'));
+      }
+
+      const payload = {
+        device_code,
+        action: normalizedAction,
+        timestamp: timestamp || new Date().toISOString(),
+        status: normalizedAction === 'unlock' ? 'opened' : 'locked',
+      };
+
+      logger.info({ ...payload }, 'Door command processed');
+      return res.status(200).json(createResponse(200, 'Door command processed successfully', payload));
     } catch (error) {
       next(error);
     }
@@ -221,11 +262,94 @@ export class FaceVerificationController {
       const publicDir = path.join(process.cwd(), 'public', 'live');
       await fs.mkdir(publicDir, { recursive: true });
       await fs.writeFile(path.join(publicDir, 'feed.jpg'), binary);
+      faceVerificationStream.publish(binary);
+      faceVerificationMonitoringBus.recordLiveFrame(device_code);
 
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
       next(error);
     }
+  }
+
+  static async liveStream(_req: Request, res: Response) {
+    res.status(200);
+    faceVerificationStream.subscribe(res);
+  }
+
+  // Accept generic detection payloads from external detectors and broadcast as 'scan' events
+  static async detections(req: Request, res: Response, next: NextFunction) {
+    try {
+      const payload = req.body || {};
+
+      const { id, confidence, scanned_at, bounding_box, device_code, direction } = payload;
+
+      if (!id || !scanned_at) {
+        return res.status(400).json({ status: 'ignored', reason: 'missing_required_fields' });
+      }
+
+      const scan = {
+        id: id,
+        student_code: payload.student_code || '',
+        direction: direction === 'OUT' ? 'OUT' : 'IN',
+        confidence: confidence !== undefined ? Number(confidence) : 0,
+        scanned_at,
+        device_code,
+        action: payload.action,
+        bounding_box: payload.bounding_box,
+        student: payload.student,
+      };
+
+      // Record to monitoring bus (will broadcast SSE 'scan')
+      faceVerificationMonitoringBus.recordScan(scan as any);
+
+      return res.status(200).json({ status: 'ok' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async scanHistory(_req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json(
+        createResponse(200, 'Scan history retrieved successfully', {
+          items: faceVerificationMonitoringBus.getScanHistory(),
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async devices(_req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json(
+        createResponse(200, 'Camera device status retrieved successfully', {
+          items: faceVerificationMonitoringBus.getDevices(),
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async events(req: Request, res: Response) {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    faceVerificationMonitoringBus.subscribe(res);
+
+    const keepAlive = setInterval(() => {
+      res.write(`event: ping\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      res.end();
+    });
   }
 }
 

@@ -1,37 +1,37 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
+import http from "k6/http";
+import { check, sleep } from "k6";
 
 export const options = {
   scenarios: {
     api_ping: {
-      executor: 'constant-vus',
+      executor: "constant-vus",
       vus: Number(__ENV.PING_VUS || 50),
-      duration: __ENV.PING_DURATION || '30s',
-      exec: 'ping',
+      duration: __ENV.PING_DURATION || "30s",
+      exec: "ping",
     },
     auth_login: {
-      executor: 'constant-arrival-rate',
+      executor: "constant-arrival-rate",
       rate: Number(__ENV.LOGIN_RATE || 10),
-      timeUnit: '1s',
-      duration: __ENV.LOGIN_DURATION || '30s',
+      timeUnit: "1s",
+      duration: __ENV.LOGIN_DURATION || "30s",
       preAllocatedVUs: Number(__ENV.LOGIN_PREALLOCATED_VUS || 20),
-      exec: 'login',
+      exec: "login",
     },
   },
   thresholds: {
-    http_req_failed: ['rate<0.05'],
-    http_req_duration: ['p(95)<500'],
+    http_req_failed: ["rate<0.05"],
+    http_req_duration: ["p(95)<500"],
   },
 };
 
-const baseUrl = __ENV.BASE_URL || 'http://127.0.0.1:3002';
-const loginEmail = __ENV.LOGIN_EMAIL || 'admin@example.com';
-const loginPassword = __ENV.LOGIN_PASSWORD || 'Password123';
+const baseUrl = __ENV.BASE_URL || "http://127.0.0.1:3000";
+const loginEmail = __ENV.LOGIN_EMAIL || "admin@example.com";
+const loginPassword = __ENV.LOGIN_PASSWORD || "Password123";
 
 export function ping() {
   const response = http.get(`${baseUrl}/api/ping`);
   check(response, {
-    'ping status is 200': (res) => res.status === 200,
+    "ping status is 200": (res) => res.status === 200,
   });
   sleep(1);
 }
@@ -45,12 +45,12 @@ export function login() {
     }),
     {
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     },
   );
 
   check(response, {
-    'login handled': (res) => [200, 400, 401, 429].includes(res.status),
+    "login handled": (res) => [200, 400, 401, 429].includes(res.status),
   });
 }

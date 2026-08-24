@@ -2,6 +2,152 @@
 
 ## [Unreleased]
 
+### 2026-08-24 — Maintenance image viewer & interactive lightbox enhancements
+
+- เพิ่มระบบสไลเดอร์และปุ่มควบคุมขนาดซูม (Zoom Slider & Buttons) ควบคุมอัตราการซูมแบบละเอียดตั้งแต่ 100% ถึง 400%
+- เพิ่มระบบคลิกลากเมาส์ (Drag-to-pan) และสัมผัสปัดบนหน้าจอมือถือเพื่อแพนและย้ายภาพเมื่อขยายใหญ่เกินหน้าจอ
+- แก้ไขปัญหาคลิกลากหน้าจอแล้วรูปดีดกลับตำแหน่งเดิม (Click-vs-drag collision) โดยดักจับระยะเลื่อน (displacement >= 5px) เพื่อระงับ toggle trigger ขณะจับลาก
+- ป้องกันการเกิด Double Scroll บนองค์ประกอบเบื้องหลังขณะเลื่อนหรือซูมภาพ:
+  - ล็อก `document.body.style.overflow = 'hidden'` ชั่วคราวเมื่อแถบขยายภาพทำงาน
+  - ผูก ref-based event listeners แบบ active (`{ passive: false }`) เข้ากับ `wheel` และ `touchmove` เพื่อตัดการบับเบิ้ลของสกรอลล์
+- ปรับสไตล์ของ Lightbox ให้เป็นสากล: เอาแผงพื้นกรอบทึบรอบตัวออก ใช้รูปสาดเงา `filter: drop-shadow` ลอยเด่นตัดกับกระจกเบลอฝ้า `backdrop-filter: blur(6px)` สีขาวดำ `rgba(0, 0, 0, 0.75)`
+- ยืนยันว่าหน้าจอ JSX และ CSS Module ของ frontend ได้ปรับฟิลด์ครบถ้วน ถูกต้องตามสเปกและ compile สำเร็จ
+
+### 2026-08-22 — Backend OCR age calculation
+
+- เพิ่ม `age` ใน OCR result โดยคำนวณจากวันเกิดปัจจุบัน รองรับวันเกิด ค.ศ., พ.ศ. และชื่อเดือนภาษาไทย
+- Step 4 ใช้ค่าอายุจาก backend และยกเลิกค่า default `20` เพื่อไม่แสดงอายุผิดเมื่อ OCR อ่านวันเกิดไม่ได้
+- reload Docker backend แล้วเพื่อใช้ logic ใหม่
+- ตรวจสอบแล้ว: backend tests 32 ผ่าน และ frontend build ผ่าน
+
+### 2026-08-22 — OCR provider response compatibility follow-up
+
+- เพิ่ม compatibility mapping สำหรับ OCR response ที่ส่งข้อมูลระดับ top-level หรือใช้ชื่อ field วันเกิด/ที่อยู่หลายรูปแบบ
+- รองรับวันเกิดภาษาไทยในตัวคำนวณอายุของสัญญา
+- reload Docker backend แล้วเพื่อเปิดใช้ mapping ใหม่
+- ยืนยันว่า backend tests 32 ผ่านและ frontend build ผ่าน
+- เลขที่ OCR ส่งมาเป็น `140********71` ยังต้องแก้ที่ source ของ smart-ocr/provider จึงจะได้เลขเต็ม เพราะ backend ไม่สามารถกู้ข้อมูลที่ถูก mask แล้วได้
+
+### 2026-08-22 — OCR identity data, address persistence, and current age
+
+- เพิ่มการอ่านและส่งต่อที่อยู่จาก OCR โดยรองรับหลายชื่อ field ของ OCR provider
+- เปลี่ยน application upload response ให้ส่งเลขบัตรประชาชนที่ normalize เป็นตัวเลขเต็มสำหรับใช้ในสัญญาของผู้สมัครที่ authenticated แล้ว
+- ยังคงเก็บผล OCR verification แบบปลอดภัยด้วยเลขบัตร masked/hash สำหรับรายการตรวจสอบทั่วไป
+- บันทึก `citizenId` และ `address` จาก OCR ลง `Tenant` เมื่อ submit ใบสมัคร
+- คำนวณอายุปัจจุบันจากวันเกิด OCR รองรับปี พ.ศ. และเติมลงข้อมูลสัญญาแทนค่าอายุคงที่
+- ตรวจสอบแล้ว: backend build/tests ผ่าน 32 tests และ frontend build ผ่าน
+
+### 2026-08-22 — OCR Docker connectivity and false-success correction
+
+- แก้ค่า OCR ใน Docker backend ให้เรียก service บน Windows host ผ่าน `host.docker.internal:8000` แทน `localhost:8000` ซึ่งชี้กลับเข้า container ตัวเอง
+- เพิ่ม `extra_hosts` สำหรับ `host-gateway` ใน Docker Compose
+- เปลี่ยน upload document flow ให้ตอบ `502` เมื่อ OCR service ใช้งานไม่ได้ และ `422` เมื่อ OCR อ่านได้แต่ไม่สามารถยืนยันบัตรประชาชนไทย
+- แก้ข้อความ Step 4 ไม่ให้แสดง “ตรวจสอบแล้วผ่านระบบ OCR” แบบคงที่ โดยจะแสดงผ่านเฉพาะผล OCR จริง
+- ตรวจสอบแล้ว: container ติดต่อ OCR host ได้ HTTP 200, backend build/tests ผ่าน และ frontend build ผ่าน
+
+### 2026-08-22 — Full read-only rental agreement document
+
+- เพิ่มหนังสือสัญญาเช่าฉบับเต็มในหน้าเอกสาร โดยดึงข้อมูล `contractData` จาก Step 4 ที่บันทึกในฐานข้อมูล
+- แสดงข้อมูลคู่สัญญา สถานที่/วันที่ทำสัญญา ห้องพัก ระยะเวลา ค่าเช่า เงินประกัน คีย์การ์ด ค่าสาธารณูปโภค เงื่อนไขการพักอาศัย และการสิ้นสุดสัญญา
+- เพิ่มส่วนลายเซ็นผู้ให้เช่า ผู้เช่า และพยาน โดยยังคงเป็นเอกสารอ่านอย่างเดียว
+- เพิ่มปุ่มพิมพ์และบันทึกเป็น PDF ผ่าน browser พร้อม print stylesheet สำหรับพิมพ์เฉพาะตัวสัญญา
+- ตรวจสอบแล้ว: frontend production build ผ่านและไม่พบ TypeScript diagnostics
+
+### 2026-08-21 — Reload Docker backend after tenant delete fix
+
+- ตรวจพบว่า Docker backend process เดิมยังใช้การลบ tenant แบบตรงๆ ทำให้ tenant ที่มี bill เช่น `42` ล้มเหลวด้วย `Bill_tenantId_fkey`
+- restart เฉพาะ backend container และยืนยัน `DELETE /api/tenants/42` ผ่าน API gateway สำเร็จหลัง service พร้อม
+- ระหว่าง restart อาจได้ `502 Bad Gateway` ชั่วคราว ควรรอ backend startup complete ก่อน retry
+
+### 2026-08-21 — Tenant deletion with related database records
+
+- แก้ `DELETE /api/tenants/:id` ให้ลบข้อมูลที่อ้างอิง tenant ใน transaction เดียวก่อนลบ parent record ป้องกัน foreign-key error และ HTTP 500
+- ลำดับการลบคือ visitor logs, visitors, bills, maintenance tickets แล้วจึงลบ tenant
+- ถ้าไม่พบ tenant จะตอบ HTTP 404 แทน `Internal Server Error`
+- ไม่ลบบัญชี `User` ที่เชื่อมกับ tenant เพื่อรักษาบัญชีผู้ใช้และประวัติการเข้าสู่ระบบ
+- ทดสอบ endpoint จริงด้วย tenant ชั่วคราวแล้วลบสำเร็จและอ่านกลับได้ 404; backend build และ 32 tests ผ่าน
+
+### 2026-08-21 — Contract fields and uploaded slip aligned with application flow
+
+- หน้าเอกสารดึง `contractData` จาก Step 4 ที่บันทึกใน `Tenant` โดยตรง และแสดงข้อมูลสัญญาครบทุก field แบบอ่านอย่างเดียว
+- preview บัตรประชาชนและสลิปใช้ไฟล์จาก Step 3 upload และรองรับทั้ง image และ PDF
+- ตรวจสอบ record seed แล้วพบว่าไม่มี `contractData` และ document paths จึงไม่แสดงข้อมูลปลอม; ต้องส่งใบสมัครจริงด้วย user เดียวกันเพื่อให้เอกสารปรากฏ
+- Frontend build ผ่าน
+
+### 2026-08-21 — Read-only student application documents
+
+- เพิ่มหน้าใบสัญญาและเอกสารสำหรับนักเรียน โดยดึงข้อมูลจากใบสมัครและแสดงแบบอ่านอย่างเดียว ไม่เปิดให้แก้ไข
+- แสดงข้อมูลส่วนตัว, ข้อมูลติดต่อฉุกเฉิน, OCR, รายละเอียดสัญญา และห้องพักจาก tenant record จริง
+- เพิ่ม authenticated endpoints สำหรับดูบัตรประชาชนและสลิปของผู้สมัครปัจจุบัน
+- บังคับให้เอกสารดาวน์โหลดได้เฉพาะเจ้าของใบสมัครที่มีสถานะ `APPROVED` หรือ `ACTIVE` พร้อมตรวจ path ป้องกัน path traversal
+- ตรวจสอบแล้ว: backend build ผ่าน, backend tests 32 ผ่าน, frontend build ผ่าน
+
+### 2026-08-21 — Approval and rejection rollback actions
+
+- เพิ่ม `Cancel approval` เพื่อยกเลิกการอนุมัติและเปลี่ยนสถานะจาก `Active` กลับเป็น `Pending`
+- เพิ่ม `Cancel rejection` เพื่อยกเลิกการปฏิเสธและเปลี่ยนสถานะจาก `Inactive` กลับเป็น `Pending`
+- หลังกลับเป็น `Pending` ผู้ดูแลสามารถ Approve หรือ Reject รายการเดิมใหม่ได้
+- ยืนยันด้วย API จริงว่าการเปลี่ยนสถานะ `PENDING -> APPROVED -> PENDING` ถูกบันทึกใน PostgreSQL
+- Frontend build ผ่านและไม่พบ TypeScript errors
+
+### 2026-08-21 — Student status badge refresh after approval actions
+
+- แก้ `DataTable` ไม่ให้ memoize row model เก่า ทำให้แถวแสดง status ล่าสุดหลังข้อมูลเปลี่ยน
+- หลัง Approve/Reject สำเร็จ frontend จะอัปเดตสถานะในแถวทันทีเป็น `Active`/`Inactive` และเรียก API refetch เพื่อยืนยันกับฐานข้อมูล
+- ตรวจสอบ API gateway แล้วว่าสถานะ tenant ที่อนุมัติอ่านกลับจาก PostgreSQL เป็น `APPROVED`
+- Frontend production build ผ่านและไม่พบ TypeScript diagnostics ในไฟล์ที่เกี่ยวข้อง
+
+### 2026-08-21 — Local Prisma seed and Docker API gateway correction
+
+- เพิ่ม `tsconfig.seed.json` สำหรับ `prisma.config.ts` ทำให้ `npx prisma db seed` ทำงานได้สำเร็จ
+- ยืนยันพอร์ต API ตาม Docker Compose: frontend ใช้ `http://localhost:3002/api`; port `3000` ไม่ใช่ backend gateway ใน environment ปัจจุบัน
+- Seed local database สำเร็จและสร้าง/อัปเดต `admin@smart-dormitory.local` เป็น role `ADMIN`
+- ทดสอบผ่าน API gateway จริงแล้วว่า `PATCH /api/tenants/:id` เปลี่ยนสถานะจาก `PENDING` เป็น `APPROVED` และ readback จากฐานข้อมูลได้ถูกต้อง
+
+### 2026-08-21 — Student management actions connected to database
+
+- ทำให้ปุ่ม `View` ใน Student Management โหลดข้อมูล tenant จริงจาก `GET /api/tenants/:id` และแสดงรายละเอียดในหน้า
+- ทำให้ปุ่ม `Delete` เรียก `DELETE /api/tenants/:id` พร้อมยืนยันก่อนลบ, แสดงสถานะกำลังทำงาน/ข้อผิดพลาด และ refresh ข้อมูลหลังลบสำเร็จ
+- ปุ่ม `Approve`/`Reject` ยังคงเปลี่ยนสถานะ tenant ผ่าน `PATCH /api/tenants/:id` และแจ้งข้อผิดพลาดแทนการเงียบเมื่อ request ล้มเหลว
+- การลบผ่าน endpoint จะลบแถว tenant ใน PostgreSQL จริง ไม่ใช่เพียงซ่อนแถวใน frontend
+- ตรวจสอบแล้ว: frontend build ผ่าน, backend build ผ่าน และ backend tests ผ่าน 32 tests
+
+### 2026-08-21 — Student application redirect and admin approval gate
+
+- หลังนักเรียนส่งใบสมัครสำเร็จ ระบบ redirect กลับ `/student` dashboard ตามหน้าจอหลัก
+- เพิ่ม `GET /api/tenants/me` สำหรับให้นักเรียนอ่านสถานะใบสมัครของตนเองอย่างปลอดภัย
+- ทำให้ admin เปลี่ยนสถานะ tenant ผ่าน `PATCH /api/tenants/:id` ได้จริง พร้อม validation ของสถานะ และเพิ่มปุ่ม Approve/Reject ใน Student Management
+- ปลดล็อคเมนูใบสัญญา/เอกสารและแจ้งซ่อมเมื่อสถานะ tenant เป็น `APPROVED` หรือ `ACTIVE`; ระหว่างรอจะแสดง `รอ Admin ยืนยัน`
+- เพิ่ม student routes สำหรับ document และ maintenance destinations เพื่อรองรับการต่อยอดฟังก์ชันจริง
+- ตรวจสอบแล้ว: backend build ผ่าน, backend tests 32 ผ่าน, frontend build ผ่าน และ frontend tests 2 ผ่าน
+- งานถัดไปคือเชื่อมข้อมูลสัญญาจริงและฟอร์มแจ้งซ่อมของนักเรียนเข้ากับ backend
+
+### 2026-08-21 — Face enrollment, monitor access control, and door command integration
+
+- เพิ่ม flow การลงทะเบียนใบหน้าโดยบันทึกภาพลง `FaceEnrollmentPhoto` และจัดเก็บไฟล์ไว้ที่ `uploads/face-photo` เพื่อให้ FaceGate.Edge นำไปสร้าง embeddings ต่อได้
+- ปรับ `/access-control` ให้ใช้ `MonitorPage` เป็น monitoring engine เดียวกับหน้า monitoring พร้อม camera feed, recognition result, scan history, device status และ activity log
+- เพิ่ม `POST /api/face-verification/door-command` พร้อม JWT และ ADMIN authorization สำหรับคำสั่ง `lock`/`unlock` และ standardized API response
+- เชื่อมปุ่ม Unlock/Lock ฝั่ง frontend ให้ยิง backend จริง พร้อมแสดง error และคืนสถานะประตูเมื่อ command ล้มเหลว
+- เพิ่ม integration coverage สำหรับ door command และตรวจสอบผลการทดสอบ backend ผ่าน 32 tests; frontend production build ผ่าน
+- **ข้อจำกัด local:** หากไม่มี `FACE_API_URL` และ `FACE_API_KEY` ระบบ verification จะใช้ fallback mock จึงยังไม่ใช่การเปรียบเทียบ biometric จริงจนกว่าจะเชื่อม Face API หรือ FaceGate.Edge
+- **งานถัดไป:** จัดทำ QA/Postman flow สำหรับ register -> ตรวจสอบ DB -> capture จาก monitor -> verify -> recognition/door decision และเชื่อม door command กับอุปกรณ์จริงหรือ audit storage
+
+### 2026-08-15 — Tenant registration restructuring, payload validations, Nginx limits, and Admin data sync
+
+- ปรับปรุงเวทมนตร์สมัครพักเรียน 4 ขั้นตอน: รวมส่วนข้อมูลส่วนตัวผู้ติดต่อฉุกเฉิน ย้ายแบบฟอร์มตรวจสอบสลิปและสแกนบัตรมารวมใน Step 3 และยื่นร่างสัญญา Step 4
+- ปรับจูน Nginx: เพิ่ม `client_max_body_size 20m` และ `proxy_read_timeout 60s` เพื่อไม่ให้เกิด `413 Request Entity Too Large` เวลาส่งอัปโหลดรูป ID Card ผสมรูป Slip
+- แก้ไขปัญหาดักความสำเร็จใบสมัคร: แก้จากดักเช็คฟิลด์ `.success` ที่ไม่มีใน Standardized Response มาเป็นการตรวจสอบสถานะ `statusCode === 200` ใน `DocumentUpload.tsx` และ `TenantApplication.tsx` แทน
+- ซิงก์ข้อมูลแดชบอร์ดผู้ดูแลระบบ: ปรับฟิลด์ของข้อมูลใน `normalizeTenant` ของ `DashboardContext.tsx` ให้ตรงตามคีย์ข้อมูล PostgreSQL: `fullName` -> `name`, `phone` -> `contact`, `yearLevel` -> `year`, ปรับห้องว่างตาม preferredRoomType และแปลงค่าสถานะ PENDING สู่ PascalCase เพื่อวาดสรุปไอคอนและตารางผู้เรียนของ Admin ให้สมบูรณ์และถูกต้องตามสกีมาฐานข้อมูลจริง
+
+### 2026-08-04 — Face verification live feed and frontend connectivity hardening
+
+- ปรับโครงสร้าง live face-verification ให้รองรับการประมวลผลภาพแบบ throttled frame processing โดยตรวจจับทุก 3–5 เฟรม เพื่อให้ระบบลื่นขึ้นและลดภาระ CPU ในระหว่าง stream
+- เพิ่ม utility methods ใน `FaceVerificationService` สำหรับคำนวณ interval และตัดสินใจว่าแต่ละเฟรมควรประมวลผลหรือไม่ พร้อม unit test ครอบคลุมพฤติกรรมนี้
+- ปรับค่า CORS สำหรับ frontend ที่รันบน `http://localhost:5174` ให้ backend ยอมรับ request จาก frontend สำหรับการทดสอบ local development
+- ยืนยันว่า backend สามารถรันได้สำเร็จด้วย `npm run dev` และ frontend build ผ่านด้วย `npm run build`
+- ตรวจยืนยันด้วย `npm test` และ `npm run test:typecheck` ผ่านสำเร็จ
+- อัปเดตบันทึก change log ของ backend เพื่อระบุว่า session ปัจจุบันมีการบันทึกสถานะและ placeholder สำหรับการเปลี่ยนแปลงที่เกี่ยวข้องกับ frontend face detection ใน `ai-CHANGELOG.md`
+
 ### 2026-07-27 — Backend/Frontend connectivity alignment
 
 - ปรับ CORS fallback ให้อนุญาต origin จาก frontend gateway และ localhost ports ที่ใช้งานจริง เพื่อกัน browser แสดง `Network Error`
@@ -120,3 +266,15 @@
 - **Worker:** Added `src/workers/notificationWorker.ts` to process pending/scheduled notifications and mark status/results in DB.
 - **Tests:** Added `tests/unit/notification.test.ts` (mock DB) and verified full test suite (`npm test`) passes locally.
 - **Notes:** DB reset/migrate was performed during implementation — this drops development data. Use caution on shared environments.
+
+### 2026-08-06 — Face Recognition Client Environment & MediaPipe Debugging
+
+#### Face_Recognition Environment (`C:\Users\raphi\Documents\Face_Recognition`)
+
+- แก้ไขปัญหาไลบรารี `mediapipe` ขาดโมดูล `mp.solutions.face_detection` (เกิดข้อผิดพลาด `AttributeError: module 'mediapipe' has no attribute 'solutions'`)
+- ตรวจพบว่า `.venv` เดิมจำลองมาจาก Python 3.14.0 (Pre-release) ซึ่งไม่มี Precompiled binary ของ MediaPipe บน Windows ส่งผลให้ได้สคริปต์คอมไพล์ที่ไม่สมบูรณ์และไม่มีโฟลเดอร์ `solutions`
+- วิธีแก้ไข:
+  - ลบโฟลเดอร์ `.venv` สภาพแวดล้อมเดิมออกทั้งหมดเพื่อป้องกันไฟล์ไบนารีตกค้าง
+  - สร้างสภาพแวดล้อมจำลอง `.venv` ใหม่โดยระบุเอนจินหลักเป็น Python 3.11.9 (เวอร์ชันเสถียรที่ระบบพัฒนาและผู้ใช้มีติดตั้งอยู่แล้ว)
+  - ติดตั้งและดาวน์เกรด `mediapipe` มาใช้เวอร์ชัน `0.10.14` ที่ระบุโมดูล `solutions` ครบถ้วน พร้อมอัปเกรด package ที่เกี่ยวข้อง
+  - ยืนยันการเริ่มทำงานของแบบจำลองตรวจจับใบหน้า `FaceDetection` และ TensorFlow Lite XNNPACK delegate สำเร็จเรียบร้อย สามารถรันสตรีมกล้องกับเว็บแคมได้อย่างราบรื่น

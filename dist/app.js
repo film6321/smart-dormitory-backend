@@ -28,6 +28,8 @@ const notification_routes_1 = __importDefault(require("./modules/notifications/n
 const notification_preferences_routes_1 = __importDefault(require("./modules/notifications/notification-preferences.routes"));
 const health_1 = __importDefault(require("./routes/health"));
 const app = (0, express_1.default)();
+// Serve static files from public folder (e.g., live camera feed)
+app.use(express_1.default.static(path_1.default.join(process.cwd(), 'public')));
 // Initialize system components
 (0, setupSecurity_1.setupSecurity)(app);
 (0, setupMonitoring_1.setupMonitoring)(app);

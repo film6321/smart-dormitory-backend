@@ -32,6 +32,7 @@ const ocrCircuit = {
 };
 
 interface InternalVerifyIdCardResult extends VerifyIdCardResult {
+  citizenId?: string;
   citizenIdHash?: string;
 }
 
@@ -159,6 +160,62 @@ const getStringValue = (value: unknown): string | undefined => {
 
   const trimmed = value.trim();
   return trimmed && trimmed !== '-' ? trimmed : undefined;
+};
+
+const thaiMonths: Record<string, number> = {
+  มกราคม: 1,
+  กุมภาพันธ์: 2,
+  มีนาคม: 3,
+  เมษายน: 4,
+  พฤษภาคม: 5,
+  มิถุนายน: 6,
+  กรกฎาคม: 7,
+  สิงหาคม: 8,
+  กันยายน: 9,
+  ตุลาคม: 10,
+  พฤศจิกายน: 11,
+  ธันวาคม: 12,
+};
+
+const calculateAgeFromBirthDate = (birthDate?: string): number | undefined => {
+  if (!birthDate) return undefined;
+
+  const numbers = birthDate.match(/\d+/gu)?.map(Number) ?? [];
+  const monthName = Object.keys(thaiMonths).find((month) => birthDate.includes(month));
+  let day: number;
+  let month: number;
+  let year: number;
+
+  if (monthName && numbers.length >= 2) {
+    day = numbers[0];
+    month = thaiMonths[monthName];
+    year = numbers[numbers.length - 1];
+  } else if (numbers.length >= 3) {
+    const [first, second, third] = numbers;
+    if (first > 31) {
+      year = first;
+      month = second;
+      day = third;
+    } else {
+      day = first;
+      month = second;
+      year = third;
+    }
+  } else {
+    return undefined;
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const normalizedYear = year > currentYear + 100 ? year - 543 : year;
+  if (day < 1 || day > 31 || month < 1 || month > 12 || normalizedYear < 1900 || normalizedYear > currentYear) {
+    return undefined;
+  }
+
+  let age = currentYear - normalizedYear;
+  const birthday = new Date(currentYear, month - 1, day);
+  if (now < birthday) age -= 1;
+  return age >= 0 ? age : undefined;
 };
 
 const stripDataUrlPrefix = (imageBase64: string): string => {
@@ -417,6 +474,9 @@ export class OcrService {
       verificationId: result.verificationId,
       isThaiIdCard: result.isThaiIdCard,
       reason: result.reason,
+      citizenId: result.citizenId,
+      address: result.address,
+      age: result.age,
       imagePath: result.imagePath,
       citizenIdMasked: result.citizenIdMasked,
       fullNameTh: result.fullNameTh,
@@ -436,11 +496,17 @@ export class OcrService {
   }
 
   private static mapIdCardVerification(payload: OcrIdCardResponse): InternalVerifyIdCardResult {
-    const data = payload.data ?? {};
+    const data = {
+      ...(payload.data ?? {}),
+      citizen_id: payload.citizen_id ?? payload.id_number ?? payload.data?.citizen_id ?? payload.data?.id_number,
+      dob_th: payload.birth_date ?? payload.birthDate ?? payload.date_of_birth ?? payload.data?.dob_th ?? payload.data?.th_dob,
+      address: payload.address ?? payload.address_th ?? payload.th_address ?? payload.data?.address ?? payload.data?.address_th ?? payload.data?.th_address,
+    };
     const validation = payload.validation ?? {};
     const citizenId = getStringValue(data.citizen_id) ?? getStringValue(data.id_number);
     const fullNameTh = getStringValue(data.bp_full_name_th) ?? getStringValue(data.th_name);
     const birthDateTh = getStringValue(data.dob_th) ?? getStringValue(data.th_dob);
+    const address = getStringValue(data.address) ?? getStringValue(data.address_th) ?? getStringValue(data.th_address);
     const idDetected = payload.id_detected === true;
     const idPresent = validation.id_present === true || Boolean(citizenId);
     const idChecksumValid = validation.id_checksum_valid === true;
@@ -454,6 +520,9 @@ export class OcrService {
         ? undefined
         : payload.message || payload.error || 'Unable to verify this image as a Thai ID card',
       citizenIdMasked: normalizedCitizenId ? maskCitizenId(normalizedCitizenId) : undefined,
+      citizenId: normalizedCitizenId,
+      address,
+      age: calculateAgeFromBirthDate(birthDateTh),
       citizenIdHash: normalizedCitizenId ? hashCitizenId(normalizedCitizenId) : undefined,
       fullNameTh,
       birthDateTh,

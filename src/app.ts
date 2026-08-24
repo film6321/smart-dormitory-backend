@@ -28,6 +28,9 @@ import healthRoutes from './routes/health';
 
 const app = express();
 
+// Serve static files from public folder (e.g., live camera feed)
+app.use(express.static(path.join(process.cwd(), 'public')));
+
 // Initialize system components
 setupSecurity(app);
 setupMonitoring(app);

@@ -18,6 +18,12 @@ const maintenanceTransitions = new Set([
     ['IN_PROGRESS', 'RESOLVED'],
     ['IN_PROGRESS', 'CANCELLED'],
     ['RESOLVED', 'CLOSED'],
+    // Revert transitions (for correction)
+    ['APPROVED', 'PENDING'],
+    ['IN_PROGRESS', 'APPROVED'],
+    ['RESOLVED', 'IN_PROGRESS'],
+    ['CLOSED', 'RESOLVED'],
+    ['CANCELLED', 'PENDING'],
 ]);
 const visitorTransitions = new Set([
     ['REGISTERED', 'VERIFYING'],
@@ -30,9 +36,9 @@ const visitorTransitions = new Set([
     ['CHECKED_IN', 'CHECKED_OUT'],
     ['CHECKED_IN', 'EXPIRED'],
 ]);
-const canTransitionBillStatus = (from, to) => billTransitions.has([from, to]);
+const canTransitionBillStatus = (from, to) => [...billTransitions].some(([f, t]) => f === from && t === to);
 exports.canTransitionBillStatus = canTransitionBillStatus;
-const canTransitionMaintenanceStatus = (from, to) => maintenanceTransitions.has([from, to]);
+const canTransitionMaintenanceStatus = (from, to) => [...maintenanceTransitions].some(([f, t]) => f === from && t === to);
 exports.canTransitionMaintenanceStatus = canTransitionMaintenanceStatus;
-const canTransitionVisitorStatus = (from, to) => visitorTransitions.has([from, to]);
+const canTransitionVisitorStatus = (from, to) => [...visitorTransitions].some(([f, t]) => f === from && t === to);
 exports.canTransitionVisitorStatus = canTransitionVisitorStatus;

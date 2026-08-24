@@ -85,6 +85,16 @@ describe('FaceVerificationService (unit)', () => {
     }
   });
 
+  it('throttles frame processing based on the configured interval', () => {
+    assert.equal(FaceVerificationService.resolveDetectionInterval('4'), 4);
+    assert.equal(FaceVerificationService.resolveDetectionInterval('0'), 4);
+    assert.equal(FaceVerificationService.resolveDetectionInterval('10'), 10);
+    assert.equal(FaceVerificationService.shouldProcessFrame(1, 4), false);
+    assert.equal(FaceVerificationService.shouldProcessFrame(4, 4), true);
+    assert.equal(FaceVerificationService.shouldProcessFrame(8, 4), true);
+    assert.equal(FaceVerificationService.shouldProcessFrame(1, 1), true);
+  });
+
   it('manages face templates via service methods', async () => {
     db.faceEmbedding.findUnique = (async ({ where }: any) => {
       if (where.id === 12) {

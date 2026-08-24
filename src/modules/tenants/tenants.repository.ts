@@ -19,6 +19,13 @@ export class TenantsRepository {
     });
   }
 
+  static async getTenantByUserId(userId: number, db = prisma) {
+    return db.tenant.findUnique({
+      where: { userId },
+      include: { user: true, room: true },
+    });
+  }
+
   static async findUserById(id: number, db = prisma) {
     return db.user.findUnique({ where: { id } });
   }
@@ -36,6 +43,40 @@ export class TenantsRepository {
   }
 
   static async deleteTenant(id: number, db = prisma) {
-    return db.tenant.delete({ where: { id } });
+    const deleteRelatedRecords = async (transaction: any) => {
+      const visitors = await transaction.visitor.findMany({
+        where: { tenantId: id },
+        select: { id: true },
+      });
+      const visitorIds = visitors.map((visitor: { id: number }) => visitor.id);
+
+      if (visitorIds.length > 0) {
+        await transaction.visitorLog.deleteMany({ where: { visitorId: { in: visitorIds } } });
+        await transaction.visitor.deleteMany({ where: { id: { in: visitorIds } } });
+      }
+
+      await transaction.bill.deleteMany({ where: { tenantId: id } });
+      await transaction.maintenanceTicket.deleteMany({ where: { tenantId: id } });
+
+      // Retrieve tenant's roomId and release the room status to AVAILABLE
+      const tenant = await transaction.tenant.findUnique({
+        where: { id },
+        select: { roomId: true },
+      });
+      if (tenant?.roomId) {
+        await transaction.room.update({
+          where: { id: tenant.roomId },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+
+      return transaction.tenant.delete({ where: { id } });
+    };
+
+    if (typeof db.$transaction === 'function') {
+      return db.$transaction((transaction: any) => deleteRelatedRecords(transaction));
+    }
+
+    return deleteRelatedRecords(db);
   }
 }

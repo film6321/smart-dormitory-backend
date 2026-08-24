@@ -1,4 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { createResponse } from '../../shared/api-response';
 import { MaintenanceService } from './maintenance.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
@@ -11,9 +13,14 @@ export class MaintenanceController {
       const authReq = req as AuthenticatedRequest;
       const { roomId, category, description, contactTime } = req.body;
 
+      const tenant = await MaintenanceService.getTenantByUserId(authReq.user?.id ?? 0);
+      if (!tenant) {
+        return res.status(404).json(createResponse(404, 'Tenant profile not found. Please complete your registration first.'));
+      }
+
       const ticket = await MaintenanceService.createTicket({
-        tenantId: authReq.user?.id ?? 0,
-        roomId,
+        tenantId: tenant.id,
+        roomId: roomId ?? tenant.roomId ?? undefined,
         category,
         description,
         contactTime: contactTime ? new Date(contactTime) : undefined,
@@ -55,6 +62,46 @@ export class MaintenanceController {
 
       const updated = await MaintenanceService.updateTicketStatus(id, status, note);
       return res.status(200).json(createResponse(200, 'Maintenance ticket updated', updated));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json(createResponse(400, 'Image file is required'));
+      }
+
+      const uploadDir = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/maintenance'));
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const ext = path.extname(file.originalname) || '.jpg';
+      const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const filepath = path.join(uploadDir, filename);
+
+      await fs.promises.writeFile(filepath, file.buffer);
+
+      return res.status(200).json(createResponse(200, 'Image uploaded successfully', { filename }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async serveImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const filename = req.params.filename as string;
+      const uploadDir = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/maintenance'));
+      const filepath = path.join(uploadDir, filename);
+
+      if (!fs.existsSync(filepath)) {
+        return res.status(404).json(createResponse(404, 'Image not found'));
+      }
+
+      return res.sendFile(filepath);
     } catch (error) {
       next(error);
     }

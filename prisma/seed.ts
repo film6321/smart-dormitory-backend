@@ -107,7 +107,7 @@ const seedTestMaintenanceTicket = async (tenantId: number, roomId: number) => {
 // ─── Rooms Config (only rooms with real tenants) ─────────────────────────────
 const roomsToSeed = [
   // Real tenant: Somchai — linked to actual user account
-  { roomNumber: '304', floor: 3, status: 'OCCUPIED', capacity: 4, monthlyRent: 5500, description: 'Floor 3 Room 304', tenantName: 'สมชาย ทดสอบระบบ', linkUserId: true },
+  { roomNumber: '304', floor: 3, status: 'AVAILABLE', capacity: 4, monthlyRent: 5500, description: 'Floor 3 Room 304', tenantName: 'สมชาย ทดสอบระบบ', linkUserId: true },
 ];
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -173,10 +173,8 @@ const main = async () => {
         tenantData.userId = studentUser.id;
       }
 
-      const tenantRecord = await prisma.tenant.upsert({
-        where: { roomId: roomRecord.id },
-        update: tenantData,
-        create: {
+      const tenantRecord = await prisma.tenant.create({
+        data: {
           roomId: roomRecord.id,
           ...tenantData,
         },

@@ -1,14 +1,73 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantsService = void 0;
+const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
 const tenants_repository_1 = require("./tenants.repository");
+const path_1 = __importDefault(require("path"));
 class TenantsService {
     static async listTenants(db) {
         return tenants_repository_1.TenantsRepository.listTenants(undefined, undefined, db);
     }
     static async getTenantById(id, db) {
         return tenants_repository_1.TenantsRepository.getTenantById(id, db);
+    }
+    static async getTenantByUserId(userId, db) {
+        return tenants_repository_1.TenantsRepository.getTenantByUserId(userId, db);
+    }
+    static resolveTenantDocumentPath(documentPath) {
+        if (!documentPath) {
+            throw new error_handler_1.AppError('Document not found', 404);
+        }
+        const uploadRoot = path_1.default.resolve(process.env.UPLOAD_ROOT || path_1.default.join(process.cwd(), 'uploads/private'));
+        const normalizedPath = documentPath.replace(/^uploads[\\/ ]*private[\\/]?/u, '');
+        const resolvedPath = path_1.default.resolve(uploadRoot, normalizedPath);
+        if (resolvedPath !== uploadRoot && !resolvedPath.startsWith(`${uploadRoot}${path_1.default.sep}`)) {
+            throw new error_handler_1.AppError('Invalid document path', 400);
+        }
+        return resolvedPath;
+    }
+    static async submitApplication(data, db) {
+        const { personalInformation, emergencyContact, roomPreference, ocrData, idCardImagePath, paymentSlipPath, contractData, userId } = data;
+        if (!personalInformation?.fullName?.trim()) {
+            throw new error_handler_1.AppError('Full Name is required', 400);
+        }
+        const tenantPayload = {
+            fullName: personalInformation.fullName.trim(),
+            studentId: personalInformation.studentId?.trim(),
+            course: personalInformation.course?.trim(),
+            yearLevel: personalInformation.yearLevel,
+            phone: personalInformation.contactNumber?.trim(),
+            email: personalInformation.emailAddress?.trim(),
+            emergencyName: emergencyContact?.emergencyName?.trim(),
+            emergencyRelation: emergencyContact?.relationship,
+            emergencyContact: emergencyContact?.emergencyNumber?.trim(),
+            preferredRoomType: roomPreference?.preferredRoomType,
+            notes: roomPreference?.notes?.trim(),
+            citizenId: ocrData?.citizenId?.trim(),
+            address: ocrData?.address?.trim(),
+            birthDate: ocrData?.birthDate?.trim(),
+            idCardImagePath,
+            paymentSlipPath,
+            contractData: contractData ? JSON.stringify(contractData) : null,
+            status: 'PENDING',
+            isActive: true,
+        };
+        const client = db || db_1.prisma;
+        if (userId) {
+            const existing = await client.tenant.findUnique({ where: { userId } });
+            if (existing) {
+                return client.tenant.update({
+                    where: { userId },
+                    data: tenantPayload,
+                });
+            }
+            tenantPayload.user = { connect: { id: userId } };
+        }
+        return client.tenant.create({ data: tenantPayload });
     }
     static async createTenant(data, db) {
         if (data.userId !== undefined && data.userId !== null) {
@@ -48,6 +107,17 @@ class TenantsService {
         }, db);
     }
     static async updateTenant(id, data, db) {
+        const client = db || db_1.prisma;
+        if (data.status !== undefined && !['PENDING', 'APPROVED', 'REJECTED', 'ACTIVE', 'INACTIVE'].includes(data.status)) {
+            throw new error_handler_1.AppError('Invalid tenant status', 400);
+        }
+        const tenant = await client.tenant.findUnique({
+            where: { id },
+            include: { room: true },
+        });
+        if (!tenant) {
+            throw new error_handler_1.AppError('Tenant not found', 404);
+        }
         const updateData = {
             fullName: data.fullName?.trim(),
             phone: data.phone?.trim(),
@@ -55,6 +125,7 @@ class TenantsService {
             checkInDate: data.checkInDate ? new Date(data.checkInDate) : undefined,
             checkOutDate: data.checkOutDate ? new Date(data.checkOutDate) : undefined,
             isActive: data.isActive,
+            status: data.status,
         };
         if ('userId' in data) {
             if (data.userId === null)
@@ -62,15 +133,111 @@ class TenantsService {
             else if (data.userId !== undefined)
                 updateData.user = { connect: { id: data.userId } };
         }
+        // Determine room updates and status changes
+        let nextRoomId = undefined;
         if ('roomId' in data) {
-            if (data.roomId === null)
-                updateData.room = { disconnect: true };
-            else if (data.roomId !== undefined)
-                updateData.room = { connect: { id: data.roomId } };
+            nextRoomId = data.roomId;
         }
-        return tenants_repository_1.TenantsRepository.updateTenant(id, updateData, db);
+        const isBecomingActive = data.status === 'APPROVED' || data.status === 'ACTIVE';
+        const isBecomingInactive = data.status === 'PENDING' || data.status === 'REJECTED' || data.status === 'INACTIVE';
+        if (isBecomingActive && !tenant.roomId && nextRoomId === undefined) {
+            // Auto-assign random available room
+            const rooms = await client.room.findMany({
+                include: { tenants: true },
+            });
+            const availableRooms = rooms.filter((r) => r.tenants.length < (r.capacity ?? 4));
+            if (availableRooms.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableRooms.length);
+                const selectedRoom = availableRooms[randomIndex];
+                updateData.room = { connect: { id: selectedRoom.id } };
+                const newOccupantsCount = selectedRoom.tenants.length + 1;
+                const isNowOccupied = newOccupantsCount >= (selectedRoom.capacity ?? 4);
+                await client.room.update({
+                    where: { id: selectedRoom.id },
+                    data: { status: isNowOccupied ? 'OCCUPIED' : 'AVAILABLE' },
+                });
+            }
+            else {
+                throw new error_handler_1.AppError('No available rooms in the system', 400);
+            }
+        }
+        else if (isBecomingInactive && tenant.roomId) {
+            // Release current room and disconnect it
+            updateData.room = { disconnect: true };
+            const currentRoom = await client.room.findUnique({
+                where: { id: tenant.roomId },
+                include: { tenants: true },
+            });
+            // The current tenant is still in the room during this query, count minus 1
+            const occupantsCount = Math.max(0, (currentRoom?.tenants?.length ?? 0) - 1);
+            const isNowOccupied = occupantsCount >= (currentRoom?.capacity ?? 4);
+            await client.room.update({
+                where: { id: tenant.roomId },
+                data: { status: isNowOccupied ? 'OCCUPIED' : 'AVAILABLE' },
+            });
+        }
+        else if (nextRoomId !== undefined) {
+            // Explicit roomId changes
+            if (nextRoomId === null) {
+                if (tenant.roomId) {
+                    updateData.room = { disconnect: true };
+                    const currentRoom = await client.room.findUnique({
+                        where: { id: tenant.roomId },
+                        include: { tenants: true },
+                    });
+                    const occupantsCount = Math.max(0, (currentRoom?.tenants?.length ?? 0) - 1);
+                    await client.room.update({
+                        where: { id: tenant.roomId },
+                        data: { status: occupantsCount >= (currentRoom?.capacity ?? 4) ? 'OCCUPIED' : 'AVAILABLE' },
+                    });
+                }
+            }
+            else {
+                if (tenant.roomId && tenant.roomId !== nextRoomId) {
+                    const prevRoom = await client.room.findUnique({
+                        where: { id: tenant.roomId },
+                        include: { tenants: true },
+                    });
+                    const occupantsCount = Math.max(0, (prevRoom?.tenants?.length ?? 0) - 1);
+                    await client.room.update({
+                        where: { id: tenant.roomId },
+                        data: { status: occupantsCount >= (prevRoom?.capacity ?? 4) ? 'OCCUPIED' : 'AVAILABLE' },
+                    });
+                }
+                updateData.room = { connect: { id: nextRoomId } };
+                const targetRoom = await client.room.findUnique({
+                    where: { id: nextRoomId },
+                    include: { tenants: true },
+                });
+                const targetOccupantsCount = (targetRoom?.tenants?.length ?? 0) + 1;
+                const isNowOccupied = targetOccupantsCount >= (targetRoom?.capacity ?? 4);
+                await client.room.update({
+                    where: { id: nextRoomId },
+                    data: { status: isNowOccupied ? 'OCCUPIED' : 'AVAILABLE' },
+                });
+            }
+        }
+        else if (isBecomingActive && tenant.roomId) {
+            const currentRoom = await client.room.findUnique({
+                where: { id: tenant.roomId },
+                include: { tenants: true },
+            });
+            // The current tenant might not be linked in the relations yet (if status was pending)
+            const hasSelf = currentRoom?.tenants?.some((t) => t.id === tenant.id);
+            const occupantsCount = (currentRoom?.tenants?.length ?? 0) + (hasSelf ? 0 : 1);
+            const isNowOccupied = occupantsCount >= (currentRoom?.capacity ?? 4);
+            await client.room.update({
+                where: { id: tenant.roomId },
+                data: { status: isNowOccupied ? 'OCCUPIED' : 'AVAILABLE' },
+            });
+        }
+        return tenants_repository_1.TenantsRepository.updateTenant(id, updateData, client);
     }
     static async deleteTenant(id, db) {
+        const tenant = await tenants_repository_1.TenantsRepository.getTenantById(id, db);
+        if (!tenant) {
+            throw new error_handler_1.AppError('Tenant not found', 404);
+        }
         return tenants_repository_1.TenantsRepository.deleteTenant(id, db);
     }
 }

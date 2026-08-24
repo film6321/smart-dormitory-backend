@@ -1,8 +1,13 @@
 import NotificationService from '../notifications/notification.service';
 import { MaintenanceRepository } from './maintenance.repository';
 import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
+import { prisma } from '../../database/db';
 
 export class MaintenanceService {
+  static async getTenantByUserId(userId: number) {
+    return prisma.tenant.findFirst({ where: { userId } });
+  }
+
   static async getTicketById(id: number) {
     return MaintenanceRepository.getTicketById(id);
   }
@@ -16,13 +21,19 @@ export class MaintenanceService {
       contactTime: data.contactTime,
     });
 
-    const notificationService = new NotificationService();
-    await notificationService.scheduleNotification({
-      tenantId: ticket.tenantId,
-      channel: 'SMS',
-      type: 'MAINTENANCE_COMPLETED',
-      payload: JSON.stringify({ message: `Maintenance ticket ${ticket.id} created`, category: ticket.category }),
-    });
+    // Fire-and-forget: notification failure must not block ticket creation
+    try {
+      const notificationService = new NotificationService();
+      await notificationService.scheduleNotification({
+        tenantId: ticket.tenantId,
+        channel: 'SMS',
+        type: 'MAINTENANCE_COMPLETED',
+        payload: JSON.stringify({ message: `Maintenance ticket ${ticket.id} created`, category: ticket.category }),
+      });
+    } catch (notifErr) {
+      // Log but don't propagate - ticket is already saved
+      console.warn('[MaintenanceService] Notification scheduling failed (non-critical):', notifErr);
+    }
 
     return ticket;
   }

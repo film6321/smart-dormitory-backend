@@ -13,6 +13,9 @@ export interface OcrIdCardData {
   bp_full_name_th?: string;
   th_dob?: string;
   dob_th?: string;
+  address?: string;
+  address_th?: string;
+  th_address?: string;
   issue_date?: string;
   expiry_date?: string;
 }
@@ -29,12 +32,23 @@ export interface OcrIdCardResponse {
   };
   processing_time_ms?: number;
   job_id?: string;
+  citizen_id?: string;
+  id_number?: string;
+  birth_date?: string;
+  birthDate?: string;
+  date_of_birth?: string;
+  address?: string;
+  address_th?: string;
+  th_address?: string;
 }
 
 export interface VerifyIdCardResult {
   verificationId?: number;
   isThaiIdCard: boolean;
   reason?: string;
+  citizenId?: string;
+  address?: string;
+  age?: number;
   imagePath?: string;
   citizenIdMasked?: string;
   fullNameTh?: string;
