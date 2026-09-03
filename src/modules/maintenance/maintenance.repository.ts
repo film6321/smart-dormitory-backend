@@ -25,4 +25,8 @@ export class MaintenanceRepository {
   static async updateTicketStatus(id: number, data: Prisma.MaintenanceTicketUpdateInput, db = prisma) {
     return db.maintenanceTicket.update({ where: { id }, data });
   }
+
+  static async deleteTicket(id: number, db = prisma) {
+    return db.maintenanceTicket.delete({ where: { id } });
+  }
 }

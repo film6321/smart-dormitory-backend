@@ -10,16 +10,31 @@ class AuthRepository {
             select: {
                 id: true,
                 email: true,
+                username: true,
                 password: true,
                 role: true,
                 firstName: true,
                 lastName: true,
+                lastLogin: true,
+            },
+        });
+    }
+    static async findByUsername(username, db = db_1.prisma) {
+        const client = db;
+        return client.user.findUnique({
+            where: { username },
+            select: {
+                id: true,
+                username: true,
             },
         });
     }
     static async createUser(data, db = db_1.prisma) {
         const client = db;
-        return client.user.create({ data: data, select: { id: true, email: true, role: true, firstName: true, lastName: true, password: true } });
+        return client.user.create({
+            data: data,
+            select: { id: true, email: true, username: true, role: true, firstName: true, lastName: true, lastLogin: true, password: true },
+        });
     }
     static async updateUser(id, data, db = db_1.prisma) {
         const client = db;

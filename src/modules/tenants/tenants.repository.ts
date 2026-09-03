@@ -2,12 +2,22 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 
 export class TenantsRepository {
+  private static readonly userSelect: Prisma.UserSelect = {
+    id: true,
+    email: true,
+    role: true,
+    firstName: true,
+    lastName: true,
+    createdAt: true,
+    updatedAt: true,
+  };
+
   static async listTenants(userId?: number, role?: string, db = prisma) {
     const where: Prisma.TenantWhereInput = role === 'ADMIN' ? {} : { userId };
 
     return db.tenant.findMany({
       where,
-      include: { user: true, room: true },
+      include: { user: { select: TenantsRepository.userSelect }, room: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -15,14 +25,14 @@ export class TenantsRepository {
   static async getTenantById(id: number, db = prisma) {
     return db.tenant.findUnique({
       where: { id },
-      include: { user: true, room: true },
+      include: { user: { select: TenantsRepository.userSelect }, room: true },
     });
   }
 
   static async getTenantByUserId(userId: number, db = prisma) {
     return db.tenant.findUnique({
       where: { userId },
-      include: { user: true, room: true },
+      include: { user: { select: TenantsRepository.userSelect }, room: true },
     });
   }
 

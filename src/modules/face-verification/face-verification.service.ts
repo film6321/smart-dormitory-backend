@@ -54,7 +54,7 @@ export class FaceVerificationService {
 
   /**
    * Registers a face photo by saving it to disk and recording it in FaceEnrollmentPhoto
-   * so that the C# Edge client can pull and process it.
+   * and forwarding the photo to the Python Face Recognition API for embedding extraction.
    */
   static async registerFace(
     userId: number,
@@ -98,6 +98,9 @@ export class FaceVerificationService {
         },
       });
 
+      // 4. Forward photo to external Python Face Recognition API if configured
+      await this.forwardRegisterToExternalApi(userId, fileBuffer, mimeType, cleanFileName);
+
       return {
         id: photo.id,
         user_id: userId,
@@ -107,44 +110,88 @@ export class FaceVerificationService {
         updated_at: photo.createdAt.toISOString(),
       };
     } catch (error) {
+      if (error instanceof AppError) throw error;
       logger.error({ error, userId }, 'Failed to save register face photo');
       throw new AppError('Failed to register face template', 500);
     }
   }
 
   /**
-   * Mocks face verification for backward compatibility.
-   * Real-time verification is performed on the C# FaceGate.Edge client.
+   * Helper to forward face registration to the external Python Face API
    */
-  private static normalizeFaceApiUrl(): string | null {
-    const rawUrl = process.env.FACE_API_URL?.trim();
-    if (!rawUrl) {
-      return null;
-    }
+  private static async forwardRegisterToExternalApi(
+    userId: number,
+    fileBuffer: Buffer,
+    mimeType: string,
+    fileName: string
+  ): Promise<void> {
+    const rawUrl = process.env.FACE_API_URL?.trim() || 'http://127.0.0.1:8000';
+    const baseUrl = rawUrl.replace(/\/+$/u, '').replace(/\/api\/v1\/?$/u, '').replace(/\/faces\/?$/u, '');
+    const endpoint = `${baseUrl}/api/v1/faces/register`;
+    const apiKey = process.env.FACE_API_KEY?.trim() || 'face-recognition-secret-key-change-me-in-production';
 
+    try {
+      if (typeof fetch !== 'function') return;
+
+      const fileArrayBuffer = fileBuffer.buffer.slice(
+        fileBuffer.byteOffset,
+        fileBuffer.byteOffset + fileBuffer.byteLength
+      ) as ArrayBuffer;
+
+      const formData = new FormData();
+      formData.append('user_id', String(userId));
+      formData.append('file', new Blob([fileArrayBuffer], { type: mimeType }), fileName);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-API-Key': apiKey,
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (response.ok) {
+        logger.info({ userId, endpoint }, 'Successfully forwarded face registration to Python API');
+      } else {
+        const bodyText = await response.text();
+        logger.warn({ userId, status: response.status, bodyText }, 'External Face API register returned non-200');
+      }
+    } catch (error) {
+      logger.warn({ userId, error }, 'Failed to forward face registration to external Face API (will proceed with local disk copy)');
+    }
+  }
+
+  /**
+   * Normalizes the Face API endpoint URL
+   */
+  private static normalizeFaceApiUrl(): string {
+    const rawUrl = process.env.FACE_API_URL?.trim() || 'http://127.0.0.1:8000';
     const baseUrl = rawUrl.replace(/\/+$/u, '');
+    if (baseUrl.endsWith('/api/v1/faces/verify') || baseUrl.endsWith('/faces/verify')) {
+      return baseUrl;
+    }
     if (baseUrl.endsWith('/api/v1')) {
       return `${baseUrl}/faces/verify`;
     }
     return `${baseUrl}/api/v1/faces/verify`;
   }
 
+  /**
+   * Safe fallback for when Face API is unreachable or returns invalid data.
+   * STRICT SECURITY: Always defaults to NOT_MATCHED (matched: false) to prevent unauthorized access.
+   */
   private static createMockFaceVerificationResult(
-    fileBuffer: Buffer,
-    fileName: string,
-    threshold?: number,
+    _fileBuffer: Buffer,
+    _fileName: string,
+    _threshold?: number,
   ): FaceVerifyResponse {
-    const normalizedFileName = fileName.toLowerCase();
-    const thresholdValue = typeof threshold === 'number' ? threshold : 0.5;
-    const hasFaceLikeInput = fileBuffer.length > 0 && (normalizedFileName.includes('face') || normalizedFileName.includes('photo') || normalizedFileName.includes('image') || normalizedFileName.includes('avatar') || normalizedFileName.includes('verify') || normalizedFileName.includes('capture'));
-    const matched = hasFaceLikeInput || thresholdValue <= 0.99;
-
     return {
-      matched,
-      user_id: matched ? 99 : null,
-      similarity: matched ? 0.94 : 0.21,
-      processing_time_ms: 85,
-      message: matched ? 'Face matched successfully' : 'Face did not match registered templates',
+      matched: false,
+      user_id: null,
+      similarity: 0.1,
+      processing_time_ms: 50,
+      message: 'Face did not match registered templates',
     };
   }
 
@@ -155,19 +202,18 @@ export class FaceVerificationService {
     threshold?: number,
   ): Promise<FaceVerifyResponse> {
     const endpoint = this.normalizeFaceApiUrl();
-    const apiKey = process.env.FACE_API_KEY?.trim();
-
-    if (!endpoint || !apiKey) {
-      logger.warn({ fileName }, 'Face recognition service not configured, using mock verification fallback');
-      return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
-    }
+    const apiKey = process.env.FACE_API_KEY?.trim() || 'face-recognition-secret-key-change-me-in-production';
 
     if (typeof fetch !== 'function') {
       throw new AppError('Runtime fetch API is not available', 500);
     }
 
     try {
-      const fileArrayBuffer = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer;
+      const fileArrayBuffer = fileBuffer.buffer.slice(
+        fileBuffer.byteOffset,
+        fileBuffer.byteOffset + fileBuffer.byteLength
+      ) as ArrayBuffer;
+
       const formData = new FormData();
       formData.append('file', new Blob([fileArrayBuffer], { type: mimeType }), fileName);
       if (threshold !== undefined) {
@@ -180,11 +226,12 @@ export class FaceVerificationService {
         headers: {
           'X-API-Key': apiKey,
         },
+        signal: AbortSignal.timeout(4000),
       });
 
       if (!response.ok) {
         const bodyText = await response.text();
-        logger.warn({ endpoint, status: response.status, bodyText, fileName }, 'Face API unavailable, using mock verification fallback');
+        logger.warn({ endpoint, status: response.status, bodyText, fileName }, 'Face API returned non-ok status');
         return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
       }
 
@@ -193,20 +240,36 @@ export class FaceVerificationService {
         throw new AppError('Face recognition service returned invalid JSON', 502);
       }
 
-      return {
-        matched: Boolean(result.matched),
-        user_id: result.user_id !== undefined ? Number(result.user_id) : null,
-        similarity: Number(result.similarity ?? 0),
-        processing_time_ms: Number(result.processing_time_ms ?? 0),
-        message: result.message ?? (result.matched ? 'Face matched' : 'Face did not match'),
-      };
-    } catch (error) {
-      if (error instanceof AppError) {
-        logger.warn({ fileName, error }, 'Face API failed; reverting to mock verification fallback');
-        return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
+      const matched = Boolean(result.matched);
+      const matchedUserId = result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
+      let userName = result.message;
+
+      // If matched, lookup real user name from DB
+      if (matched && matchedUserId) {
+        try {
+          const user = await db.user.findUnique({ where: { id: matchedUserId } });
+          if (user) {
+            userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || `User #${user.id}`;
+          } else {
+            const visitor = await db.visitor.findUnique({ where: { id: matchedUserId } });
+            if (visitor) {
+              userName = visitor.guestName || `Visitor #${visitor.id}`;
+            }
+          }
+        } catch {
+          // ignore db lookup failure
+        }
       }
 
-      logger.warn({ fileName, error }, 'Face API threw; reverting to mock verification fallback');
+      return {
+        matched,
+        user_id: matchedUserId,
+        similarity: Number(result.similarity ?? 0),
+        processing_time_ms: Number(result.processing_time_ms ?? 0),
+        message: matched ? (userName || 'Face matched successfully') : 'Face did not match registered templates',
+      };
+    } catch (error) {
+      logger.warn({ fileName, error }, 'External Face API call failed or timed out; safe deny fallback applied');
       return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
     }
   }
@@ -222,7 +285,7 @@ export class FaceVerificationService {
       const data = await this.callExternalFaceApi(fileBuffer, mimeType, fileName, threshold);
       const elapsed = Date.now() - start;
       await this.saveLog(
-        undefined,
+        data.user_id ?? undefined,
         data.similarity,
         data.matched ? 'MATCHED' : 'NOT_MATCHED',
         elapsed,

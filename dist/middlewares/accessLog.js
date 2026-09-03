@@ -3,8 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.accessLog = void 0;
 const db_1 = require("../database/db");
 const logger_1 = require("../logger");
+const presence_1 = require("../shared/presence");
 const accessLogQueue_1 = require("../workers/accessLogQueue");
 const ignoredPaths = ['/health', '/api/health', '/metrics'];
+const ignoredPresencePaths = ['/api/auth/logout'];
 const shouldSkipAccessLog = (path) => ignoredPaths.some((ignoredPath) => path.startsWith(ignoredPath));
 const persistAccessLogFallback = async (log) => {
     try {
@@ -43,6 +45,11 @@ const accessLog = (req, res, next) => {
             logger_1.logger.warn({ error }, 'Failed to enqueue access log, writing directly to database');
             void persistAccessLogFallback(log);
         });
+        if (log.userId && !ignoredPresencePaths.some((ignoredPath) => log.path.startsWith(ignoredPath))) {
+            void (0, presence_1.markUserOnline)(log.userId).catch((error) => {
+                logger_1.logger.warn({ error, userId: log.userId }, 'Failed to refresh user presence from access log');
+            });
+        }
     });
     next();
 };

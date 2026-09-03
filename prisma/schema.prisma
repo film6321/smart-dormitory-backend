@@ -27,11 +27,13 @@ enum OcrJobStatus {
  */
 model User {
   id        Int      @id @default(autoincrement())
+  username  String?  @unique
   email     String   @unique
   password  String
   role      Role     @default(STUDENT)
   firstName String?
   lastName  String?
+  lastLogin DateTime?
   version   Int      @default(1) // Optimistic Concurrency Control (OCC)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

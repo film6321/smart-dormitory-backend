@@ -1,0 +1,14 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Smart Dormitory Prometheus
+    orgId: 1
+
+datasources:
+  - name: Smart Dormitory Prometheus
+    uid: smart_dormitory_prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

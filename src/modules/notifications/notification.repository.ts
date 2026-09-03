@@ -2,9 +2,19 @@ import { Prisma, NotificationChannel, NotificationType } from '@prisma/client';
 import { prisma } from '../../database/db';
 
 export class NotificationRepository {
+  private static readonly userSelect = {
+    id: true,
+    email: true,
+    role: true,
+    firstName: true,
+    lastName: true,
+    createdAt: true,
+    updatedAt: true,
+  };
+
   static async findTenantById(id: number, db = prisma) {
     const _db: any = db;
-    return _db.tenant.findUnique({ where: { id }, include: { user: true } });
+    return _db.tenant.findUnique({ where: { id }, include: { user: { select: NotificationRepository.userSelect } } });
   }
 
   static async findUserById(id: number, db = prisma) {

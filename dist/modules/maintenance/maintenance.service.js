@@ -6,7 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MaintenanceService = void 0;
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
 const maintenance_repository_1 = require("./maintenance.repository");
+const client_1 = require("@prisma/client");
 const db_1 = require("../../database/db");
+const error_handler_1 = require("../../middlewares/error-handler");
 class MaintenanceService {
     static async getTenantByUserId(userId) {
         return db_1.prisma.tenant.findFirst({ where: { userId } });
@@ -46,6 +48,17 @@ class MaintenanceService {
             status: status,
             note,
         });
+    }
+    static async deleteTicket(id) {
+        try {
+            return await maintenance_repository_1.MaintenanceRepository.deleteTicket(id);
+        }
+        catch (error) {
+            if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+                throw new error_handler_1.AppError('Maintenance ticket not found', 404);
+            }
+            throw error;
+        }
     }
 }
 exports.MaintenanceService = MaintenanceService;

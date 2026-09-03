@@ -26,6 +26,7 @@ const upload = (0, multer_1.default)({
 router.post('/', auth_jwt_1.verifyToken, (0, dto_validation_1.validateDto)(maintenance_dto_1.createMaintenanceTicketSchema), maintenance_controller_1.MaintenanceController.createTicket);
 router.get('/', auth_jwt_1.verifyToken, maintenance_controller_1.MaintenanceController.listTickets);
 router.patch('/:id/status', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), (0, dto_validation_1.validateDto)(maintenance_dto_1.updateMaintenanceStatusSchema), maintenance_controller_1.MaintenanceController.updateTicketStatus);
+router.delete('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), maintenance_controller_1.MaintenanceController.deleteTicket);
 // Image uploading & downloading routes
 router.post('/upload', auth_jwt_1.verifyToken, upload.single('image'), maintenance_controller_1.MaintenanceController.uploadImage);
 router.get('/images/:filename', maintenance_controller_1.MaintenanceController.serveImage);

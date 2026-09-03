@@ -74,6 +74,8 @@ services:
       UPLOAD_ROOT: /app/uploads/private
       OCR_API_URL: http://host.docker.internal:8000
       OCR_API_BASE_URL: http://host.docker.internal:8000
+      FACE_API_URL: http://face-recognition:8000
+      FACE_API_KEY: ${FACE_API_KEY:-face-recognition-secret-key-change-me-in-production}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -87,6 +89,26 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["npm", "run", "dev"]
+
+  face-recognition:
+    build:
+      context: ../Face_Recognition
+      dockerfile: Dockerfile
+    container_name: smart-dormitory-face-recognition
+    restart: unless-stopped
+    ports:
+      - "${FACE_RECOGNITION_PORT:-8001}:8000"
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///face_recognition.db
+      APP_PORT: "8000"
+      APP_HOST: "0.0.0.0"
+      APP_RELOAD: "false"
+      API_KEY: ${FACE_API_KEY:-face-recognition-secret-key-change-me-in-production}
+      MODEL_DIR: "models"
+      SIMILARITY_THRESHOLD: "0.60"
+    volumes:
+      - ../Face_Recognition/models:/app/models
+      - face_recognition_data:/app
 
   nginx:
     image: nginx:1.27-alpine
@@ -117,10 +139,17 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+    environment:
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
     ports:
-      - "${GRAFANA_HOST_PORT:-3000}:3000"
+      - "${GRAFANA_HOST_PORT:-3001}:3000"
     volumes:
       - grafanadata:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
   pgdata:
@@ -128,3 +157,4 @@ volumes:
   uploads:
   prometheusdata:
   grafanadata:
+  face_recognition_data:

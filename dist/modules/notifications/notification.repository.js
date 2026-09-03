@@ -3,9 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationRepository = void 0;
 const db_1 = require("../../database/db");
 class NotificationRepository {
+    static userSelect = {
+        id: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        createdAt: true,
+        updatedAt: true,
+    };
     static async findTenantById(id, db = db_1.prisma) {
         const _db = db;
-        return _db.tenant.findUnique({ where: { id }, include: { user: true } });
+        return _db.tenant.findUnique({ where: { id }, include: { user: { select: NotificationRepository.userSelect } } });
     }
     static async findUserById(id, db = db_1.prisma) {
         const _db = db;

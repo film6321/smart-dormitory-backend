@@ -67,6 +67,26 @@ export class MaintenanceController {
     }
   }
 
+  static async deleteTicket(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json(createResponse(400, 'Invalid ticket id'));
+      }
+
+      const existingTicket = await MaintenanceService.getTicketById(id);
+      if (!existingTicket) {
+        return res.status(404).json(createResponse(404, 'Maintenance ticket not found'));
+      }
+
+      await MaintenanceService.deleteTicket(id);
+      return res.status(200).json(createResponse(200, 'Maintenance ticket deleted'));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async uploadImage(req: Request, res: Response, next: NextFunction) {
     try {
       const file = req.file;

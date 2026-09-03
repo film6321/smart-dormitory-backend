@@ -3,71 +3,100 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersRepository = void 0;
 const db_1 = require("../../database/db");
 class UsersRepository {
+    static baseUserSelect = {
+        id: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        lastLogin: true,
+        createdAt: true,
+        updatedAt: true,
+    };
+    static usernameUserSelect = {
+        ...UsersRepository.baseUserSelect,
+        username: true,
+    };
     static async listUsers(db = db_1.prisma) {
-        const client = db;
-        return db.user.findMany({
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+        try {
+            return await db.user.findMany({
+                select: UsersRepository.usernameUserSelect,
+                orderBy: { createdAt: 'desc' },
+            });
+        }
+        catch (error) {
+            if (error?.code !== 'P2022') {
+                throw error;
+            }
+            return db.user.findMany({
+                select: UsersRepository.baseUserSelect,
+                orderBy: { createdAt: 'desc' },
+            });
+        }
     }
     static async getUserById(id, db = db_1.prisma) {
-        const client = db;
-        return db.user.findUnique({
-            where: { id },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
+        try {
+            return await db.user.findUnique({
+                where: { id },
+                select: UsersRepository.usernameUserSelect,
+            });
+        }
+        catch (error) {
+            if (error?.code !== 'P2022') {
+                throw error;
+            }
+            return db.user.findUnique({
+                where: { id },
+                select: UsersRepository.baseUserSelect,
+            });
+        }
     }
     static async findByEmail(email, db = db_1.prisma) {
-        const client = db;
         return db.user.findUnique({
             where: { email },
             select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
+                ...UsersRepository.baseUserSelect,
                 password: true,
             },
         });
     }
     static async createUser(data, db = db_1.prisma) {
-        const client = db;
-        return client.user.create({
-            data: data,
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                firstName: true,
-                lastName: true,
-                password: true,
-            },
-        });
+        try {
+            return await db.user.create({
+                data: data,
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    firstName: true,
+                    lastName: true,
+                    password: true,
+                },
+            });
+        }
+        catch (error) {
+            if (error?.code !== 'P2022') {
+                throw error;
+            }
+            const { username: _username, ...fallbackData } = data;
+            return db.user.create({
+                data: fallbackData,
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    firstName: true,
+                    lastName: true,
+                    password: true,
+                },
+            });
+        }
     }
     static async updateUser(id, data, db = db_1.prisma) {
-        const client = db;
-        return client.user.update({ where: { id }, data: data });
+        return db.user.update({ where: { id }, data: data });
     }
     static async deleteUser(id, db = db_1.prisma) {
-        const client = db;
-        return client.user.delete({ where: { id } });
+        return db.user.delete({ where: { id } });
     }
 }
 exports.UsersRepository = UsersRepository;

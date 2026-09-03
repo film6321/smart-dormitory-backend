@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### 2026-09-02 — Face recognition docker integration, multi-face workflow, and student UI balance
+
+- รวม Service Face Recognition AI เข้ากับ `docker-compose.yml` สำหรับรันและสื่อสารกับ Backend ภายใน Container Network
+- แก้ไขปัญหา missing dependency `aiosqlite` ใน `Face_Recognition/requirements.txt` และ Rebuild Docker container สำเร็จ
+- ปรับปรุง `face-verification.service.ts` ใน Backend ให้ Forward คำขอลงทะเบียนและตรวจสอบใบหน้าไปยัง Python FastAPI service พร้อมตั้งค่า Fallback เป็น Denial-by-Default เพื่อความปลอดภัย
+- ปรับปรุง `MonitorPage.tsx` ใน Frontend ให้รองรับการตรวจจับหลายใบหน้าพร้อมกัน (Multi-face detection), จัดลำดับความสำคัญของใบหน้าที่อยู่ใกล้กล้องที่สุดก่อน และตัดภาพเฉพาะกรอบใบหน้าส่งไปประมวลผล
+- ปรับแต่ง UI หน้า Student Home และ Student Documents: ลบพื้นหลังเงาสีเข้มที่ไม่จำเป็นออก และจัดระเบียบ Padding/Margin ฝั่งซ้าย-ขวาให้สมดุลเท่ากันทั้งสองด้าน
+
+### 2026-09-01 — Admin dashboard real data and embedded Grafana observability
+
+- เปลี่ยนหน้า Admin Dashboard ให้ใช้ข้อมูลจริงจาก backend APIs แทน mock/debug data สำหรับ rooms, tenants, maintenance tickets, users และ billing
+- เพิ่มการคำนวณ financial summary และกราฟรายเดือนจาก bills จริงใน `DashboardContext`
+- เพิ่ม Business Health และ System Health panels เพื่อดูภาพรวมอัตราเข้าพัก งานซ่อมค้าง ผู้ใช้ออนไลน์ backend health และ metrics readiness
+- เพิ่ม backend HTTP metrics สำหรับ Prometheus ได้แก่ `dormitory_http_requests_total` และ `dormitory_http_request_duration_seconds`
+- เพิ่ม Grafana provisioning สำหรับ Prometheus datasource และ dashboard `Smart Dormitory Operations`
+- ฝัง Grafana dashboard ในหน้าเว็บ admin ด้วย iframe โดยใช้ anonymous viewer ใน local/dev และไม่ฝัง Prometheus UI ตรงๆ เพื่อลดความเสี่ยงด้านความปลอดภัย
+- แก้ปัญหา Grafana panel ขึ้น `No data` จาก datasource UID mismatch โดยบังคับ datasource UID เป็น `smart_dormitory_prometheus`
+- ตั้งค่า frontend monitoring URLs ใน `.env.example` และ local `.env` สำหรับ `VITE_GRAFANA_URL` และ `VITE_PROMETHEUS_URL`
+- ตรวจสอบแล้ว: backend build ผ่าน, frontend build ผ่าน, Grafana dashboard ตอบ 200, Prometheus ready ตอบ 200 และ Grafana datasource proxy query มีข้อมูล
+
+### 2026-09-01 — Maintenance delete, viewed notification state, and admin logout
+
+- เพิ่ม `DELETE /api/maintenance/:id` สำหรับ ADMIN เพื่อลบรายการแจ้งซ่อมที่ไม่ต้องการแล้ว
+- เพิ่มปุ่มลบในหน้าแจ้งซ่อม พร้อม confirm ก่อนลบ และ refresh รายการหลังลบสำเร็จ
+- เพิ่ม error message ที่แสดง HTTP status/message จริงเมื่ออัปเดตหรือลบ maintenance request ไม่สำเร็จ
+- เพิ่มการจัดการ Prisma `P2025` ให้ตอบ `404 Maintenance ticket not found` แทน error 500
+- เพิ่มสถานะ viewed สำหรับจุดแดงแจ้งเตือนรายการแจ้งซ่อมใหม่ โดยจุดแดงหายเมื่อ admin กดดูรายการหรือกลุ่มรายการ
+- ปรับกล่องวันเวลาที่สะดวกให้ช่างเข้าดำเนินการเป็นสีเทาอ่อน
+- เพิ่มปุ่มออกจากระบบใน Admin Dashboard sidebar และ redirect กลับ `/login`
+
 ### 2026-08-24 — Maintenance image viewer & interactive lightbox enhancements
 
 - เพิ่มระบบสไลเดอร์และปุ่มควบคุมขนาดซูม (Zoom Slider & Buttons) ควบคุมอัตราการซูมแบบละเอียดตั้งแต่ 100% ถึง 400%

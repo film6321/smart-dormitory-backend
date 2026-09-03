@@ -24,6 +24,7 @@ const upload = multer({
 router.post('/', verifyToken, validateDto(createMaintenanceTicketSchema), MaintenanceController.createTicket);
 router.get('/', verifyToken, MaintenanceController.listTickets);
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateMaintenanceStatusSchema), MaintenanceController.updateTicketStatus);
+router.delete('/:id', verifyToken, requireRole(['ADMIN']), MaintenanceController.deleteTicket);
 
 // Image uploading & downloading routes
 router.post('/upload', verifyToken, upload.single('image'), MaintenanceController.uploadImage);

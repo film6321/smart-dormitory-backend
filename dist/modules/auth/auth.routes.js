@@ -32,6 +32,8 @@ const registerLimiter = (0, express_rate_limit_1.default)({
 // เส้นทางแบบเข้าถึงได้อิสระ (Public Routes) - มี Rate Limiting
 router.post('/login', loginLimiter, auth_controller_1.AuthController.login);
 router.post('/register', registerLimiter, auth_controller_1.AuthController.register);
+router.post('/heartbeat', auth_jwt_1.verifyToken, auth_controller_1.AuthController.heartbeat);
+router.post('/logout', auth_jwt_1.verifyToken, auth_controller_1.AuthController.logout);
 // เส้นทางตัวอย่างเพื่อทดสอบ Token
 router.get('/me', auth_jwt_1.verifyToken, (req, res) => {
     res.json((0, api_response_1.createResponse)(200, 'ดึงข้อมูลโปรไฟล์ได้สำเร็จ', { user: req.user }));

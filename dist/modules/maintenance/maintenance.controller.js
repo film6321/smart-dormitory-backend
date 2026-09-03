@@ -63,6 +63,23 @@ class MaintenanceController {
             next(error);
         }
     }
+    static async deleteTicket(req, res, next) {
+        try {
+            const id = Number(req.params.id);
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid ticket id'));
+            }
+            const existingTicket = await maintenance_service_1.MaintenanceService.getTicketById(id);
+            if (!existingTicket) {
+                return res.status(404).json((0, api_response_1.createResponse)(404, 'Maintenance ticket not found'));
+            }
+            await maintenance_service_1.MaintenanceService.deleteTicket(id);
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Maintenance ticket deleted'));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     static async uploadImage(req, res, next) {
         try {
             const file = req.file;

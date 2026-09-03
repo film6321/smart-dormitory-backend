@@ -2,48 +2,63 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 
 export class UsersRepository {
+  private static readonly baseUserSelect = {
+    id: true,
+    email: true,
+    role: true,
+    firstName: true,
+    lastName: true,
+    lastLogin: true,
+    createdAt: true,
+    updatedAt: true,
+  } satisfies Prisma.UserSelect;
+
+  private static readonly usernameUserSelect = {
+    ...UsersRepository.baseUserSelect,
+    username: true,
+  } satisfies Prisma.UserSelect;
+
   static async listUsers(db = prisma) {
-    const client: any = db;
-    return db.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      return await db.user.findMany({
+        select: UsersRepository.usernameUserSelect,
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (error) {
+      if ((error as { code?: string } | null | undefined)?.code !== 'P2022') {
+        throw error;
+      }
+
+      return db.user.findMany({
+        select: UsersRepository.baseUserSelect,
+        orderBy: { createdAt: 'desc' },
+      });
+    }
   }
 
   static async getUserById(id: number, db = prisma) {
-    const client: any = db;
-    return db.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    try {
+      return await db.user.findUnique({
+        where: { id },
+        select: UsersRepository.usernameUserSelect,
+      });
+    } catch (error) {
+      if ((error as { code?: string } | null | undefined)?.code !== 'P2022') {
+        throw error;
+      }
+
+      return db.user.findUnique({
+        where: { id },
+        select: UsersRepository.baseUserSelect,
+      });
+    }
   }
 
   static async findByEmail(email: string, db = prisma) {
-    const client: any = db;
     return db.user.findUnique({
       where: { email },
       select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
+        ...UsersRepository.baseUserSelect,
         password: true,
       },
     });
@@ -52,31 +67,49 @@ export class UsersRepository {
   static async createUser(data: {
     email: string;
     password: string;
+    username?: string | null;
     firstName?: string | null;
     lastName?: string | null;
+    lastLogin?: Date | string | null;
     role: string;
   }, db = prisma) {
-    const client: any = db;
-    return client.user.create({
-      data: data as Prisma.UserCreateInput,
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        password: true,
-      },
-    });
+    try {
+      return await db.user.create({
+        data: data as Prisma.UserCreateInput,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          firstName: true,
+          lastName: true,
+          password: true,
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string } | null | undefined)?.code !== 'P2022') {
+        throw error;
+      }
+
+      const { username: _username, ...fallbackData } = data;
+      return db.user.create({
+        data: fallbackData as Prisma.UserCreateInput,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          firstName: true,
+          lastName: true,
+          password: true,
+        },
+      });
+    }
   }
 
   static async updateUser(id: number, data: Partial<Prisma.UserUpdateInput>, db = prisma) {
-    const client: any = db;
-    return client.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
+    return db.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
   }
 
   static async deleteUser(id: number, db = prisma) {
-    const client: any = db;
-    return client.user.delete({ where: { id } });
+    return db.user.delete({ where: { id } });
   }
 }

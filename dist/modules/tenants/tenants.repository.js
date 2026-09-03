@@ -3,24 +3,33 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantsRepository = void 0;
 const db_1 = require("../../database/db");
 class TenantsRepository {
+    static userSelect = {
+        id: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        createdAt: true,
+        updatedAt: true,
+    };
     static async listTenants(userId, role, db = db_1.prisma) {
         const where = role === 'ADMIN' ? {} : { userId };
         return db.tenant.findMany({
             where,
-            include: { user: true, room: true },
+            include: { user: { select: TenantsRepository.userSelect }, room: true },
             orderBy: { createdAt: 'desc' },
         });
     }
     static async getTenantById(id, db = db_1.prisma) {
         return db.tenant.findUnique({
             where: { id },
-            include: { user: true, room: true },
+            include: { user: { select: TenantsRepository.userSelect }, room: true },
         });
     }
     static async getTenantByUserId(userId, db = db_1.prisma) {
         return db.tenant.findUnique({
             where: { userId },
-            include: { user: true, room: true },
+            include: { user: { select: TenantsRepository.userSelect }, room: true },
         });
     }
     static async findUserById(id, db = db_1.prisma) {

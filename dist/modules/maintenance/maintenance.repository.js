@@ -22,5 +22,8 @@ class MaintenanceRepository {
     static async updateTicketStatus(id, data, db = db_1.prisma) {
         return db.maintenanceTicket.update({ where: { id }, data });
     }
+    static async deleteTicket(id, db = db_1.prisma) {
+        return db.maintenanceTicket.delete({ where: { id } });
+    }
 }
 exports.MaintenanceRepository = MaintenanceRepository;

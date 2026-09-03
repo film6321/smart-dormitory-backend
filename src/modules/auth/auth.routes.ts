@@ -31,6 +31,8 @@ const registerLimiter = rateLimit({
 // เส้นทางแบบเข้าถึงได้อิสระ (Public Routes) - มี Rate Limiting
 router.post('/login', loginLimiter, AuthController.login);
 router.post('/register', registerLimiter, AuthController.register);
+router.post('/heartbeat', verifyToken, AuthController.heartbeat);
+router.post('/logout', verifyToken, AuthController.logout);
 
 // เส้นทางตัวอย่างเพื่อทดสอบ Token
 router.get('/me', verifyToken, (req: AuthenticatedRequest, res: Response) => {

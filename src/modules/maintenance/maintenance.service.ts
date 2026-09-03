@@ -2,6 +2,7 @@ import NotificationService from '../notifications/notification.service';
 import { MaintenanceRepository } from './maintenance.repository';
 import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
 import { prisma } from '../../database/db';
+import { AppError } from '../../middlewares/error-handler';
 
 export class MaintenanceService {
   static async getTenantByUserId(userId: number) {
@@ -47,5 +48,16 @@ export class MaintenanceService {
       status: status as unknown as MaintenanceStatus,
       note,
     });
+  }
+
+  static async deleteTicket(id: number) {
+    try {
+      return await MaintenanceRepository.deleteTicket(id);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new AppError('Maintenance ticket not found', 404);
+      }
+      throw error;
+    }
   }
 }
