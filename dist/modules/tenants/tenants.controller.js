@@ -164,6 +164,31 @@ class TenantsController {
             next(error);
         }
     }
+    static async getTenantDocumentById(req, res, next) {
+        try {
+            const id = Number(req.params.id);
+            const documentType = req.params.documentType;
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid tenant id'));
+            }
+            if (documentType !== 'id-card' && documentType !== 'payment-slip') {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Unsupported document type'));
+            }
+            const tenant = await tenants_service_1.TenantsService.getTenantById(id);
+            if (!tenant) {
+                return res.status(404).json((0, api_response_1.createResponse)(404, 'Tenant not found'));
+            }
+            const documentPath = documentType === 'id-card' ? tenant.idCardImagePath : tenant.paymentSlipPath;
+            if (!documentPath) {
+                return res.status(404).json((0, api_response_1.createResponse)(404, 'Document not found for this tenant'));
+            }
+            const absolutePath = tenants_service_1.TenantsService.resolveTenantDocumentPath(documentPath);
+            return res.sendFile(absolutePath);
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     static async createTenant(req, res, next) {
         try {
             const tenant = await tenants_service_1.TenantsService.createTenant(req.body);

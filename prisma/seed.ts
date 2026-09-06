@@ -104,11 +104,60 @@ const seedTestMaintenanceTicket = async (tenantId: number, roomId: number) => {
   return ticket;
 };
 
-// ─── Rooms Config (only rooms with real tenants) ─────────────────────────────
-const roomsToSeed = [
-  // Real tenant: Somchai — linked to actual user account
-  { roomNumber: '304', floor: 3, status: 'AVAILABLE', capacity: 4, monthlyRent: 5500, description: 'Floor 3 Room 304', tenantName: 'สมชาย ทดสอบระบบ', linkUserId: true },
-];
+// ─── Rooms Config (120 rooms: 4 floors x 30 rooms per floor) ────────────────
+const generateAllRooms = () => {
+  const rooms: Array<{
+    roomNumber: string;
+    floor: number;
+    status: string;
+    capacity: number;
+    monthlyRent: number;
+    description: string;
+    tenantName?: string;
+    linkUserId?: boolean;
+  }> = [];
+
+  const floorRents: Record<number, number> = {
+    1: 3500,
+    2: 4200,
+    3: 4900,
+    4: 5600,
+  };
+
+  for (let floor = 1; floor <= 4; floor++) {
+    for (let i = 1; i <= 30; i++) {
+      const roomNum = `${floor}${i.toString().padStart(2, '0')}`;
+      const rent = floorRents[floor] || 3500;
+
+      if (roomNum === '304') {
+        // Real tenant: Somchai — linked to actual student user account
+        rooms.push({
+          roomNumber: '304',
+          floor: 3,
+          status: 'AVAILABLE',
+          capacity: 4,
+          monthlyRent: 5500,
+          description: 'Floor 3 Room 304',
+          tenantName: 'สมชาย ทดสอบระบบ',
+          linkUserId: true,
+        });
+      } else {
+        rooms.push({
+          roomNumber: roomNum,
+          floor,
+          status: 'AVAILABLE',
+          capacity: 4,
+          monthlyRent: rent,
+          description: `Floor ${floor} Room ${roomNum}`,
+        });
+      }
+    }
+  }
+
+  return rooms;
+};
+
+const roomsToSeed = generateAllRooms();
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const main = async () => {

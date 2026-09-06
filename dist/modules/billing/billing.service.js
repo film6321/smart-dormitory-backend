@@ -4,15 +4,114 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillingService = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const error_handler_1 = require("../../middlewares/error-handler");
+const db_1 = require("../../database/db");
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
 const billing_repository_1 = require("./billing.repository");
+const payment_provider_1 = require("./payment.provider");
 class BillingService {
     static async listBills(userId, role) {
         return billing_repository_1.BillingRepository.listBills(userId, role);
     }
     static async getBillById(id) {
         return billing_repository_1.BillingRepository.findBillById(id);
+    }
+    static async generatePaymentQr(billId, userId) {
+        const bill = await billing_repository_1.BillingRepository.findBillById(billId);
+        if (!bill) {
+            throw new error_handler_1.AppError('Bill not found', 404);
+        }
+        if (bill.tenant.userId !== userId) {
+            throw new error_handler_1.AppError('You are not allowed to pay this bill', 403);
+        }
+        if (bill.status !== 'UNPAID' && bill.status !== 'OVERDUE') {
+            throw new error_handler_1.AppError('This bill cannot receive a payment', 409);
+        }
+        return payment_provider_1.PaymentProviderClient.generateQr(Number(bill.amount));
+    }
+    static async getRoomBillingInfo(roomNumber) {
+        const room = await billing_repository_1.BillingRepository.findRoomByNumberWithTenants(roomNumber);
+        if (!room) {
+            throw new error_handler_1.AppError(`ไม่พบข้อมูลห้องพักเลขที่ ${roomNumber}`, 404);
+        }
+        return {
+            id: room.id,
+            roomNumber: room.roomNumber,
+            floor: room.floor,
+            status: room.status,
+            monthlyRent: Number(room.monthlyRent),
+            capacity: room.capacity,
+            tenantCount: room.tenants.length,
+            tenants: room.tenants.map((t) => ({
+                id: t.id,
+                fullName: t.fullName || (t.user ? `${t.user.firstName || ''} ${t.user.lastName || ''}`.trim() : 'ไม่ระบุชื่อ'),
+                studentId: t.studentId,
+                phone: t.phone,
+                email: t.email || t.user?.email,
+            })),
+        };
+    }
+    static async generateRoomBills(data) {
+        const room = await billing_repository_1.BillingRepository.findRoomByNumberWithTenants(data.roomNumber);
+        if (!room) {
+            throw new error_handler_1.AppError(`ไม่พบข้อมูลห้องพักเลขที่ ${data.roomNumber}`, 404);
+        }
+        const tenants = room.tenants;
+        if (!tenants || tenants.length === 0) {
+            throw new error_handler_1.AppError(`ห้อง ${room.roomNumber} ยังไม่มีผู้พักอาศัยที่ลงทะเบียนในระบบ ไม่สามารถสร้างบิลและหารค่าใช้จ่ายได้`, 400);
+        }
+        // 1. คำนวณค่าไฟ (อัตราคงที่ 8 บาท/หน่วย ตามสัญญา)
+        const electricRate = data.electricRate !== undefined ? Number(data.electricRate) : 8;
+        const electricUnits = Math.max(0, Number(data.electricUnits || 0));
+        const electricTotal = electricUnits * electricRate;
+        // 2. คำนวณค่าน้ำ (อัตราเหมาจ่ายคงที่ 100 บาท/ห้อง ตามสัญญา)
+        const waterTotal = data.waterAmount !== undefined ? Number(data.waterAmount) : 100;
+        // 3. ค่าเช่าห้อง
+        const rentTotal = data.customRent !== undefined ? Number(data.customRent) : Number(room.monthlyRent);
+        // 4. ยอดรวมทั้งห้อง
+        const grandTotal = rentTotal + electricTotal + waterTotal;
+        // 5. หารตามจำนวนผู้พักอาศัยจริงในห้อง (เพื่อป้องกันเงินตกหล่น)
+        const tenantCount = tenants.length;
+        const amountPerTenant = Math.round((grandTotal / tenantCount) * 100) / 100;
+        // วันครบกำหนดชำระ
+        const dueDate = data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const billingMonth = data.billingMonth || new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+        const description = `ค่าห้องพักประจำเดือน ${billingMonth} (ค่าเช่า ฿${rentTotal.toLocaleString('th-TH')} + ค่าไฟ ${electricUnits} หน่วย @${electricRate}บ. ฿${electricTotal.toLocaleString('th-TH')} + ค่าน้ำ ฿${waterTotal.toLocaleString('th-TH')} รวม ฿${grandTotal.toLocaleString('th-TH')} หาร ${tenantCount} คน)`;
+        const billsPayload = tenants.map((tenant) => ({
+            tenantId: tenant.id,
+            roomId: room.id,
+            amount: amountPerTenant,
+            rentAmount: Math.round((rentTotal / tenantCount) * 100) / 100,
+            electricAmount: Math.round((electricTotal / tenantCount) * 100) / 100,
+            waterAmount: Math.round((waterTotal / tenantCount) * 100) / 100,
+            penaltyAmount: 0,
+            dueDate,
+            description,
+        }));
+        const createdBills = await billing_repository_1.BillingRepository.createBills(billsPayload);
+        return {
+            roomNumber: room.roomNumber,
+            roomId: room.id,
+            calculation: {
+                rentTotal,
+                electricUnits,
+                electricRate,
+                electricTotal,
+                waterTotal,
+                grandTotal,
+                tenantCount,
+                amountPerTenant,
+                billingMonth,
+                dueDate,
+            },
+            tenants: tenants.map((t) => ({
+                id: t.id,
+                fullName: t.fullName || (t.user ? `${t.user.firstName || ''} ${t.user.lastName || ''}`.trim() : 'ไม่ระบุชื่อ'),
+                studentId: t.studentId,
+            })),
+            createdBills,
+        };
     }
     static async uploadSlip(billId, slipHash) {
         const bill = await billing_repository_1.BillingRepository.findBillById(billId);
@@ -26,12 +125,128 @@ class BillingService {
             version: bill.version + 1,
         });
     }
+    static async verifyPaymentSlip(billId, userId, idempotencyKey, file) {
+        const bill = await billing_repository_1.BillingRepository.findBillById(billId);
+        if (!bill) {
+            throw new error_handler_1.AppError('Bill not found', 404);
+        }
+        if (bill.tenant.userId !== userId) {
+            throw new error_handler_1.AppError('You are not allowed to pay this bill', 403);
+        }
+        if (bill.status !== 'UNPAID' && bill.status !== 'OVERDUE') {
+            throw new error_handler_1.AppError('This bill cannot receive a payment', 409);
+        }
+        const slipHash = crypto_1.default.createHash('sha256').update(file.buffer).digest('hex');
+        const existingPayment = await db_1.prisma.payment.findFirst({
+            where: {
+                OR: [{ idempotencyKey }, { slipHash }],
+            },
+        });
+        if (existingPayment) {
+            throw new error_handler_1.AppError('This payment has already been submitted', 409);
+        }
+        const payment = await db_1.prisma.$transaction(async (transaction) => {
+            const updatedBill = await transaction.bill.updateMany({
+                where: {
+                    id: billId,
+                    version: bill.version,
+                    status: bill.status,
+                },
+                data: {
+                    status: 'VERIFYING',
+                    slipHash,
+                    reason: 'Payment provider verification pending',
+                    version: { increment: 1 },
+                },
+            });
+            if (updatedBill.count !== 1) {
+                throw new error_handler_1.AppError('Bill was updated by another request', 409);
+            }
+            return transaction.payment.create({
+                data: {
+                    billId,
+                    payerUserId: userId,
+                    amount: bill.amount,
+                    status: 'VERIFYING',
+                    idempotencyKey,
+                    slipHash,
+                },
+            });
+        });
+        let verification;
+        try {
+            verification = await payment_provider_1.PaymentProviderClient.verifySlip(file);
+        }
+        catch (error) {
+            await db_1.prisma.payment.update({
+                where: { id: payment.id },
+                data: {
+                    status: 'MANUAL_REVIEW',
+                    failureReason: error instanceof Error ? error.message : 'Payment provider request failed',
+                },
+            });
+            throw error;
+        }
+        const expectedAmount = Number(bill.amount);
+        const amountMatches = verification.amount !== null && verification.amount === expectedAmount;
+        const verified = verification.success
+            && verification.recipientMatched
+            && !verification.duplicate
+            && amountMatches;
+        const failureReason = verification.duplicate
+            ? 'Duplicate slip'
+            : !verification.recipientMatched
+                ? 'Recipient account does not match'
+                : !amountMatches
+                    ? 'Payment amount does not match bill amount'
+                    : verification.message;
+        const result = await db_1.prisma.$transaction(async (transaction) => {
+            const currentBill = await transaction.bill.findUnique({ where: { id: billId } });
+            if (!currentBill || currentBill.status !== 'VERIFYING') {
+                throw new error_handler_1.AppError('Bill verification state changed unexpectedly', 409);
+            }
+            const updatedBill = await transaction.bill.updateMany({
+                where: { id: billId, version: currentBill.version, status: 'VERIFYING' },
+                data: {
+                    status: verified ? 'PAID' : 'FAILED',
+                    paidAt: verified ? new Date() : null,
+                    reason: verified ? 'Payment verified' : failureReason,
+                    version: { increment: 1 },
+                },
+            });
+            if (updatedBill.count !== 1) {
+                throw new error_handler_1.AppError('Bill was updated by another request', 409);
+            }
+            const updatedPayment = await transaction.payment.update({
+                where: { id: payment.id },
+                data: {
+                    status: verified ? 'PAID' : 'FAILED',
+                    providerResponse: JSON.stringify(verification.rawData),
+                    failureReason: verified ? null : failureReason,
+                    verifiedAt: verified ? new Date() : null,
+                },
+            });
+            return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
+        });
+        return result;
+    }
     static async updateBillStatus(billId, status, reason) {
-        const updated = await billing_repository_1.BillingRepository.updateBill(billId, {
+        const existing = await billing_repository_1.BillingRepository.findBillById(billId);
+        if (!existing) {
+            throw new error_handler_1.AppError('Bill not found', 404);
+        }
+        const dataToUpdate = {
             status: status,
             reason,
             version: { increment: 1 },
-        });
+        };
+        if (status === 'PAID') {
+            dataToUpdate.paidAt = new Date();
+        }
+        else if (status === 'UNPAID') {
+            dataToUpdate.paidAt = null;
+        }
+        const updated = await billing_repository_1.BillingRepository.updateBill(billId, dataToUpdate);
         if (status === 'OVERDUE') {
             const notificationService = new notification_service_1.default();
             await notificationService.scheduleNotification({
@@ -42,6 +257,20 @@ class BillingService {
             });
         }
         return updated;
+    }
+    static async deleteBill(billId) {
+        const bill = await billing_repository_1.BillingRepository.findBillById(billId);
+        if (!bill) {
+            throw new error_handler_1.AppError('Bill not found', 404);
+        }
+        const [paymentCount, batchItemCount] = await Promise.all([
+            db_1.prisma.payment.count({ where: { billId } }),
+            db_1.prisma.paymentBatchItem.count({ where: { billId } }),
+        ]);
+        if (paymentCount > 0 || batchItemCount > 0) {
+            throw new error_handler_1.AppError('ไม่สามารถลบบิลได้ เนื่องจากมีประวัติการชำระเงินแล้ว', 409);
+        }
+        return billing_repository_1.BillingRepository.deleteBill(billId);
     }
 }
 exports.BillingService = BillingService;

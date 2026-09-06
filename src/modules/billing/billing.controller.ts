@@ -16,16 +16,76 @@ export class BillingController {
     }
   }
 
-  static async uploadSlip(req: Request, res: Response, next: NextFunction) {
+  static async getRoomBillingInfo(req: Request, res: Response, next: NextFunction) {
     try {
+      const roomNumber = String(req.params.roomNumber);
+      const roomInfo = await BillingService.getRoomBillingInfo(roomNumber);
+      return res.status(200).json(createResponse(200, 'Room billing info fetched successfully', roomInfo));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async generatePaymentQr(req: Request, res: Response, next: NextFunction) {
+    try {
+      const authReq = req as AuthenticatedRequest;
       const billId = Number(req.params.id);
       if (!Number.isInteger(billId) || billId <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid bill id'));
       }
 
-      const slipHash = `${Date.now()}-${billId}`;
-      const bill = await BillingService.uploadSlip(billId, slipHash);
-      return res.status(202).json(createResponse(202, 'Slip upload accepted', bill));
+      const qrCode = await BillingService.generatePaymentQr(billId, authReq.user!.id);
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.send(qrCode);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  static async generateRoomBills(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { roomNumber, electricUnits, electricRate, waterAmount, dueDate, billingMonth, customRent } = req.body;
+      const result = await BillingService.generateRoomBills({
+        roomNumber: String(roomNumber),
+        electricUnits: Number(electricUnits),
+        electricRate: electricRate !== undefined ? Number(electricRate) : undefined,
+        waterAmount: waterAmount !== undefined ? Number(waterAmount) : undefined,
+        dueDate: dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        billingMonth: billingMonth ? String(billingMonth) : undefined,
+        customRent: customRent !== undefined ? Number(customRent) : undefined,
+      });
+
+      return res.status(201).json(createResponse(201, 'คำนวณและสร้างบิลส่งให้นักศึกษาในห้องสำเร็จ', result));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadSlip(req: Request, res: Response, next: NextFunction) {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const billId = Number(req.params.id);
+      if (!Number.isInteger(billId) || billId <= 0) {
+        return res.status(400).json(createResponse(400, 'Invalid bill id'));
+      }
+
+      const idempotencyKey = req.header('Idempotency-Key')?.trim();
+      if (!idempotencyKey) {
+        return res.status(400).json(createResponse(400, 'Idempotency-Key header is required'));
+      }
+
+      if (!req.file) {
+        return res.status(400).json(createResponse(400, 'slipImage file is required'));
+      }
+
+      const result = await BillingService.verifyPaymentSlip(
+        billId,
+        authReq.user!.id,
+        idempotencyKey,
+        req.file,
+      );
+      return res.status(200).json(createResponse(200, 'Payment verification completed', result));
     } catch (error) {
       next(error);
     }
@@ -51,6 +111,20 @@ export class BillingController {
 
       const updated = await BillingService.updateBillStatus(billId, status, reason);
       return res.status(200).json(createResponse(200, 'Bill status updated', updated));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteBill(req: Request, res: Response, next: NextFunction) {
+    try {
+      const billId = Number(req.params.id);
+      if (!Number.isInteger(billId) || billId <= 0) {
+        return res.status(400).json(createResponse(400, 'Invalid bill id'));
+      }
+
+      await BillingService.deleteBill(billId);
+      return res.status(200).json(createResponse(200, 'ลบบิลสำเร็จ'));
     } catch (error) {
       next(error);
     }

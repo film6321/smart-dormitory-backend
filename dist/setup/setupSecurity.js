@@ -40,7 +40,7 @@ const setupSecurity = (app) => {
         },
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Idempotency-Key"],
     }));
     app.use(express_1.default.json({ limit: "10mb" }));
     app.use(express_1.default.urlencoded({ limit: "10mb", extended: true }));

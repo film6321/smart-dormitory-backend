@@ -22,25 +22,47 @@ enum OcrJobStatus {
   FAILED
 }
 
+enum PaymentStatus {
+  PENDING
+  VERIFYING
+  PAID
+  FAILED
+  MANUAL_REVIEW
+}
+
+enum PaymentProvider {
+  THUNDER
+}
+
+enum PaymentBatchStatus {
+  PENDING
+  VERIFYING
+  PAID
+  FAILED
+  MANUAL_REVIEW
+}
+
 /**
  * ---------- Existing User Model ----------
  */
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String?  @unique
-  email     String   @unique
+  id        Int       @id @default(autoincrement())
+  username  String?   @unique
+  email     String    @unique
   password  String
-  role      Role     @default(STUDENT)
+  role      Role      @default(STUDENT)
   firstName String?
   lastName  String?
   lastLogin DateTime?
-  version   Int      @default(1) // Optimistic Concurrency Control (OCC)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  version   Int       @default(1) // Optimistic Concurrency Control (OCC)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Relations
   accessLogs           AccessLog[]
   transactions         Transaction[]
+  payments             Payment[]
+  paymentBatches       PaymentBatch[]
   idCardVerifications  IdCardVerification[]
   ocrJobs              OcrJob[]
   tenant               Tenant?
@@ -202,34 +224,34 @@ model Room {
 }
 
 model Tenant {
-  id               Int       @id @default(autoincrement())
-  userId           Int?      @unique
-  user             User?     @relation(fields: [userId], references: [id])
-  roomId           Int?
-  room             Room?     @relation(fields: [roomId], references: [id])
-  fullName         String?
-  phone            String?
-  email            String?
-  studentId        String?
-  course           String?
-  yearLevel        String?
-  citizenId        String?
-  address          String?
-  birthDate        String?
-  emergencyContact String?
-  emergencyName    String?
+  id                Int       @id @default(autoincrement())
+  userId            Int?      @unique
+  user              User?     @relation(fields: [userId], references: [id])
+  roomId            Int?
+  room              Room?     @relation(fields: [roomId], references: [id])
+  fullName          String?
+  phone             String?
+  email             String?
+  studentId         String?
+  course            String?
+  yearLevel         String?
+  citizenId         String?
+  address           String?
+  birthDate         String?
+  emergencyContact  String?
+  emergencyName     String?
   emergencyRelation String?
   preferredRoomType String?
-  notes            String?
-  contractData     String?   // JSON string storing full contract details
-  idCardImagePath  String?
-  paymentSlipPath  String?
-  status           String    @default("PENDING")
-  checkInDate      DateTime?
-  checkOutDate     DateTime?
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  notes             String?
+  contractData      String? // JSON string storing full contract details
+  idCardImagePath   String?
+  paymentSlipPath   String?
+  status            String    @default("PENDING")
+  checkInDate       DateTime?
+  checkOutDate      DateTime?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   bills              Bill[]
   maintenanceTickets MaintenanceTicket[]
@@ -241,26 +263,98 @@ model Tenant {
 }
 
 model Bill {
-  id          Int        @id @default(autoincrement())
-  tenantId    Int
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
-  roomId      Int?
-  room        Room?      @relation(fields: [roomId], references: [id])
-  amount      Decimal    @db.Decimal(10, 2)
-  dueDate     DateTime
-  status      BillStatus @default(UNPAID)
-  version     Int        @default(1)
-  description String?
-  slipHash    String?
-  reason      String?
-  paidAt      DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             Int        @id @default(autoincrement())
+  tenantId       Int
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  roomId         Int?
+  room           Room?      @relation(fields: [roomId], references: [id])
+  amount         Decimal    @db.Decimal(10, 2)
+  rentAmount     Decimal    @default(0) @db.Decimal(10, 2)
+  electricAmount Decimal    @default(0) @db.Decimal(10, 2)
+  waterAmount    Decimal    @default(0) @db.Decimal(10, 2)
+  penaltyAmount  Decimal    @default(0) @db.Decimal(10, 2)
+  dueDate        DateTime
+  status         BillStatus @default(UNPAID)
+  version        Int        @default(1)
+  description    String?
+  slipHash       String?
+  reason         String?
+  paidAt         DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  payments   Payment[]
+  batchItems PaymentBatchItem[]
 
   @@index([tenantId])
   @@index([roomId])
   @@index([status])
   @@index([dueDate])
+}
+
+model Payment {
+  id                    Int             @id @default(autoincrement())
+  billId                Int
+  bill                  Bill            @relation(fields: [billId], references: [id])
+  payerUserId           Int?
+  payerUser             User?           @relation(fields: [payerUserId], references: [id])
+  amount                Decimal         @db.Decimal(10, 2)
+  status                PaymentStatus   @default(PENDING)
+  provider              PaymentProvider @default(THUNDER)
+  providerTransactionId String?         @unique
+  idempotencyKey        String          @unique
+  slipHash              String?         @unique
+  slipPath              String?
+  slipAmount            Decimal?        @db.Decimal(10, 2)
+  transferAt            DateTime?
+  providerResponse      String?
+  failureReason         String?
+  verifiedAt            DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([billId])
+  @@index([payerUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PaymentBatch {
+  id                    Int                @id @default(autoincrement())
+  payerUserId           Int
+  payerUser             User               @relation(fields: [payerUserId], references: [id])
+  amount                Decimal            @db.Decimal(10, 2)
+  status                PaymentBatchStatus @default(PENDING)
+  provider              PaymentProvider    @default(THUNDER)
+  idempotencyKey        String             @unique
+  slipHash              String?            @unique
+  slipPath              String?
+  slipAmount            Decimal?           @db.Decimal(10, 2)
+  transferAt            DateTime?
+  providerTransactionId String?            @unique
+  providerResponse      String?
+  failureReason         String?
+  verifiedAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  items PaymentBatchItem[]
+
+  @@index([payerUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PaymentBatchItem {
+  batchId   Int
+  batch     PaymentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  billId    Int
+  bill      Bill         @relation(fields: [billId], references: [id])
+  amount    Decimal      @db.Decimal(10, 2)
+  createdAt DateTime     @default(now())
+
+  @@id([batchId, billId])
+  @@index([billId])
 }
 
 model MaintenanceTicket {
@@ -296,9 +390,9 @@ model Visitor {
   expectedEntryTime DateTime?
   status            VisitorStatus @default(REGISTERED)
   checkedInAt       DateTime?
-  checkedOutAt         DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  checkedOutAt      DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   logs                 VisitorLog[]
   faceEmbeddings       FaceEmbedding[]
@@ -466,7 +560,7 @@ model FaceEmbedding {
 model FaceEnrollmentPhoto {
   id        Int      @id @default(autoincrement())
   userId    Int?
-  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   visitorId Int?
   visitor   Visitor? @relation(fields: [visitorId], references: [id], onDelete: Cascade)
   photoPath String   @map("photo_path")

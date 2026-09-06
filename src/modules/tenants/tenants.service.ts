@@ -43,6 +43,8 @@ export interface SubmitApplicationInput {
   };
   roomPreference: {
     preferredRoomType: string;
+    roomNumber?: string;
+    isRandomRoom?: boolean;
     notes?: string;
   };
   ocrData?: {
@@ -117,6 +119,41 @@ export class TenantsService {
     };
 
     const client = db || prisma;
+
+    // Resolve room assignment (selected room or random room on chosen floor)
+    let targetRoomId: number | null = null;
+    const requestedRoomNumber = roomPreference?.roomNumber?.trim() || (contractData?.roomNumber ? String(contractData.roomNumber).trim() : '');
+
+    if (requestedRoomNumber) {
+      const room = await client.room.findUnique({
+        where: { roomNumber: requestedRoomNumber },
+      });
+      if (room) {
+        targetRoomId = room.id;
+      }
+    } else if (roomPreference?.isRandomRoom) {
+      const floorMatch = roomPreference?.preferredRoomType?.match(/Floor\s*(\d+)/i) || roomPreference?.preferredRoomType?.match(/ชั้น\s*(\d+)/i);
+      const floorNum = floorMatch ? parseInt(floorMatch[1], 10) : undefined;
+
+      const availableRooms = await client.room.findMany({
+        where: {
+          ...(floorNum ? { floor: floorNum } : {}),
+          status: 'AVAILABLE',
+        },
+        include: { tenants: true },
+      });
+
+      const openRooms = availableRooms.filter((r: any) => (r.tenants?.length ?? 0) < (r.capacity ?? 4));
+      if (openRooms.length > 0) {
+        const randomIndex = Math.floor(Math.random() * openRooms.length);
+        targetRoomId = openRooms[randomIndex].id;
+      }
+    }
+
+    if (targetRoomId) {
+      tenantPayload.room = { connect: { id: targetRoomId } };
+    }
+
     if (userId) {
       const existing = await client.tenant.findUnique({ where: { userId } });
       if (existing) {

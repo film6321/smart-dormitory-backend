@@ -2,6 +2,61 @@
 
 ## [Unreleased]
 
+### 2026-09-06 — Payment test data cleanup
+
+- ล้างเฉพาะข้อมูลทดสอบของบิล `#13` และ `#14`
+- ลบ `PaymentBatch`, `PaymentBatchItem`, `Payment` และ `Bill` ที่เกี่ยวข้องเท่านั้น
+- ตรวจสอบแล้วไม่พบข้อมูลของบิล `#13–14` หรือ batch ทดสอบ ID `1–5` เหลืออยู่
+
+### 2026-09-06 — Automatic payment verification and private slip review
+
+- ป้องกันการลบบิลที่มี `Payment` หรือ `PaymentBatchItem` โดยตอบ `409 Conflict` พร้อมข้อความที่ชัดเจน
+- ยกเลิกการเปลี่ยนสถานะชำระเงินด้วยมือจากหน้า Admin; สถานะ `PAID`/`FAILED` มาจากการตรวจสลิปอัตโนมัติ
+- เพิ่มการเก็บสลิป PaymentBatch ใน private upload storage ด้วยชื่อไฟล์สุ่มและ permission จำกัด
+- เพิ่ม metadata สลิป: ยอดจากสลิป, เวลาโอน และเลขอ้างอิงธุรกรรมจาก provider response
+- เพิ่ม Admin-only endpoints สำหรับดูรายละเอียด payment และเปิดดูสลิปผ่าน JWT/Role: ADMIN
+- ตรวจสอบแล้ว: ลบบิลที่มี PaymentBatch ตอบ 409, รายละเอียด payment ตอบ 200 และไฟล์ที่ไม่มีตอบ 404
+
+### 2026-09-06 — Multi-bill PaymentBatch flow and structured bill details
+
+- เพิ่ม `PaymentBatch` และ `PaymentBatchItem` สำหรับเลือกหลายบิลและรวมจ่ายด้วย QR เดียว
+- เพิ่ม `rentAmount`, `electricAmount`, `waterAmount`, และ `penaltyAmount` ใน `Bill`
+- เพิ่ม API สร้าง batch, ดูรายละเอียด/status, สร้าง QR และ upload slip ที่ `/api/payment-batches`
+- เพิ่มการตรวจ owner, idempotency, duplicate slip, OCC และอัปเดตหลาย Bill เป็น `PAID` หรือ `FAILED` แบบ transaction
+- เพิ่มการบันทึกค่าใช้จ่ายแยกเมื่อสร้างบิลห้องพักใหม่
+- Backend build ผ่าน; backend test ผ่าน 31/32 โดย failure เดิมอยู่ที่ Face Verification mock/test database
+
+### 2026-09-05 — Payment tracking, slip verification, and Bill-owned PromptPay QR
+
+- เพิ่ม `Payment` model และ migration สำหรับติดตาม payment attempt ที่ผูกกับ `Bill` พร้อมสถานะ `PENDING`, `VERIFYING`, `PAID`, `FAILED`, และ `MANUAL_REVIEW`
+- เพิ่ม idempotency ด้วย `idempotencyKey`, SHA-256 `slipHash` และ `providerTransactionId` พร้อม unique indexes เพื่อป้องกันการส่งชำระซ้ำ
+- เพิ่ม migration reconcile สำหรับ Tenant schema drift โดยไม่ reset หรือลบข้อมูลเดิม
+- เพิ่ม `PaymentProviderClient` สำหรับเรียก payment API ผ่าน `PAYMENT_API_URL` พร้อม timeout และ mapping ผลตรวจสลิป
+- ปรับ `POST /api/billing/:id/upload-slip` และ alias ให้รับ `slipImage`, ตรวจสิทธิ์เจ้าของบิล, ตรวจยอด/บัญชีผู้รับ และใช้ OCC ก่อนเปลี่ยนเป็น `PAID` หรือ `FAILED`
+- เพิ่ม `GET /api/billing/:id/payment-qr` โดย backend อ่านยอดจาก `Bill.amount` เอง ไม่รับยอดจาก client
+- กำหนด payment API local เป็น port `8002` เพื่อไม่ชนกับ OCR ที่ใช้ host port `8000` และ Face Recognition ที่ใช้ host port `8001`
+- ตรวจสอบแล้ว: Prisma migration status, backend build และ payment API connectivity ผ่าน; QR provider ปัจจุบันตอบ `403 application_expired` เนื่องจาก Thunder application/API key หมดอายุ
+
+### 2026-09-04 — Floor & Room Selection Grid (120 rooms across 4 floors)
+
+- อัปเดต `prisma/seed.ts` ให้สร้างห้องพัก 120 ห้อง (4 ชั้น ชั้นละ 30 ห้อง: 101–130, 201–230, 301–330, 401–430) พร้อมรัน seed เข้า PostgreSQL เรียบร้อย
+- ปรับสิทธิ์ `GET /api/rooms` และ `GET /api/rooms/:id` ใน `rooms.routes.ts` ให้รองรับทั้ง `ADMIN` และ `STUDENT` เพื่อให้หน้าจองสามารถเรียกดูสถานะห้องพักได้
+- ปรับปรุง `tenants.service.ts` ใน `submitApplication`: รองรับการจัดสรรห้องพักตาม `roomNumber` ที่เลือก หรือสุ่มห้องว่างบนชั้นนั้นให้อัตโนมัติกรณีเลือก `isRandomRoom`
+- เพิ่มผังห้องพัก 30 ห้อง (แถวละ 5 ห้อง x 6 แถว) ในหน้าสมัครหอพัก พร้อม Checkbox สุ่มห้องว่างอัตโนมัติ และคำนวณเงินมัดจำ PromptPay QR แบบ Real-time
+- Backend และ Frontend build ผ่านสมบูรณ์ 0 errors
+
+### 2026-09-04 — Billing management module: automatic utility bill generation and split per tenant
+
+- เพิ่ม endpoint `GET /api/billing/room-info/:roomNumber` สำหรับดึงข้อมูลห้อง ผู้เช่า และค่าเช่าปัจจุบันเพื่อใช้แสดง Preview ก่อนออกบิล
+- เพิ่ม endpoint `POST /api/billing/generate-room-bill` สำหรับสร้างบิลค่าน้ำค่าไฟอัตโนมัติ โดยรับ `roomNumber`, `electricUnits`, `month`, `year` และ optional `dueDate`
+- คำนวณค่าไฟที่ **8 บาท/หน่วย** และค่าน้ำ **100 บาท/ห้อง** (อัตราคงที่ตามสัญญา) หารด้วยจำนวนผู้เช่าที่ Active จริงในห้องนั้น ป้องกันเงินตกหล่นจากการหารกับชื่อที่ไม่มีอยู่จริง
+- เพิ่ม endpoint `DELETE /api/billing/:id` สำหรับลบบิลรายการ (ADMIN only)
+- อัพเดท `billing.repository.ts`: เพิ่ม `findRoomByNumberWithTenants`, `createBills`, และ `deleteBill`
+- อัพเดท `billing.service.ts`: เพิ่ม `getRoomBillingInfo`, `generateRoomBills` พร้อม logic คำนวณค่าสาธารณูปโภคและแบ่งบิลต่อผู้เช่า, และ `deleteBill`
+- อัพเดท `billing.dto.ts`: เพิ่ม `generateRoomBillSchema` สำหรับ validate input
+- อัพเดท `billing.controller.ts` และ `billing.routes.ts`: ลงทะเบียน route ใหม่ทั้งหมด
+- Backend build ผ่านสำเร็จ 0 TypeScript errors
+
 ### 2026-09-02 — Face recognition docker integration, multi-face workflow, and student UI balance
 
 - รวม Service Face Recognition AI เข้ากับ `docker-compose.yml` สำหรับรันและสื่อสารกับ Backend ภายใน Container Network

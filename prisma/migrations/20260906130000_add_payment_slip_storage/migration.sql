@@ -1,0 +1,9 @@
+ALTER TABLE "Payment"
+ADD COLUMN "slipPath" TEXT,
+ADD COLUMN "slipAmount" DECIMAL(10,2),
+ADD COLUMN "transferAt" TIMESTAMP(3);
+
+ALTER TABLE "PaymentBatch"
+ADD COLUMN "slipPath" TEXT,
+ADD COLUMN "slipAmount" DECIMAL(10,2),
+ADD COLUMN "transferAt" TIMESTAMP(3);

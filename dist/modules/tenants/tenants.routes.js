@@ -30,6 +30,7 @@ const uploadFields = upload.fields([
 router.get('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.listTenants);
 router.get('/me', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.getMyTenant);
 router.get('/me/documents/:documentType', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.getMyDocument);
+router.get('/:id/documents/:documentType', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.getTenantDocumentById);
 router.get('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.getTenantById);
 router.post('/upload-documents', auth_jwt_1.verifyToken, uploadFields, tenants_controller_1.TenantsController.uploadDocuments);
 router.post('/apply', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.submitApplication);
