@@ -9,6 +9,7 @@ const promises_1 = __importDefault(require("fs/promises"));
 const api_response_1 = require("../../shared/api-response");
 const face_verification_service_1 = require("./face-verification.service");
 const logger_1 = require("../../logger");
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 const face_verification_monitoring_1 = require("./face-verification-monitoring");
 const face_verification_stream_1 = require("./face-verification-stream");
 class FaceVerificationController {
@@ -195,6 +196,7 @@ class FaceVerificationController {
                 status: normalizedAction === 'unlock' ? 'opened' : 'locked',
             };
             logger_1.logger.info({ ...payload }, 'Door command processed');
+            (0, notification_gateway_1.publishAdminAlert)(0, 'DOOR_COMMAND', normalizedAction === 'unlock' ? `เปิดประตู ${device_code}` : `ปิดประตู ${device_code}`, payload.status.toUpperCase());
             return res.status(200).json((0, api_response_1.createResponse)(200, 'Door command processed successfully', payload));
         }
         catch (error) {

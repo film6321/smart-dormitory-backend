@@ -16,7 +16,8 @@ class NotificationController {
     }
     static async listNotifications(req, res, next) {
         try {
-            const userId = req.user?.id;
+            const authUser = req.user;
+            const userId = authUser?.role === 'ADMIN' ? undefined : authUser?.id;
             const notifications = await NotificationController.getService().listNotifications(userId);
             return res.status(200).json((0, api_response_1.createResponse)(200, 'Notifications fetched successfully', notifications));
         }

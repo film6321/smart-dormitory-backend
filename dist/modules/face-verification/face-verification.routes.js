@@ -57,8 +57,15 @@ const uploadFaceImage = (req, res, next) => {
         next(error);
     });
 };
+const authorizeFaceRegistration = (req, res, next) => {
+    const requestedUserId = Number(req.body.userId || req.body.user_id);
+    if (req.user?.role === 'ADMIN' || req.user?.id === requestedUserId) {
+        return next();
+    }
+    return next(new error_handler_1.AppError('You can only register your own face template', 403));
+};
 // ── Web Dashboard/Legacy API Endpoints ──
-router.post('/register', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), uploadFaceImage, face_verification_controller_1.FaceVerificationController.register);
+router.post('/register', auth_jwt_1.verifyToken, uploadFaceImage, authorizeFaceRegistration, face_verification_controller_1.FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
 router.post('/verify-image', faceLimiter, uploadFaceImage, face_verification_controller_1.FaceVerificationController.verify);
 // ── C# FaceGate.Edge Integration Endpoints ──

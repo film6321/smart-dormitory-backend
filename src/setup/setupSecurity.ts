@@ -6,6 +6,8 @@ import { logger } from "../logger";
 import { createRateLimitStore } from "../shared/rate-limit-store";
 
 export const setupSecurity = (app: Express) => {
+  app.set("trust proxy", 1);
+
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },

@@ -10,12 +10,16 @@ const logger_1 = require("../../logger");
 const error_handler_1 = require("../../middlewares/error-handler");
 const env_1 = require("../../shared/env");
 const presence_1 = require("../../shared/presence");
+const settings_service_1 = require("../settings/settings.service");
 const auth_repository_1 = require("./auth.repository");
 // ฟังก์ชันตรวจสอบความเข็มแข็งของรหัสผ่าน
-const validatePassword = (password) => {
+const validatePassword = async (password) => {
+    const policy = (await (0, settings_service_1.getSettingValue)('passwordPolicy')).trim().toLowerCase();
     if (!password || password.length < 8) {
         throw new error_handler_1.AppError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', 400);
     }
+    if (policy === 'ผ่อนปรน' || policy === 'relaxed')
+        return;
     if (!/[A-Z]/.test(password)) {
         throw new error_handler_1.AppError('รหัสผ่านต้องมีตัวอักษรใหญ่อย่างน้อย 1 ตัว', 400);
     }
@@ -24,6 +28,11 @@ const validatePassword = (password) => {
     }
     if (!/[0-9]/.test(password)) {
         throw new error_handler_1.AppError('รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว', 400);
+    }
+    if (policy === 'เข้มงวด' || policy === 'strict') {
+        if (!/[^A-Za-z0-9]/.test(password)) {
+            throw new error_handler_1.AppError('รหัสผ่านแบบเข้มงวดต้องมีอักขระพิเศษอย่างน้อย 1 ตัว', 400);
+        }
     }
 };
 const getPrismaErrorCode = (error) => {
@@ -52,8 +61,8 @@ class AuthService {
         if (!isValid) {
             throw new error_handler_1.AppError('อีเมลหรือรหัสผ่านไม่ถูกต้อง', 401);
         }
-        // เจนเนอเรต JWT Token (หมดอายุใน 1 วัน)
-        const token = jsonwebtoken_1.default.sign({ id: user.id, role: user.role }, (0, env_1.getJwtSecret)(), { expiresIn: '1d' });
+        const sessionTimeoutMinutes = Number(await (0, settings_service_1.getSettingValue)('sessionTimeoutMinutes')) || 30;
+        const token = jsonwebtoken_1.default.sign({ id: user.id, role: user.role }, (0, env_1.getJwtSecret)(), { expiresIn: `${sessionTimeoutMinutes}m` });
         const lastLogin = new Date();
         try {
             await auth_repository_1.AuthRepository.updateUser(user.id, { lastLogin }, undefined);
@@ -76,7 +85,8 @@ class AuthService {
                 lastLogin: normalizeLastLogin(lastLogin),
                 isOnline: true,
             },
-            token
+            token,
+            sessionTimeoutMinutes,
         };
     }
     static async register(data) {
@@ -103,7 +113,7 @@ class AuthService {
             }
         }
         // ตรวจสอบความเข็มแข็งของรหัสผ่าน
-        validatePassword(password);
+        await validatePassword(password);
         // แฮชรหัสผ่านเพื่อความปลอดภัยก่อนบันทึกลง Database
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
         const createPayload = {

@@ -68,6 +68,21 @@ model User {
   tenant               Tenant?
   faceEmbeddings       FaceEmbedding[]
   faceEnrollmentPhotos FaceEnrollmentPhoto[]
+  updatedSettings     SystemSetting[]
+}
+
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  category    String   @default("GENERAL")
+  updatedById Int?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([updatedById])
 }
 
 /**

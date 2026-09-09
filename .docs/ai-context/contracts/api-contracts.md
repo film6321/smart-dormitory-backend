@@ -86,9 +86,23 @@ DELETE /api/ocr/id-card-verifications/:id     — ADMIN only: ลบรายก
 ```text
 GET    /api/billing                   — ดูบิล (STUDENT: เฉพาะตัวเอง, ADMIN: ทั้งหมด)
 GET    /api/billing/:id               — ดูบิลรายการเดียว
+POST   /api/billing/generate-room-bill — ADMIN: สร้างบิลจากค่าใช้จ่ายของห้อง
 POST   /api/billing/:id/upload-slip   — ผู้เช่าส่งสลิป (Multipart, ฟิลด์: slipImage)
 PATCH  /api/billing/:id/status        — ADMIN: แก้ไขสถานะ Manual
 ```
+
+**Generate Room Bill Request:**
+```json
+{
+  "roomNumber": "207",
+  "electricUnits": 0,
+  "customRent": 100,
+  "waterAmount": 0,
+  "billingMonth": "กันยายน 2569"
+}
+```
+
+`customRent` คือค่าเช่าห้องรวมของรอบบิล หน่วยเป็นบาทไทย (THB) และจะถูกหารตามจำนวนผู้พักในห้อง จากนั้นยอดที่บันทึกใน `Bill.amount` จะเป็นแหล่งเดียวที่ใช้สร้าง QR และ payment batch เพื่อป้องกันยอดไม่ตรงกัน
 
 **Upload Slip Response `data`:**
 ```json

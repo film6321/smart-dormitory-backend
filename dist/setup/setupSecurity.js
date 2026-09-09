@@ -11,6 +11,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const logger_1 = require("../logger");
 const rate_limit_store_1 = require("../shared/rate-limit-store");
 const setupSecurity = (app) => {
+    app.set("trust proxy", 1);
     app.use((0, helmet_1.default)({
         crossOriginResourcePolicy: { policy: "cross-origin" },
     }));

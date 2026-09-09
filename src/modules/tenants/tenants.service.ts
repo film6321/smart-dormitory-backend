@@ -2,6 +2,7 @@ import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 import { TenantsRepository } from './tenants.repository';
 import path from 'path';
+import { getSettingValue } from '../settings/settings.service';
 
 export interface CreateTenantInput {
   userId?: number | null;
@@ -61,6 +62,17 @@ export interface SubmitApplicationInput {
 }
 
 export class TenantsService {
+  private static async getMaxOccupants() {
+    return Number(await getSettingValue('maxOccupants')) || 4;
+  }
+
+  private static assertRoomHasCapacity(room: { capacity: number; tenants?: Array<unknown> }, maxOccupants: number) {
+    const configuredCapacity = Math.min(room.capacity || maxOccupants, maxOccupants);
+    if ((room.tenants?.length ?? 0) >= configuredCapacity) {
+      throw new AppError(`ห้องพักเต็มตามข้อกำหนด ${maxOccupants} คน`, 409);
+    }
+  }
+
   static async listTenants(db?: any) {
     return TenantsRepository.listTenants(undefined, undefined, db);
   }
@@ -129,6 +141,9 @@ export class TenantsService {
         where: { roomNumber: requestedRoomNumber },
       });
       if (room) {
+        const maxOccupants = await this.getMaxOccupants();
+        const roomWithTenants = await client.room.findUnique({ where: { id: room.id }, include: { tenants: { where: { isActive: true } } } });
+        this.assertRoomHasCapacity({ capacity: room.capacity, tenants: roomWithTenants?.tenants }, maxOccupants);
         targetRoomId = room.id;
       }
     } else if (roomPreference?.isRandomRoom) {
@@ -143,7 +158,8 @@ export class TenantsService {
         include: { tenants: true },
       });
 
-      const openRooms = availableRooms.filter((r: any) => (r.tenants?.length ?? 0) < (r.capacity ?? 4));
+      const maxOccupants = await this.getMaxOccupants();
+      const openRooms = availableRooms.filter((r: any) => (r.tenants?.length ?? 0) < Math.min(r.capacity ?? maxOccupants, maxOccupants));
       if (openRooms.length > 0) {
         const randomIndex = Math.floor(Math.random() * openRooms.length);
         targetRoomId = openRooms[randomIndex].id;
@@ -181,6 +197,9 @@ export class TenantsService {
       if (!room) {
         throw new AppError('Room not found', 404);
       }
+      const client = db || prisma;
+      const roomWithTenants = await client.room.findUnique({ where: { id: data.roomId }, include: { tenants: { where: { isActive: true } } } });
+      this.assertRoomHasCapacity({ capacity: room.capacity, tenants: roomWithTenants?.tenants }, await this.getMaxOccupants());
     }
 
     // If a fake/mock db is injected (unit tests), prefer flat userId/roomId fields
@@ -253,7 +272,8 @@ export class TenantsService {
       const rooms = await client.room.findMany({
         include: { tenants: true },
       });
-      const availableRooms = rooms.filter((r: any) => r.tenants.length < (r.capacity ?? 4));
+      const maxOccupants = await this.getMaxOccupants();
+      const availableRooms = rooms.filter((r: any) => r.tenants.length < Math.min(r.capacity ?? maxOccupants, maxOccupants));
 
       if (availableRooms.length > 0) {
         const randomIndex = Math.floor(Math.random() * availableRooms.length);
@@ -316,6 +336,9 @@ export class TenantsService {
           where: { id: nextRoomId },
           include: { tenants: true },
         });
+        if (!targetRoom) throw new AppError('Room not found', 404);
+        const maxOccupants = await this.getMaxOccupants();
+        this.assertRoomHasCapacity(targetRoom, maxOccupants);
         const targetOccupantsCount = (targetRoom?.tenants?.length ?? 0) + 1;
         const isNowOccupied = targetOccupantsCount >= (targetRoom?.capacity ?? 4);
         await client.room.update({

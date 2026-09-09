@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import { createResponse } from '../../shared/api-response';
 import { FaceVerificationService } from './face-verification.service';
 import { logger } from '../../logger';
+import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { faceVerificationMonitoringBus } from './face-verification-monitoring';
 import { faceVerificationStream } from './face-verification-stream';
 
@@ -245,6 +246,12 @@ export class FaceVerificationController {
       };
 
       logger.info({ ...payload }, 'Door command processed');
+      publishAdminAlert(
+        0,
+        'DOOR_COMMAND',
+        normalizedAction === 'unlock' ? `เปิดประตู ${device_code}` : `ปิดประตู ${device_code}`,
+        payload.status.toUpperCase(),
+      );
       return res.status(200).json(createResponse(200, 'Door command processed successfully', payload));
     } catch (error) {
       next(error);

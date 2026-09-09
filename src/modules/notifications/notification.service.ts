@@ -2,6 +2,7 @@ import { logger } from '../../logger';
 import { prisma } from '../../database/db';
 import { NotificationRepository } from './notification.repository';
 import { Prisma } from '@prisma/client';
+import { publishNotificationAlert } from '../../realtime/notification-gateway';
 
 export class NotificationService {
   // Service uses static repository methods on NotificationRepository
@@ -35,9 +36,12 @@ export class NotificationService {
   }
 
   async scheduleNotification(data: any) {
-    const recipientPhone = await this.resolveRecipientPhone(data);
+    const tenant = data.tenantId ? await NotificationRepository.findTenantById(data.tenantId, this.db) : null;
+    const recipientPhone = data.recipientPhone ?? tenant?.phone ?? tenant?.user?.phone ?? null;
     const payload = { ...data, recipientPhone };
-    return NotificationRepository.createNotification(payload as Prisma.NotificationCreateInput, this.db);
+    const notification = await NotificationRepository.createNotification(payload as Prisma.NotificationCreateInput, this.db);
+    publishNotificationAlert(notification);
+    return notification;
   }
 
   async listPreferences(userId?: number) {

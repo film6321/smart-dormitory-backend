@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### 2026-09-09 — Realtime in-app notifications
+
+- เพิ่ม Socket.IO gateway ที่ `/socket.io` พร้อมตรวจ JWT จาก handshake หรือ `access_token` cookie และจัด room `admins`/`user:{userId}`
+- Broadcast event `notificationAlert` หลังบันทึก Notification ลง PostgreSQL สำเร็จ ครอบคลุม billing, maintenance และ visitor flows ที่ใช้ NotificationService อยู่แล้ว
+- เพิ่ม global alert stack มุมขวาของ frontend รองรับ notification, bill/maintenance/visitor events, API error, Socket.IO disconnect และ browser offline โดยไม่ต้อง refresh หน้า
+- เพิ่ม cleanup ของ socket listeners และ timeout ทุกครั้งที่ logout หรือ unmount
+- ใช้ `socket.io` และ `socket.io-client` เป็น realtime transport ตาม Socket.IO contract ของระบบ
+- แก้ Docker reverse-proxy runtime warning ด้วยการตั้ง Express `trust proxy` สำหรับ Nginx หนึ่งชั้น
+- แก้การ broadcast แจ้งเตือนงานบิล/แจ้งซ่อม/ผู้มาติดต่อไม่ให้ใช้ `tenant.userId` เป็น target อัตโนมัติ เพื่อให้ส่งเข้า room `admins` ตามวัตถุประสงค์ของงานผู้ดูแล
+- จำกัด `notificationAlert`, system/API error toast และ realtime connection ให้ทำงานเฉพาะผู้ใช้ role `ADMIN`; หน้า User จะไม่รับแจ้งเตือนงานผู้ดูแล
+- เพิ่ม Admin alerts หลัง state change จริงสำหรับงานแจ้งซ่อม, Check-in/Check-out ผู้มาติดต่อ, ผลตรวจสลิป และคำสั่งเปิด/ปิดประตู พร้อมข้อความระบุ action โดยตรง
+- ทำให้รายการกระดิ่ง Admin คงอยู่ข้ามการ refresh โดยโหลด history จาก backend และเก็บ realtime events ชั่วคราวใน browser สูงสุด 24 ชั่วโมง พร้อมตัดรายการหมดอายุอัตโนมัติ
+- รายการเก่าหลัง refresh จะไม่แสดง Toast ซ้ำ ส่วน event ใหม่ยังแสดงทั้ง Toast และรายการในกระดิ่ง
+- ปรับกระดิ่งเป็น unread indicator จุดแดงมุมขวาบน, เอาปุ่มกากบาทออก และ “อ่านทั้งหมด” จะซ่อนจุดแดงโดยเก็บรายการไว้จนหมดอายุ 24 ชั่วโมง
+- เพิ่ม notification history สำหรับ ADMIN ที่โหลดจาก `GET /api/notifications` และคงรายการใน browser ข้าม refresh สูงสุด 24 ชั่วโมง
+- ปรับสถานะรายการเป็น unread/read: จุดแดงหายเมื่ออ่านทั้งหมด แต่ข้อมูลยังคงอยู่จนหมดอายุ และเอาปุ่มลบรายรายการออกจาก UI
+- ตรวจสอบ runtime ผ่าน Docker, Admin notification history ตอบ `200`, backend tests ผ่าน `32/32` และ backend build ผ่าน
+
+### 2026-09-09 — Audit, system settings, billing reports, and access hardening
+
+- เพิ่มโมดูล Audit Logs สำหรับ ADMIN พร้อม pagination และ filter ตาม method, user และช่วงเวลา ที่ `GET /api/audit-logs`
+- เพิ่มโมดูล System Settings และ migration สำหรับจัดเก็บค่าตั้งค่าระบบ โดย ADMIN อ่าน/แก้ไขผ่าน `GET/PATCH /api/settings`
+- เพิ่ม `GET /api/billing/report` สำหรับสรุปยอดบิลตามสถานะ จำนวนรายการ และประวัติรายเดือน พร้อมรองรับช่วงวันที่
+- ปรับการลบบิลให้ลบรายการ payment ที่ผูกอยู่ใน transaction เดียวกัน และปรับการเตรียม PaymentBatch เมื่อสร้าง QR ไม่สำเร็จให้ล้างรายการ pending ที่ค้างอยู่
+- ปรับข้อความและ HTTP status ของ Payment Gateway failure เป็น `503 Service Unavailable` และเพิ่มการตรวจสิทธิ์ให้ผู้ใช้ลงทะเบียน face template ของตนเองได้เท่านั้น ยกเว้น ADMIN
+
 ### 2026-09-06 — Payment test data cleanup
 
 - ล้างเฉพาะข้อมูลทดสอบของบิล `#13` และ `#14`

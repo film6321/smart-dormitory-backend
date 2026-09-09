@@ -10,7 +10,7 @@ const getTimeoutMs = () => {
 const getPaymentApiUrl = () => {
     const configured = process.env.PAYMENT_API_URL?.trim();
     if (!configured) {
-        throw new error_handler_1.AppError('PAYMENT_API_URL is not configured', 500);
+        throw new error_handler_1.AppError('Payment Gateway is not configured. Please contact the administrator.', 503);
     }
     return normalizeBaseUrl(configured);
 };
@@ -22,8 +22,8 @@ const fetchWithTimeout = async (url, init) => {
     }
     catch (error) {
         throw new error_handler_1.AppError(error instanceof Error && error.name === 'AbortError'
-            ? 'Payment provider request timed out'
-            : 'Payment provider is unavailable', 502);
+            ? 'Payment Gateway timed out. Please try again later.'
+            : 'Payment Gateway is unavailable. Please try again later.', 503);
     }
     finally {
         clearTimeout(timeout);
@@ -52,7 +52,7 @@ class PaymentProviderClient {
         }
         const response = await fetchWithTimeout(`${getPaymentApiUrl()}/qrcode?amount=${encodeURIComponent(amount.toFixed(2))}`, { method: 'GET' });
         if (!response.ok) {
-            throw new error_handler_1.AppError('Payment provider failed to generate QR code', 502);
+            throw new error_handler_1.AppError('Payment Gateway could not generate the QR code. Please try again later.', 503);
         }
         return Buffer.from(await response.arrayBuffer());
     }
@@ -67,10 +67,10 @@ class PaymentProviderClient {
         });
         const payload = (await response.json().catch(() => null));
         if (!payload) {
-            throw new error_handler_1.AppError('Payment provider returned an invalid response', 502);
+            throw new error_handler_1.AppError('Payment Gateway returned an invalid response. Please try again later.', 503);
         }
         if (response.status >= 500) {
-            throw new error_handler_1.AppError('Payment provider is unavailable', 502);
+            throw new error_handler_1.AppError('Payment Gateway is unavailable. Please try again later.', 503);
         }
         return normalizeResponse(payload);
     }

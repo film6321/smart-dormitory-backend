@@ -12,12 +12,16 @@ export class VisitorRepository {
 
   static async listVisitors(db = prisma) {
     return db.visitor.findMany({
-      include: { logs: true },
+      include: {
+        logs: { orderBy: { createdAt: 'asc' } },
+        room: { select: { roomNumber: true } },
+        tenant: { select: { fullName: true, studentId: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  static async updateVisitorStatus(id: number, data: Prisma.VisitorUpdateInput, db = prisma) {
+  static async updateVisitorStatus(id: number, data: Prisma.VisitorUpdateInput, db: Prisma.TransactionClient | typeof prisma = prisma) {
     return db.visitor.update({ where: { id }, data });
   }
 }

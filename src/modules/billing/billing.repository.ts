@@ -118,7 +118,11 @@ export class BillingRepository {
   }
 
   static async deleteBill(id: number, db = prisma) {
-    return db.bill.delete({ where: { id } });
+    return db.$transaction(async (transaction) => {
+      await transaction.paymentBatchItem.deleteMany({ where: { billId: id } });
+      await transaction.payment.deleteMany({ where: { billId: id } });
+      return transaction.bill.delete({ where: { id } });
+    });
   }
 }
 

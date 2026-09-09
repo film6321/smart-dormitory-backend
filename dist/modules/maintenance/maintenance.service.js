@@ -9,6 +9,7 @@ const maintenance_repository_1 = require("./maintenance.repository");
 const client_1 = require("@prisma/client");
 const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 class MaintenanceService {
     static async getTenantByUserId(userId) {
         return db_1.prisma.tenant.findFirst({ where: { userId } });
@@ -44,10 +45,12 @@ class MaintenanceService {
         return maintenance_repository_1.MaintenanceRepository.listTickets(userId, role);
     }
     static async updateTicketStatus(id, status, note) {
-        return maintenance_repository_1.MaintenanceRepository.updateTicketStatus(id, {
+        const updated = await maintenance_repository_1.MaintenanceRepository.updateTicketStatus(id, {
             status: status,
             note,
         });
+        (0, notification_gateway_1.publishAdminAlert)(updated.id, 'MAINTENANCE_STATUS', `แจ้งซ่อม #${updated.id} เปลี่ยนสถานะเป็น ${updated.status}`, updated.status);
+        return updated;
     }
     static async deleteTicket(id) {
         try {

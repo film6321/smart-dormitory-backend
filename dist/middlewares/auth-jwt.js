@@ -10,11 +10,17 @@ const env_1 = require("../shared/env");
 // 1. Middleware สำหรับตรวจ Token ว่าส่งมาไหม และเป็นของจริงไหม
 const verifyToken = (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1]; // รับค่าจาก Header แบบ "Bearer <token>"
-    if (!token) {
+    const cookieToken = (req.headers.cookie ?? '')
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith('access_token='))
+        ?.slice('access_token='.length);
+    const resolvedToken = token || cookieToken;
+    if (!resolvedToken) {
         return next(new error_handler_1.AppError('ไม่อนุญาตให้เข้าถึง: ไม่พบ Token', 401));
     }
     try {
-        const decoded = jsonwebtoken_1.default.verify(token, (0, env_1.getJwtSecret)());
+        const decoded = jsonwebtoken_1.default.verify(resolvedToken, (0, env_1.getJwtSecret)());
         // แปะข้อมูล user ลงใน Request เพื่อให้ Controller เอาไปใช้งานต่อได้
         req.user = decoded;
         next();

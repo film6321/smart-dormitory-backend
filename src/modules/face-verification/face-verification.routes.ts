@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import { requireRole, verifyToken } from '../../middlewares/auth-jwt';
+import { AuthenticatedRequest, requireRole, verifyToken } from '../../middlewares/auth-jwt';
 import { AppError } from '../../middlewares/error-handler';
 import { createRateLimitStore } from '../../shared/rate-limit-store';
 import { FaceVerificationController } from './face-verification.controller';
@@ -62,8 +62,18 @@ const uploadFaceImage = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
+const authorizeFaceRegistration = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const requestedUserId = Number(req.body.userId || req.body.user_id);
+
+  if (req.user?.role === 'ADMIN' || req.user?.id === requestedUserId) {
+    return next();
+  }
+
+  return next(new AppError('You can only register your own face template', 403));
+};
+
 // ── Web Dashboard/Legacy API Endpoints ──
-router.post('/register', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.register);
+router.post('/register', verifyToken, uploadFaceImage, authorizeFaceRegistration, FaceVerificationController.register);
 router.post('/verify', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
 router.post('/verify-image', faceLimiter, uploadFaceImage, FaceVerificationController.verify);
 

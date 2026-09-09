@@ -6,6 +6,20 @@ import { AppError } from '../../middlewares/error-handler';
 import { canTransitionBillStatus } from '../../shared/state-transitions';
 
 export class BillingController {
+  static async getBillingReport(req: Request, res: Response, next: NextFunction) {
+    try {
+      const from = typeof req.query.from === 'string' ? new Date(req.query.from) : undefined;
+      const to = typeof req.query.to === 'string' ? new Date(req.query.to) : undefined;
+      if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+        return res.status(400).json(createResponse(400, 'Invalid report date range'));
+      }
+      const report = await BillingService.getBillingReport(from, to);
+      return res.status(200).json(createResponse(200, 'Billing report fetched successfully', report));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async listBills(req: Request, res: Response, next: NextFunction) {
     try {
       const authReq = req as AuthenticatedRequest;

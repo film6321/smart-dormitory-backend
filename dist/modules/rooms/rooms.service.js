@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoomsService = void 0;
 const error_handler_1 = require("../../middlewares/error-handler");
 const rooms_repository_1 = require("./rooms.repository");
+const settings_service_1 = require("../settings/settings.service");
 class RoomsService {
     static async listRooms() {
         return rooms_repository_1.RoomsRepository.listRooms();
@@ -11,6 +12,10 @@ class RoomsService {
         return rooms_repository_1.RoomsRepository.getRoomById(id);
     }
     static async createRoom(data, db) {
+        const maxOccupants = Number(await (0, settings_service_1.getSettingValue)('maxOccupants')) || 4;
+        if ((data.capacity ?? 1) > maxOccupants) {
+            throw new error_handler_1.AppError(`Room capacity cannot exceed ${maxOccupants}`, 400);
+        }
         const roomNumber = data.roomNumber.trim().toUpperCase();
         const existing = await rooms_repository_1.RoomsRepository.findByNumber(roomNumber, db);
         if (existing) {
@@ -27,6 +32,12 @@ class RoomsService {
     }
     static async updateRoom(id, data) {
         const payload = {};
+        if (data.capacity !== undefined) {
+            const maxOccupants = Number(await (0, settings_service_1.getSettingValue)('maxOccupants')) || 4;
+            if (data.capacity > maxOccupants) {
+                throw new error_handler_1.AppError(`Room capacity cannot exceed ${maxOccupants}`, 400);
+            }
+        }
         if (data.roomNumber) {
             payload.roomNumber = data.roomNumber.trim().toUpperCase();
         }

@@ -6,6 +6,20 @@ const billing_service_1 = require("./billing.service");
 const error_handler_1 = require("../../middlewares/error-handler");
 const state_transitions_1 = require("../../shared/state-transitions");
 class BillingController {
+    static async getBillingReport(req, res, next) {
+        try {
+            const from = typeof req.query.from === 'string' ? new Date(req.query.from) : undefined;
+            const to = typeof req.query.to === 'string' ? new Date(req.query.to) : undefined;
+            if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid report date range'));
+            }
+            const report = await billing_service_1.BillingService.getBillingReport(from, to);
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Billing report fetched successfully', report));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     static async listBills(req, res, next) {
         try {
             const authReq = req;

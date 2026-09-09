@@ -6,31 +6,33 @@
 
 ## 1. Transport & Auth Rules
 
-* **Authentication:** Client ต้องแนบ JWT ใน Handshake `auth` option:
+- **Authentication:** Client ต้องแนบ JWT ใน Handshake `auth` option:
   ```javascript
   const socket = io("http://localhost:5000", {
-    auth: { token: "JWT_ACCESS_TOKEN" }
+    auth: { token: "JWT_ACCESS_TOKEN" },
   });
   ```
-* **Pure Transport Layer:** Socket.IO Handler ทำหน้าที่เพียง authenticate, validate, route — ห้ามมี Business Logic หรือ Prisma call โดยตรง
-* **Persist First:** ทุก state change ต้อง save ลง PostgreSQL สำเร็จก่อน broadcast เสมอ
+- **Pure Transport Layer:** Socket.IO Handler ทำหน้าที่เพียง authenticate, validate, route — ห้ามมี Business Logic หรือ Prisma call โดยตรง
+- **Persist First:** ทุก state change ต้อง save ลง PostgreSQL สำเร็จก่อน broadcast เสมอ
 
 ---
 
 ## 2. Client → Server Events
 
-| Event Name | Payload | กฎ |
-| :--- | :--- | :--- |
-| `joinRoom` | `{ room: "admins" \| "room:402" }` | ผูก socket เข้ากับ Room ของกลุ่ม |
-| `leaveRoom` | `{ room: "admins" \| "room:402" }` | ออกจาก Room |
-| `pingHeartbeat` | (none) | รายงานสถานะ Online ชั่วคราวใน Redis |
+| Event Name      | Payload                            | กฎ                                  |
+| :-------------- | :--------------------------------- | :---------------------------------- |
+| `joinRoom`      | `{ room: "admins" \| "room:402" }` | ผูก socket เข้ากับ Room ของกลุ่ม    |
+| `leaveRoom`     | `{ room: "admins" \| "room:402" }` | ออกจาก Room                         |
+| `pingHeartbeat` | (none)                             | รายงานสถานะ Online ชั่วคราวใน Redis |
 
 ---
 
 ## 3. Server → Client Events
 
 ### `visitorScanEvent`
-* **Recipients:** `admins` group
+
+- **Recipients:** `admins` group
+
 ```json
 {
   "schemaVersion": 1,
@@ -43,19 +45,23 @@
 ```
 
 ### `billStatusUpdated`
-* **Recipients:** `room:{roomNumber}` (เช่น `room:402`)
+
+- **Recipients:** `room:{roomNumber}` (เช่น `room:402`)
+
 ```json
 {
   "schemaVersion": 1,
   "billId": 101,
   "status": "PAID",
-  "amount": 4500.00,
+  "amount": 4500.0,
   "updatedAt": "2026-06-29T13:05:00Z"
 }
 ```
 
 ### `maintenanceStatusUpdated`
-* **Recipients:** `room:{roomNumber}`
+
+- **Recipients:** `room:{roomNumber}`
+
 ```json
 {
   "schemaVersion": 1,
@@ -66,23 +72,40 @@
 }
 ```
 
+### `notificationAlert`
+
+- **Recipients:** `user:{userId}` when the notification has a user recipient; otherwise `admins`
+- **Purpose:** แจ้งเตือนในแอปหลังบันทึก Notification ลง PostgreSQL สำเร็จ
+
+```json
+{
+  "schemaVersion": 1,
+  "id": 901,
+  "type": "RENT_OVERDUE",
+  "channel": "SMS",
+  "status": "PENDING",
+  "payload": "{\"message\":\"Bill 101 is overdue\"}",
+  "createdAt": "2026-09-09T01:00:00Z"
+}
+```
+
 ---
 
 ## 4. Room Groups
 
-| Room | Principals | วัตถุประสงค์ |
-| :--- | :--- | :--- |
-| `admins` | ADMIN role | รับ Access Log, สแกนกล้อง, สถานะผู้ติดต่อ |
-| `room:{roomNumber}` | STUDENT เจ้าของห้อง | รับอัปเดตบิลและข่าวซ่อมของตัวเอง |
+| Room                | Principals          | วัตถุประสงค์                              |
+| :------------------ | :------------------ | :---------------------------------------- |
+| `admins`            | ADMIN role          | รับ Access Log, สแกนกล้อง, สถานะผู้ติดต่อ |
+| `room:{roomNumber}` | STUDENT เจ้าของห้อง | รับอัปเดตบิลและข่าวซ่อมของตัวเอง          |
 
 ---
 
 ## 5. Naming Rules
 
-* Event names ใช้ `camelCase` เสมอ
-* ห้าม rename event โดยไม่อัปเดต contract นี้และ client ทุกตัวพร้อมกัน
-* เพิ่ม field ใหม่ (optional) ได้โดยไม่ต้องเพิ่ม `schemaVersion`
-* ลบหรือเปลี่ยนชนิด field หลัก → บังคับเพิ่ม `schemaVersion` ขึ้น 1
+- Event names ใช้ `camelCase` เสมอ
+- ห้าม rename event โดยไม่อัปเดต contract นี้และ client ทุกตัวพร้อมกัน
+- เพิ่ม field ใหม่ (optional) ได้โดยไม่ต้องเพิ่ม `schemaVersion`
+- ลบหรือเปลี่ยนชนิด field หลัก → บังคับเพิ่ม `schemaVersion` ขึ้น 1
 
 ---
 
@@ -101,5 +124,5 @@ useEffect(() => {
 }, []);
 ```
 
-* ห้าม register event ซ้ำในจังหวะ reconnect
-* ตรวจ `socket.connected` ก่อน emit ทุกครั้ง
+- ห้าม register event ซ้ำในจังหวะ reconnect
+- ตรวจ `socket.connected` ก่อน emit ทุกครั้ง

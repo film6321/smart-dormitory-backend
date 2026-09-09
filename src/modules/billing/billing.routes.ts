@@ -22,6 +22,7 @@ const slipUpload = multer({
 });
 
 router.get('/', verifyToken, BillingController.listBills);
+router.get('/report', verifyToken, requireRole(['ADMIN']), BillingController.getBillingReport);
 router.get('/:id/payment-qr', verifyToken, BillingController.generatePaymentQr);
 router.get('/room-info/:roomNumber', verifyToken, requireRole(['ADMIN']), BillingController.getRoomBillingInfo);
 router.post('/generate-room-bill', verifyToken, requireRole(['ADMIN']), validateDto(generateRoomBillSchema), BillingController.generateRoomBills);

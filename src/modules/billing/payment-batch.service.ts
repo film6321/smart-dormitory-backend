@@ -178,7 +178,21 @@ export class PaymentBatchService {
       throw new AppError('This payment batch cannot generate a QR code', 409);
     }
 
-    return PaymentProviderClient.generateQr(Number(batch.amount));
+    try {
+      return await PaymentProviderClient.generateQr(Number(batch.amount));
+    } catch (error) {
+      // A batch is only usable after QR generation succeeds. Remove the pending
+      // placeholder so failed preparation cannot appear as a payment attempt.
+      await prisma.paymentBatch.deleteMany({
+        where: {
+          id: batchId,
+          payerUserId: userId,
+          status: 'PENDING',
+          slipHash: null,
+        },
+      });
+      throw error;
+    }
   }
 
   static async uploadSlip(
@@ -313,6 +327,14 @@ export class PaymentBatchService {
         tenant: { include: { user: true } },
         payments: { orderBy: { createdAt: 'desc' } },
         batchItems: {
+          where: {
+            batch: {
+              OR: [
+                { status: { not: 'PENDING' } },
+                { slipPath: { not: null } },
+              ],
+            },
+          },
           include: { batch: true },
           orderBy: { batch: { createdAt: 'desc' } },
         },

@@ -5,7 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VisitorService = void 0;
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
+const error_handler_1 = require("../../middlewares/error-handler");
+const settings_service_1 = require("../settings/settings.service");
 const visitor_repository_1 = require("./visitor.repository");
+const db_1 = require("../../database/db");
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 class VisitorService {
     static async getVisitorById(id) {
         return visitor_repository_1.VisitorRepository.getVisitorById(id);
@@ -35,9 +39,43 @@ class VisitorService {
         return visitor_repository_1.VisitorRepository.listVisitors();
     }
     static async updateVisitorStatus(id, status) {
-        return visitor_repository_1.VisitorRepository.updateVisitorStatus(id, {
+        const now = new Date();
+        if (status === 'CHECKED_IN') {
+            const checkInTime = await (0, settings_service_1.getSettingValue)('checkInTime');
+            const checkOutTime = await (0, settings_service_1.getSettingValue)('checkOutTime');
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const [checkInHour, checkInMinute] = checkInTime.split(':').map(Number);
+            const [checkOutHour, checkOutMinute] = checkOutTime.split(':').map(Number);
+            const start = checkInHour * 60 + checkInMinute;
+            const end = checkOutHour * 60 + checkOutMinute;
+            const isWithinWindow = start <= end
+                ? currentMinutes >= start && currentMinutes <= end
+                : currentMinutes >= start || currentMinutes <= end;
+            if (!Number.isFinite(start) || !Number.isFinite(end) || !isWithinWindow) {
+                throw new error_handler_1.AppError(`Check-in เปิดให้บริการเวลา ${checkInTime} - ${checkOutTime}`, 409);
+            }
+        }
+        const data = {
             status: status,
+        };
+        if (status === 'CHECKED_IN')
+            data.checkedInAt = now;
+        if (status === 'CHECKED_OUT')
+            data.checkedOutAt = now;
+        const visitor = await db_1.prisma.$transaction(async (transaction) => {
+            const updated = await visitor_repository_1.VisitorRepository.updateVisitorStatus(id, data, transaction);
+            await transaction.visitorLog.create({
+                data: {
+                    visitorId: id,
+                    eventType: status,
+                    note: status === 'CHECKED_IN' ? 'ผู้มาติดต่อเข้าหอพัก' : status === 'CHECKED_OUT' ? 'ผู้มาติดต่อออกจากหอพัก' : undefined,
+                },
+            });
+            return updated;
         });
+        const actionLabel = status === 'CHECKED_IN' ? 'Check-in' : status === 'CHECKED_OUT' ? 'Check-out' : `เปลี่ยนสถานะเป็น ${status}`;
+        (0, notification_gateway_1.publishAdminAlert)(visitor.id, 'VISITOR_STATUS', `ผู้มาติดต่อ ${visitor.guestName}: ${actionLabel}`, status);
+        return visitor;
     }
 }
 exports.VisitorService = VisitorService;

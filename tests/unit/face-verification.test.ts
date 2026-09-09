@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { FaceVerificationService } from '../../src/modules/face-verification/face-verification.service';
 import { prisma } from '../../src/database/db';
 
@@ -68,19 +70,37 @@ describe('FaceVerificationService (unit)', () => {
     }
   });
 
-  it('runs mock face verification', async () => {
+  it('verifies a real enrollment image through the external API contract', async () => {
+    const originalFetch = globalThis.fetch;
+    db.user.findUnique = (async ({ where }: any) => {
+      if (where.id === 99) return { id: 99, firstName: 'Test', lastName: 'Resident' };
+      return null;
+    }) as any;
+    db.accessLog.create = (async () => ({})) as any;
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      matched: true,
+      user_id: 99,
+      similarity: 0.97,
+      processing_time_ms: 42,
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+
     try {
-      const buffer = Buffer.from('fake-image-bytes-verify');
+      const buffer = readFileSync(path.resolve(__dirname, '../fixtures/face-enrollment-user-2.jpg'));
       const result = await FaceVerificationService.verifyFace(
         buffer,
-        'image/png',
-        'test.png',
+        'image/jpeg',
+        'face-enrollment-user-2.jpg',
         0.65
       );
 
       assert.equal(result.matched, true);
       assert.equal(result.user_id, 99);
+      assert.equal(result.similarity, 0.97);
     } finally {
+      globalThis.fetch = originalFetch;
       restorePrisma();
     }
   });

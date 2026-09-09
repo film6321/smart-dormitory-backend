@@ -5,6 +5,7 @@ import { logger } from '../../logger';
 import { AppError } from '../../middlewares/error-handler';
 import { getJwtSecret } from '../../shared/env';
 import { markUserOnline } from '../../shared/presence';
+import { getSettingValue } from '../settings/settings.service';
 import { AuthRepository } from './auth.repository';
 
 interface RegisterPayload {
@@ -17,10 +18,12 @@ interface RegisterPayload {
 }
 
 // ฟังก์ชันตรวจสอบความเข็มแข็งของรหัสผ่าน
-const validatePassword = (password: string): void => {
+const validatePassword = async (password: string): Promise<void> => {
+  const policy = (await getSettingValue('passwordPolicy')).trim().toLowerCase();
   if (!password || password.length < 8) {
     throw new AppError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', 400);
   }
+  if (policy === 'ผ่อนปรน' || policy === 'relaxed') return;
   if (!/[A-Z]/.test(password)) {
     throw new AppError('รหัสผ่านต้องมีตัวอักษรใหญ่อย่างน้อย 1 ตัว', 400);
   }
@@ -29,6 +32,11 @@ const validatePassword = (password: string): void => {
   }
   if (!/[0-9]/.test(password)) {
     throw new AppError('รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว', 400);
+  }
+  if (policy === 'เข้มงวด' || policy === 'strict') {
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      throw new AppError('รหัสผ่านแบบเข้มงวดต้องมีอักขระพิเศษอย่างน้อย 1 ตัว', 400);
+    }
   }
 };
 
@@ -65,11 +73,11 @@ export class AuthService {
       throw new AppError('อีเมลหรือรหัสผ่านไม่ถูกต้อง', 401);
     }
 
-    // เจนเนอเรต JWT Token (หมดอายุใน 1 วัน)
+    const sessionTimeoutMinutes = Number(await getSettingValue('sessionTimeoutMinutes')) || 30;
     const token = jwt.sign(
       { id: user.id, role: user.role },
       getJwtSecret(),
-      { expiresIn: '1d' }
+      { expiresIn: `${sessionTimeoutMinutes}m` }
     );
 
     const lastLogin = new Date();
@@ -95,7 +103,8 @@ export class AuthService {
         lastLogin: normalizeLastLogin(lastLogin),
         isOnline: true,
       },
-      token
+      token,
+      sessionTimeoutMinutes,
     };
   }
 
@@ -126,7 +135,7 @@ export class AuthService {
     }
 
     // ตรวจสอบความเข็มแข็งของรหัสผ่าน
-    validatePassword(password);
+    await validatePassword(password);
 
     // แฮชรหัสผ่านเพื่อความปลอดภัยก่อนบันทึกลง Database
     const hashedPassword = await bcrypt.hash(password, 10);

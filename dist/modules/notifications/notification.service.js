@@ -4,6 +4,7 @@ exports.NotificationService = void 0;
 const logger_1 = require("../../logger");
 const db_1 = require("../../database/db");
 const notification_repository_1 = require("./notification.repository");
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 class NotificationService {
     // Service uses static repository methods on NotificationRepository
     db;
@@ -33,9 +34,12 @@ class NotificationService {
         return notification_repository_1.NotificationRepository.listNotifications(userId, this.db);
     }
     async scheduleNotification(data) {
-        const recipientPhone = await this.resolveRecipientPhone(data);
+        const tenant = data.tenantId ? await notification_repository_1.NotificationRepository.findTenantById(data.tenantId, this.db) : null;
+        const recipientPhone = data.recipientPhone ?? tenant?.phone ?? tenant?.user?.phone ?? null;
         const payload = { ...data, recipientPhone };
-        return notification_repository_1.NotificationRepository.createNotification(payload, this.db);
+        const notification = await notification_repository_1.NotificationRepository.createNotification(payload, this.db);
+        (0, notification_gateway_1.publishNotificationAlert)(notification);
+        return notification;
     }
     async listPreferences(userId) {
         return notification_repository_1.NotificationRepository.listPreferences(userId, this.db);

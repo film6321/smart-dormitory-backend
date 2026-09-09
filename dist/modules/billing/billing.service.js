@@ -8,6 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
 const notification_service_1 = __importDefault(require("../notifications/notification.service"));
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 const billing_repository_1 = require("./billing.repository");
 const payment_provider_1 = require("./payment.provider");
 class BillingService {
@@ -16,6 +17,47 @@ class BillingService {
     }
     static async getBillById(id) {
         return billing_repository_1.BillingRepository.findBillById(id);
+    }
+    static async getBillingReport(from, to) {
+        const bills = await db_1.prisma.bill.findMany({
+            where: {
+                ...(from || to ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+            },
+            select: { amount: true, status: true, createdAt: true },
+            orderBy: { createdAt: 'asc' },
+        });
+        const summary = bills.reduce((result, bill) => {
+            const amount = Number(bill.amount);
+            result.totalAmount += amount;
+            result.byStatus[bill.status] = (result.byStatus[bill.status] || 0) + amount;
+            result.countByStatus[bill.status] = (result.countByStatus[bill.status] || 0) + 1;
+            const month = bill.createdAt.toISOString().slice(0, 7);
+            const monthly = result.monthly[month] || { month, amount: 0, paidAmount: 0, billCount: 0, paidCount: 0 };
+            monthly.amount += amount;
+            monthly.billCount += 1;
+            if (bill.status === 'PAID') {
+                monthly.paidAmount += amount;
+                monthly.paidCount += 1;
+            }
+            result.monthly[month] = monthly;
+            return result;
+        }, {
+            totalAmount: 0,
+            byStatus: {},
+            countByStatus: {},
+            monthly: {},
+        });
+        return {
+            currency: 'THB',
+            totalBills: bills.length,
+            totalAmount: summary.totalAmount,
+            paidAmount: summary.byStatus.PAID || 0,
+            unpaidAmount: (summary.byStatus.UNPAID || 0) + (summary.byStatus.OVERDUE || 0),
+            verifyingAmount: summary.byStatus.VERIFYING || 0,
+            byStatus: summary.byStatus,
+            countByStatus: summary.countByStatus,
+            monthly: Object.values(summary.monthly),
+        };
     }
     static async generatePaymentQr(billId, userId) {
         const bill = await billing_repository_1.BillingRepository.findBillById(billId);
@@ -94,6 +136,7 @@ class BillingService {
             roomNumber: room.roomNumber,
             roomId: room.id,
             calculation: {
+                currency: 'THB',
                 rentTotal,
                 electricUnits,
                 electricRate,
@@ -228,6 +271,7 @@ class BillingService {
             });
             return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
         });
+        (0, notification_gateway_1.publishAdminAlert)(billId, 'PAYMENT_SLIP', result.billStatus === 'PAID' ? `ตรวจสลิปบิล #${billId}: ชำระเงินแล้ว` : `ตรวจสลิปบิล #${billId}: ไม่ผ่าน (${failureReason})`, result.billStatus);
         return result;
     }
     static async updateBillStatus(billId, status, reason) {
@@ -262,13 +306,6 @@ class BillingService {
         const bill = await billing_repository_1.BillingRepository.findBillById(billId);
         if (!bill) {
             throw new error_handler_1.AppError('Bill not found', 404);
-        }
-        const [paymentCount, batchItemCount] = await Promise.all([
-            db_1.prisma.payment.count({ where: { billId } }),
-            db_1.prisma.paymentBatchItem.count({ where: { billId } }),
-        ]);
-        if (paymentCount > 0 || batchItemCount > 0) {
-            throw new error_handler_1.AppError('ไม่สามารถลบบิลได้ เนื่องจากมีประวัติการชำระเงินแล้ว', 409);
         }
         return billing_repository_1.BillingRepository.deleteBill(billId);
     }

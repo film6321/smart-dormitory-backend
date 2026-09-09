@@ -12,7 +12,14 @@ class AuthController {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
             }
             const data = await auth_service_1.AuthService.login(email, password);
-            return res.status(200).json((0, api_response_1.createResponse)(200, 'เข้าสู่ระบบสำเร็จ', data));
+            res.cookie('access_token', data.token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: data.sessionTimeoutMinutes * 60 * 1000,
+                path: '/',
+            });
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'เข้าสู่ระบบสำเร็จ', { user: data.user }));
         }
         catch (error) {
             next(error); // โยนเหวี่ยงให้ Middleware Error Catch เป็นคนจัดการ Response
@@ -52,6 +59,7 @@ class AuthController {
             if (userId) {
                 await (0, presence_1.clearUserOnline)(userId);
             }
+            res.clearCookie('access_token', { httpOnly: true, sameSite: 'lax', path: '/' });
             return res.status(200).json((0, api_response_1.createResponse)(200, 'Logged out successfully'));
         }
         catch (error) {

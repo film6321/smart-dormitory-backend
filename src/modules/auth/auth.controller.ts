@@ -15,7 +15,14 @@ export class AuthController {
       }
 
       const data = await AuthService.login(email, password);
-      return res.status(200).json(createResponse(200, 'เข้าสู่ระบบสำเร็จ', data));
+      res.cookie('access_token', data.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: data.sessionTimeoutMinutes * 60 * 1000,
+        path: '/',
+      });
+      return res.status(200).json(createResponse(200, 'เข้าสู่ระบบสำเร็จ', { user: data.user }));
     } catch (error) {
       next(error); // โยนเหวี่ยงให้ Middleware Error Catch เป็นคนจัดการ Response
     }
@@ -59,6 +66,7 @@ export class AuthController {
         await clearUserOnline(userId);
       }
 
+      res.clearCookie('access_token', { httpOnly: true, sameSite: 'lax', path: '/' });
       return res.status(200).json(createResponse(200, 'Logged out successfully'));
     } catch (error) {
       next(error);

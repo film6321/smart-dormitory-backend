@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { AppError } from '../../middlewares/error-handler';
 import { prisma } from '../../database/db';
 import NotificationService from '../notifications/notification.service';
+import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { BillingRepository } from './billing.repository';
 import { PaymentProviderClient } from './payment.provider';
 
@@ -28,6 +29,50 @@ export class BillingService {
 
   static async getBillById(id: number) {
     return BillingRepository.findBillById(id);
+  }
+
+  static async getBillingReport(from?: Date, to?: Date) {
+    const bills = await prisma.bill.findMany({
+      where: {
+        ...(from || to ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      },
+      select: { amount: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const summary = bills.reduce((result, bill) => {
+      const amount = Number(bill.amount);
+      result.totalAmount += amount;
+      result.byStatus[bill.status] = (result.byStatus[bill.status] || 0) + amount;
+      result.countByStatus[bill.status] = (result.countByStatus[bill.status] || 0) + 1;
+      const month = bill.createdAt.toISOString().slice(0, 7);
+      const monthly = result.monthly[month] || { month, amount: 0, paidAmount: 0, billCount: 0, paidCount: 0 };
+      monthly.amount += amount;
+      monthly.billCount += 1;
+      if (bill.status === 'PAID') {
+        monthly.paidAmount += amount;
+        monthly.paidCount += 1;
+      }
+      result.monthly[month] = monthly;
+      return result;
+    }, {
+      totalAmount: 0,
+      byStatus: {} as Record<string, number>,
+      countByStatus: {} as Record<string, number>,
+      monthly: {} as Record<string, { month: string; amount: number; paidAmount: number; billCount: number; paidCount: number }>,
+    });
+
+    return {
+      currency: 'THB',
+      totalBills: bills.length,
+      totalAmount: summary.totalAmount,
+      paidAmount: summary.byStatus.PAID || 0,
+      unpaidAmount: (summary.byStatus.UNPAID || 0) + (summary.byStatus.OVERDUE || 0),
+      verifyingAmount: summary.byStatus.VERIFYING || 0,
+      byStatus: summary.byStatus,
+      countByStatus: summary.countByStatus,
+      monthly: Object.values(summary.monthly),
+    };
   }
 
   static async generatePaymentQr(billId: number, userId: number) {
@@ -127,6 +172,7 @@ export class BillingService {
       roomNumber: room.roomNumber,
       roomId: room.id,
       calculation: {
+        currency: 'THB',
         rentTotal,
         electricUnits,
         electricRate,
@@ -278,6 +324,13 @@ export class BillingService {
       return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
     });
 
+    publishAdminAlert(
+      billId,
+      'PAYMENT_SLIP',
+      result.billStatus === 'PAID' ? `ตรวจสลิปบิล #${billId}: ชำระเงินแล้ว` : `ตรวจสลิปบิล #${billId}: ไม่ผ่าน (${failureReason})`,
+      result.billStatus,
+    );
+
     return result;
   }
 
@@ -318,15 +371,6 @@ export class BillingService {
     const bill = await BillingRepository.findBillById(billId);
     if (!bill) {
       throw new AppError('Bill not found', 404);
-    }
-
-    const [paymentCount, batchItemCount] = await Promise.all([
-      prisma.payment.count({ where: { billId } }),
-      prisma.paymentBatchItem.count({ where: { billId } }),
-    ]);
-
-    if (paymentCount > 0 || batchItemCount > 0) {
-      throw new AppError('ไม่สามารถลบบิลได้ เนื่องจากมีประวัติการชำระเงินแล้ว', 409);
     }
 
     return BillingRepository.deleteBill(billId);

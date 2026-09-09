@@ -26,6 +26,8 @@ import visitorRoutes from './modules/visitor/visitor.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import notificationPreferencesRoutes from './modules/notifications/notification-preferences.routes';
 import healthRoutes from './routes/health';
+import auditRoutes from './modules/audit/audit.routes';
+import settingsRoutes from './modules/settings/settings.routes';
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/visitor', visitorRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notifications/preferences', notificationPreferencesRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));

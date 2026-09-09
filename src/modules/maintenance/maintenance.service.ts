@@ -3,6 +3,7 @@ import { MaintenanceRepository } from './maintenance.repository';
 import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
+import { publishAdminAlert } from '../../realtime/notification-gateway';
 
 export class MaintenanceService {
   static async getTenantByUserId(userId: number) {
@@ -44,10 +45,12 @@ export class MaintenanceService {
   }
 
   static async updateTicketStatus(id: number, status: string, note?: string) {
-    return MaintenanceRepository.updateTicketStatus(id, {
+    const updated = await MaintenanceRepository.updateTicketStatus(id, {
       status: status as unknown as MaintenanceStatus,
       note,
     });
+    publishAdminAlert(updated.id, 'MAINTENANCE_STATUS', `แจ้งซ่อม #${updated.id} เปลี่ยนสถานะเป็น ${updated.status}`, updated.status);
+    return updated;
   }
 
   static async deleteTicket(id: number) {

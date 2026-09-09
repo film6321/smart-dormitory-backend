@@ -11,7 +11,11 @@ class VisitorRepository {
     }
     static async listVisitors(db = db_1.prisma) {
         return db.visitor.findMany({
-            include: { logs: true },
+            include: {
+                logs: { orderBy: { createdAt: 'asc' } },
+                room: { select: { roomNumber: true } },
+                tenant: { select: { fullName: true, studentId: true } },
+            },
             orderBy: { createdAt: 'desc' },
         });
     }

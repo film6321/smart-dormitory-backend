@@ -28,6 +28,8 @@ const visitor_routes_1 = __importDefault(require("./modules/visitor/visitor.rout
 const notification_routes_1 = __importDefault(require("./modules/notifications/notification.routes"));
 const notification_preferences_routes_1 = __importDefault(require("./modules/notifications/notification-preferences.routes"));
 const health_1 = __importDefault(require("./routes/health"));
+const audit_routes_1 = __importDefault(require("./modules/audit/audit.routes"));
+const settings_routes_1 = __importDefault(require("./modules/settings/settings.routes"));
 const app = (0, express_1.default)();
 // Serve static files from public folder (e.g., live camera feed)
 app.use(express_1.default.static(path_1.default.join(process.cwd(), 'public')));
@@ -51,6 +53,8 @@ app.use('/api/maintenance', maintenance_routes_1.default);
 app.use('/api/visitor', visitor_routes_1.default);
 app.use('/api/notifications', notification_routes_1.default);
 app.use('/api/notifications/preferences', notification_preferences_routes_1.default);
+app.use('/api/audit-logs', audit_routes_1.default);
+app.use('/api/settings', settings_routes_1.default);
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));
 // Error handling

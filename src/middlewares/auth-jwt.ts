@@ -15,13 +15,20 @@ export interface AuthenticatedRequest extends Request {
 export const verifyToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1]; // รับค่าจาก Header แบบ "Bearer <token>"
 
-  if (!token) {
+  const cookieToken = (req.headers.cookie ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('access_token='))
+    ?.slice('access_token='.length);
+  const resolvedToken = token || cookieToken;
+
+  if (!resolvedToken) {
     return next(new AppError('ไม่อนุญาตให้เข้าถึง: ไม่พบ Token', 401));
   }
 
   try {
     const decoded = jwt.verify(
-      token,
+      resolvedToken,
       getJwtSecret()
     ) as { id: number; role: string };
 
