@@ -12,9 +12,9 @@ const router = Router();
 const verifyFaceGateToken = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.split(' ')[1];
-  const expectedToken = process.env.FACE_API_KEY || 'face-recognition-secret-key-change-me-in-production';
+  const expectedToken = process.env.FACE_API_KEY?.trim();
 
-  if (token && token === expectedToken) {
+  if (expectedToken && token && token === expectedToken) {
     (req as any).user = { id: 0, role: 'ADMIN' };
     return next();
   }

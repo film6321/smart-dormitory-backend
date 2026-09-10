@@ -114,7 +114,12 @@ class PaymentBatchService {
                 id: { in: uniqueBillIds },
                 tenant: { userId },
             },
-            include: { tenant: true },
+            include: { tenant: {
+                    select: {
+                        id: true,
+                        userId: true,
+                    },
+                } },
         });
         if (bills.length !== uniqueBillIds.length) {
             throw new error_handler_1.AppError('One or more bills were not found for this user', 404);
@@ -292,7 +297,14 @@ class PaymentBatchService {
         const bill = await db_1.prisma.bill.findUnique({
             where: { id: billId },
             include: {
-                tenant: { include: { user: true } },
+                tenant: { include: {
+                        user: {
+                            select: {
+                                id: true,
+                                role: true,
+                            }
+                        }
+                    } },
                 payments: { orderBy: { createdAt: 'desc' } },
                 batchItems: {
                     where: {

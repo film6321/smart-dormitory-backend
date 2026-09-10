@@ -6,8 +6,6 @@ export class TenantsRepository {
     id: true,
     email: true,
     role: true,
-    firstName: true,
-    lastName: true,
     createdAt: true,
     updatedAt: true,
   };
@@ -37,7 +35,10 @@ export class TenantsRepository {
   }
 
   static async findUserById(id: number, db = prisma) {
-    return db.user.findUnique({ where: { id } });
+    return db.user.findUnique({
+      where: { id },
+      select: { id: true },
+    });
   }
 
   static async findRoomById(id: number, db = prisma) {

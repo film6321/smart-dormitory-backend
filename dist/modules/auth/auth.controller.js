@@ -27,11 +27,11 @@ class AuthController {
     }
     static async register(req, res, next) {
         try {
-            const { email, password, firstName, lastName, role, username } = req.body;
+            const { email, password, username } = req.body;
             if (!email || !password) {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
             }
-            const data = await auth_service_1.AuthService.register({ email, password, firstName, lastName, role, username });
+            const data = await auth_service_1.AuthService.register({ email, password, username });
             return res.status(201).json((0, api_response_1.createResponse)(201, 'สมัครสมาชิกเรียบร้อย', data));
         }
         catch (error) {

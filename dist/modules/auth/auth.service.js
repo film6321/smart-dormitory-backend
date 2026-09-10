@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
+const client_1 = require("@prisma/client");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const logger_1 = require("../../logger");
@@ -80,8 +81,6 @@ class AuthService {
                 email: user.email,
                 username: user.username,
                 role: user.role,
-                firstName: user.firstName,
-                lastName: user.lastName,
                 lastLogin: normalizeLastLogin(lastLogin),
                 isOnline: true,
             },
@@ -90,7 +89,7 @@ class AuthService {
         };
     }
     static async register(data) {
-        const { email, password, firstName, lastName, role, username } = data;
+        const { email, password, username } = data;
         const normalizedUsername = typeof username === 'string' ? username.trim() : undefined;
         const finalUsername = normalizedUsername ? normalizedUsername : undefined;
         // ตรวจสอบว่าอีเมลซ้ำไหม
@@ -119,9 +118,7 @@ class AuthService {
         const createPayload = {
             email,
             password: hashedPassword,
-            firstName,
-            lastName,
-            role: role || 'STUDENT',
+            role: client_1.Role.STUDENT,
             username: finalUsername,
         };
         try {
@@ -134,9 +131,7 @@ class AuthService {
                 const user = await auth_repository_1.AuthRepository.createUser({
                     email,
                     password: hashedPassword,
-                    firstName,
-                    lastName,
-                    role: role || 'STUDENT',
+                    role: client_1.Role.STUDENT,
                 });
                 return { id: user.id, email: user.email, role: user.role };
             }

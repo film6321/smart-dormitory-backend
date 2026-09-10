@@ -30,13 +30,13 @@ export class AuthController {
 
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-        const { email, password, firstName, lastName, role, username } = req.body;
-        
+        const { email, password, username } = req.body;
+
         if (!email || !password) {
-           return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
+          return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
         }
 
-        const data = await AuthService.register({ email, password, firstName, lastName, role, username });
+        const data = await AuthService.register({ email, password, username });
         return res.status(201).json(createResponse(201, 'สมัครสมาชิกเรียบร้อย', data));
     } catch (error) {
         next(error);

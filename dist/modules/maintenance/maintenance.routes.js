@@ -29,5 +29,5 @@ router.patch('/:id/status', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(
 router.delete('/:id', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), maintenance_controller_1.MaintenanceController.deleteTicket);
 // Image uploading & downloading routes
 router.post('/upload', auth_jwt_1.verifyToken, upload.single('image'), maintenance_controller_1.MaintenanceController.uploadImage);
-router.get('/images/:filename', maintenance_controller_1.MaintenanceController.serveImage);
+router.get('/images/:filename', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), maintenance_controller_1.MaintenanceController.serveImage);
 exports.default = router;

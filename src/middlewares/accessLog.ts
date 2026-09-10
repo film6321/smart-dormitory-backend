@@ -38,7 +38,7 @@ export const accessLog = (req: Request, res: Response, next: NextFunction) => {
   res.on('finish', () => {
     const log: AccessLogJob = {
       method: req.method,
-      path: req.originalUrl,
+      path: req.path,
       ip: req.ip,
       userId: (req as AuthenticatedRequest).user?.id,
       duration: Date.now() - start,

@@ -7,16 +7,12 @@ export interface CreateUserInput {
   email: string;
   password: string;
   username?: string;
-  firstName?: string;
-  lastName?: string;
   role?: string;
 }
 
 export class UsersService {
   private static withDisplayName<T extends {
     username?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
     email?: string;
     isOnline?: boolean;
     lastLogin?: Date | string | null;
@@ -25,7 +21,7 @@ export class UsersService {
       return user;
     }
 
-    const displayName = user.username?.trim() || `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email || '';
+    const displayName = user.username?.trim() || user.email || '';
 
     return {
       ...user,
@@ -71,8 +67,6 @@ export class UsersService {
       email,
       password: hashedPassword,
       username: username || null,
-      firstName: data.firstName?.trim() ?? null,
-      lastName: data.lastName?.trim() ?? null,
       role: (data.role ?? 'STUDENT').toUpperCase(),
     }, db);
     return UsersService.withDisplayName(user);
@@ -82,8 +76,6 @@ export class UsersService {
     const payload: Record<string, unknown> = {};
     if (data.email) payload.email = data.email.trim().toLowerCase();
     if (data.username !== undefined) payload.username = data.username?.trim() ?? null;
-    if (data.firstName !== undefined) payload.firstName = data.firstName?.trim() ?? null;
-    if (data.lastName !== undefined) payload.lastName = data.lastName?.trim() ?? null;
     if (data.role) payload.role = data.role.toUpperCase();
     if (data.password) {
       payload.password = await bcrypt.hash(data.password, 10);

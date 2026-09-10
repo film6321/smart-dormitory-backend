@@ -5,9 +5,6 @@ export class UsersRepository {
   private static readonly baseUserSelect = {
     id: true,
     email: true,
-    role: true,
-    firstName: true,
-    lastName: true,
     lastLogin: true,
     createdAt: true,
     updatedAt: true,
@@ -59,7 +56,6 @@ export class UsersRepository {
       where: { email },
       select: {
         ...UsersRepository.baseUserSelect,
-        password: true,
       },
     });
   }
@@ -68,8 +64,6 @@ export class UsersRepository {
     email: string;
     password: string;
     username?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
     lastLogin?: Date | string | null;
     role: string;
   }, db = prisma) {
@@ -80,9 +74,6 @@ export class UsersRepository {
           id: true,
           email: true,
           role: true,
-          firstName: true,
-          lastName: true,
-          password: true,
         },
       });
     } catch (error) {
@@ -90,16 +81,14 @@ export class UsersRepository {
         throw error;
       }
 
-      const { username: _username, ...fallbackData } = data;
+      const fallbackData = { ...data };
+      delete fallbackData.username;
       return db.user.create({
         data: fallbackData as Prisma.UserCreateInput,
         select: {
           id: true,
           email: true,
           role: true,
-          firstName: true,
-          lastName: true,
-          password: true,
         },
       });
     }

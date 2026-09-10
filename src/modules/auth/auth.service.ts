@@ -11,9 +11,6 @@ import { AuthRepository } from './auth.repository';
 interface RegisterPayload {
   email: string;
   password: string;
-  firstName?: string;
-  lastName?: string;
-  role?: Role;
   username?: string;
 }
 
@@ -98,8 +95,6 @@ export class AuthService {
         email: user.email,
         username: user.username,
         role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
         lastLogin: normalizeLastLogin(lastLogin),
         isOnline: true,
       },
@@ -109,7 +104,7 @@ export class AuthService {
   }
 
   static async register(data: RegisterPayload) {
-    const { email, password, firstName, lastName, role, username } = data;
+    const { email, password, username } = data;
     const normalizedUsername = typeof username === 'string' ? username.trim() : undefined;
     const finalUsername = normalizedUsername ? normalizedUsername : undefined;
     
@@ -143,9 +138,7 @@ export class AuthService {
     const createPayload = {
       email,
       password: hashedPassword,
-      firstName,
-      lastName,
-      role: role || 'STUDENT',
+      role: Role.STUDENT,
       username: finalUsername,
     };
 
@@ -158,9 +151,7 @@ export class AuthService {
         const user = await AuthRepository.createUser({
           email,
           password: hashedPassword,
-          firstName,
-          lastName,
-          role: role || 'STUDENT',
+          role: Role.STUDENT,
         });
         return { id: user.id, email: user.email, role: user.role };
       }

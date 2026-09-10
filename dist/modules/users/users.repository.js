@@ -6,9 +6,6 @@ class UsersRepository {
     static baseUserSelect = {
         id: true,
         email: true,
-        role: true,
-        firstName: true,
-        lastName: true,
         lastLogin: true,
         createdAt: true,
         updatedAt: true,
@@ -56,7 +53,6 @@ class UsersRepository {
             where: { email },
             select: {
                 ...UsersRepository.baseUserSelect,
-                password: true,
             },
         });
     }
@@ -68,9 +64,6 @@ class UsersRepository {
                     id: true,
                     email: true,
                     role: true,
-                    firstName: true,
-                    lastName: true,
-                    password: true,
                 },
             });
         }
@@ -78,16 +71,14 @@ class UsersRepository {
             if (error?.code !== 'P2022') {
                 throw error;
             }
-            const { username: _username, ...fallbackData } = data;
+            const fallbackData = { ...data };
+            delete fallbackData.username;
             return db.user.create({
                 data: fallbackData,
                 select: {
                     id: true,
                     email: true,
                     role: true,
-                    firstName: true,
-                    lastName: true,
-                    password: true,
                 },
             });
         }

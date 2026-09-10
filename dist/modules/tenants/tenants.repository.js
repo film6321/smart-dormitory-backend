@@ -7,8 +7,6 @@ class TenantsRepository {
         id: true,
         email: true,
         role: true,
-        firstName: true,
-        lastName: true,
         createdAt: true,
         updatedAt: true,
     };
@@ -33,7 +31,10 @@ class TenantsRepository {
         });
     }
     static async findUserById(id, db = db_1.prisma) {
-        return db.user.findUnique({ where: { id } });
+        return db.user.findUnique({
+            where: { id },
+            select: { id: true },
+        });
     }
     static async findRoomById(id, db = db_1.prisma) {
         return db.room.findUnique({ where: { id } });

@@ -20,13 +20,11 @@ class NotificationService {
             const tenant = await notification_repository_1.NotificationRepository.findTenantById(data.tenantId, this.db);
             if (tenant?.phone)
                 return tenant.phone;
-            if (tenant?.user?.phone)
-                return tenant.user.phone;
         }
         if (data.userId) {
-            const user = await notification_repository_1.NotificationRepository.findUserById(data.userId, this.db);
-            if (user?.phone)
-                return user.phone;
+            const tenant = await notification_repository_1.NotificationRepository.findTenantByUserId(data.userId, this.db);
+            if (tenant?.phone)
+                return tenant.phone;
         }
         return null;
     }
@@ -35,7 +33,7 @@ class NotificationService {
     }
     async scheduleNotification(data) {
         const tenant = data.tenantId ? await notification_repository_1.NotificationRepository.findTenantById(data.tenantId, this.db) : null;
-        const recipientPhone = data.recipientPhone ?? tenant?.phone ?? tenant?.user?.phone ?? null;
+        const recipientPhone = data.recipientPhone ?? tenant?.phone ?? null;
         const payload = { ...data, recipientPhone };
         const notification = await notification_repository_1.NotificationRepository.createNotification(payload, this.db);
         (0, notification_gateway_1.publishNotificationAlert)(notification);

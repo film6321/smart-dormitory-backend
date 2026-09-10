@@ -120,7 +120,12 @@ export class PaymentBatchService {
         id: { in: uniqueBillIds },
         tenant: { userId },
       },
-      include: { tenant: true },
+      include: { tenant: {
+  select: {
+    id: true,
+    userId: true,
+  },
+} },
     });
 
     if (bills.length !== uniqueBillIds.length) {
@@ -324,7 +329,14 @@ export class PaymentBatchService {
     const bill = await prisma.bill.findUnique({
       where: { id: billId },
       include: {
-        tenant: { include: { user: true } },
+        tenant: { include: {
+            user:{
+              select: {
+                id: true,
+                role: true,
+              }
+            }
+          } },
         payments: { orderBy: { createdAt: 'desc' } },
         batchItems: {
           where: {

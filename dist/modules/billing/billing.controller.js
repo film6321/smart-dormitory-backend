@@ -89,7 +89,24 @@ class BillingController {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'slipImage file is required'));
             }
             const result = await billing_service_1.BillingService.verifyPaymentSlip(billId, authReq.user.id, idempotencyKey, req.file);
-            return res.status(200).json((0, api_response_1.createResponse)(200, 'Payment verification completed', result));
+            const safeResult = {
+                billStatus: result.billStatus,
+                payment: {
+                    id: result.payment.id,
+                    billId: result.payment.billId,
+                    amount: Number(result.payment.amount),
+                    status: result.payment.status,
+                    provider: result.payment.provider,
+                    providerTransactionId: result.payment.providerTransactionId,
+                    slipAmount: result.payment.slipAmount === null ? null : Number(result.payment.slipAmount),
+                    transferAt: result.payment.transferAt,
+                    failureReason: result.payment.failureReason,
+                    verifiedAt: result.payment.verifiedAt,
+                    createdAt: result.payment.createdAt,
+                    updatedAt: result.payment.updatedAt,
+                },
+            };
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Payment verification completed', safeResult));
         }
         catch (error) {
             next(error);

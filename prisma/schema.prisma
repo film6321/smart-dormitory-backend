@@ -22,6 +22,7 @@ enum OcrJobStatus {
   FAILED
 }
 
+// แบบจ่ายบิลเดียว
 enum PaymentStatus {
   PENDING
   VERIFYING
@@ -34,6 +35,7 @@ enum PaymentProvider {
   THUNDER
 }
 
+// แบบจ่ายหลายบิลพร้อมกัน
 enum PaymentBatchStatus {
   PENDING
   VERIFYING
@@ -51,8 +53,6 @@ model User {
   email     String    @unique
   password  String
   role      Role      @default(STUDENT)
-  firstName String?
-  lastName  String?
   lastLogin DateTime?
   version   Int       @default(1) // Optimistic Concurrency Control (OCC)
   createdAt DateTime  @default(now())
@@ -68,7 +68,7 @@ model User {
   tenant               Tenant?
   faceEmbeddings       FaceEmbedding[]
   faceEnrollmentPhotos FaceEnrollmentPhoto[]
-  updatedSettings     SystemSetting[]
+  updatedSettings      SystemSetting[]
 }
 
 model SystemSetting {

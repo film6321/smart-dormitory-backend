@@ -104,7 +104,10 @@ class MaintenanceController {
         try {
             const filename = req.params.filename;
             const uploadDir = path_1.default.resolve(process.env.UPLOAD_ROOT || path_1.default.join(process.cwd(), 'uploads/maintenance'));
-            const filepath = path_1.default.join(uploadDir, filename);
+            const filepath = path_1.default.resolve(uploadDir, path_1.default.basename(filename));
+            if (!filepath.startsWith(`${uploadDir}${path_1.default.sep}`)) {
+                return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid image path'));
+            }
             if (!fs_1.default.existsSync(filepath)) {
                 return res.status(404).json((0, api_response_1.createResponse)(404, 'Image not found'));
             }

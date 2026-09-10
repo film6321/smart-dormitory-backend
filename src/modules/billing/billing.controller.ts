@@ -99,7 +99,24 @@ export class BillingController {
         idempotencyKey,
         req.file,
       );
-      return res.status(200).json(createResponse(200, 'Payment verification completed', result));
+      const safeResult = {
+        billStatus: result.billStatus,
+        payment: {
+          id: result.payment.id,
+          billId: result.payment.billId,
+          amount: Number(result.payment.amount),
+          status: result.payment.status,
+          provider: result.payment.provider,
+          providerTransactionId: result.payment.providerTransactionId,
+          slipAmount: result.payment.slipAmount === null ? null : Number(result.payment.slipAmount),
+          transferAt: result.payment.transferAt,
+          failureReason: result.payment.failureReason,
+          verifiedAt: result.payment.verifiedAt,
+          createdAt: result.payment.createdAt,
+          updatedAt: result.payment.updatedAt,
+        },
+      };
+      return res.status(200).json(createResponse(200, 'Payment verification completed', safeResult));
     } catch (error) {
       next(error);
     }

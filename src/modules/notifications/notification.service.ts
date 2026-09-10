@@ -20,12 +20,11 @@ export class NotificationService {
     if (data.tenantId) {
       const tenant = await NotificationRepository.findTenantById(data.tenantId, this.db);
       if (tenant?.phone) return tenant.phone;
-      if (tenant?.user?.phone) return tenant.user.phone;
     }
 
     if (data.userId) {
-      const user = await NotificationRepository.findUserById(data.userId, this.db);
-      if (user?.phone) return user.phone;
+      const tenant = await NotificationRepository.findTenantByUserId(data.userId, this.db);
+      if (tenant?.phone) return tenant.phone;
     }
 
     return null;
@@ -37,7 +36,7 @@ export class NotificationService {
 
   async scheduleNotification(data: any) {
     const tenant = data.tenantId ? await NotificationRepository.findTenantById(data.tenantId, this.db) : null;
-    const recipientPhone = data.recipientPhone ?? tenant?.phone ?? tenant?.user?.phone ?? null;
+    const recipientPhone = data.recipientPhone ?? tenant?.phone ?? null;
     const payload = { ...data, recipientPhone };
     const notification = await NotificationRepository.createNotification(payload as Prisma.NotificationCreateInput, this.db);
     publishNotificationAlert(notification);

@@ -14,7 +14,12 @@ import {
 } from './face-verification.types';
 
 type FaceEnrollmentPhotoWithRelations = Prisma.FaceEnrollmentPhotoGetPayload<{
-  include: { user: true; visitor: true };
+  include: { user:{
+              select: {
+                id: true,
+                role: true,
+              }
+            }; visitor: true };
 }>;
 
 type FaceEmbeddingSummary = {
@@ -65,7 +70,10 @@ export class FaceVerificationService {
     logger.info({ userId, fileName }, 'Registering face photo, saving pending file to disk');
 
     // 1. Determine if it is a User or a Visitor
-    const userExists = await db.user.findUnique({ where: { id: userId } });
+    const userExists = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
     let visitorId: number | null = null;
     let actualUserId: number | null = userId;
 
@@ -128,7 +136,10 @@ export class FaceVerificationService {
     const rawUrl = process.env.FACE_API_URL?.trim() || 'http://127.0.0.1:8000';
     const baseUrl = rawUrl.replace(/\/+$/u, '').replace(/\/api\/v1\/?$/u, '').replace(/\/faces\/?$/u, '');
     const endpoint = `${baseUrl}/api/v1/faces/register`;
-    const apiKey = process.env.FACE_API_KEY?.trim() || 'face-recognition-secret-key-change-me-in-production';
+    const apiKey = process.env.FACE_API_KEY?.trim();
+    if (!apiKey) {
+      throw new AppError('FACE_API_KEY is not configured', 500);
+    }
 
     try {
       if (typeof fetch !== 'function') return;
@@ -154,8 +165,8 @@ export class FaceVerificationService {
       if (response.ok) {
         logger.info({ userId, endpoint }, 'Successfully forwarded face registration to Python API');
       } else {
-        const bodyText = await response.text();
-        logger.warn({ userId, status: response.status, bodyText }, 'External Face API register returned non-200');
+        await response.arrayBuffer();
+        logger.warn({ userId, status: response.status }, 'External Face API register returned non-200');
       }
     } catch (error) {
       logger.warn({ userId, error }, 'Failed to forward face registration to external Face API (will proceed with local disk copy)');
@@ -202,7 +213,10 @@ export class FaceVerificationService {
     threshold?: number,
   ): Promise<FaceVerifyResponse> {
     const endpoint = this.normalizeFaceApiUrl();
-    const apiKey = process.env.FACE_API_KEY?.trim() || 'face-recognition-secret-key-change-me-in-production';
+    const apiKey = process.env.FACE_API_KEY?.trim();
+    if (!apiKey) {
+      throw new AppError('FACE_API_KEY is not configured', 500);
+    }
 
     if (typeof fetch !== 'function') {
       throw new AppError('Runtime fetch API is not available', 500);
@@ -230,8 +244,8 @@ export class FaceVerificationService {
       });
 
       if (!response.ok) {
-        const bodyText = await response.text();
-        logger.warn({ endpoint, status: response.status, bodyText, fileName }, 'Face API returned non-ok status');
+        await response.arrayBuffer();
+        logger.warn({ endpoint, status: response.status, fileName }, 'Face API returned non-ok status');
         return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
       }
 
@@ -247,9 +261,12 @@ export class FaceVerificationService {
       // If matched, lookup real user name from DB
       if (matched && matchedUserId) {
         try {
-          const user = await db.user.findUnique({ where: { id: matchedUserId } });
+          const user = await db.user.findUnique({
+            where: { id: matchedUserId },
+            select: { id: true, username: true, email: true },
+          });
           if (user) {
-            userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || `User #${user.id}`;
+            userName = user.username || user.email || `User #${user.id}`;
           } else {
             const visitor = await db.visitor.findUnique({ where: { id: matchedUserId } });
             if (visitor) {
@@ -398,7 +415,12 @@ export class FaceVerificationService {
     const embeddings = await db.faceEmbedding.findMany({
       where: whereClause,
       include: {
-        user: true,
+        user:{
+              select: {
+                id: true,
+                role: true,
+              }
+            },
         visitor: true,
       },
     });
@@ -452,7 +474,12 @@ export class FaceVerificationService {
         ],
       },
       include: {
-        user: true,
+        user:{
+              select: {
+                id: true,
+                role: true,
+              }
+            },
         visitor: true,
       },
     }) as FaceEnrollmentPhotoWithRelations[];
@@ -519,7 +546,10 @@ export class FaceVerificationService {
       }
     } else {
       userId = studentId;
-      const userExists = await db.user.findUnique({ where: { id: userId } });
+      const userExists = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
       if (!userExists) {
         throw new AppError('User not found', 404);
       }
@@ -563,7 +593,10 @@ export class FaceVerificationService {
 
     if (studentCode.startsWith('user_')) {
       const userId = Number(studentCode.replace('user_', ''));
-      const user = await db.user.findUnique({ where: { id: userId } });
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true, email: true },
+      });
       if (!user) {
         throw new AppError('User not found', 404);
       }
@@ -585,7 +618,7 @@ export class FaceVerificationService {
         action: direction === 'IN' ? 'checkin' : 'checkout',
         student: {
           code: studentCode,
-          name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Resident',
+          name: user.username || user.email || 'Resident',
           room: 'Resident',
         },
       };

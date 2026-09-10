@@ -1,27 +1,24 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
-
+import { Prisma, Role } from '@prisma/client';
 export class AuthRepository {
   static async findByEmail(email: string, db = prisma) {
-    const client: any = db;
     return db.user.findUnique({
       where: { email },
       select: {
         id: true,
         email: true,
         username: true,
-        password: true,
         role: true,
-        firstName: true,
-        lastName: true,
+        createdAt: true,
         lastLogin: true,
+        updatedAt: true,
+        password: true,
       },
     });
   }
 
   static async findByUsername(username: string, db = prisma) {
-    const client: any = db;
-    return client.user.findUnique({
+    return db.user.findUnique({
       where: { username },
       select: {
         id: true,
@@ -33,20 +30,25 @@ export class AuthRepository {
   static async createUser(data: {
     email: string;
     password: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    role: string;
+    role: Role;
     username?: string | null;
   }, db = prisma) {
-    const client: any = db;
-    return client.user.create({
+
+    return db.user.create({
       data: data as Prisma.UserCreateInput,
-      select: { id: true, email: true, username: true, role: true, firstName: true, lastName: true, lastLogin: true, password: true },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        lastLogin: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 
   static async updateUser(id: number, data: Partial<Prisma.UserUpdateInput>, db = prisma) {
-    const client: any = db;
-    return client.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
+    return db.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
   }
 }

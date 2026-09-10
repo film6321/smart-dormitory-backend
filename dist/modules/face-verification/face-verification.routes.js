@@ -15,8 +15,8 @@ const router = (0, express_1.Router)();
 const verifyFaceGateToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
     const token = authHeader?.split(' ')[1];
-    const expectedToken = process.env.FACE_API_KEY || 'face-recognition-secret-key-change-me-in-production';
-    if (token && token === expectedToken) {
+    const expectedToken = process.env.FACE_API_KEY?.trim();
+    if (expectedToken && token && token === expectedToken) {
         req.user = { id: 0, role: 'ADMIN' };
         return next();
     }

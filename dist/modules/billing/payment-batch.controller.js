@@ -76,7 +76,54 @@ class PaymentBatchController {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'Invalid bill id'));
             }
             const data = await payment_batch_service_1.PaymentBatchService.getAdminBillPaymentDetails(billId);
-            return res.status(200).json((0, api_response_1.createResponse)(200, 'Payment details retrieved', data));
+            const safeData = {
+                bill: {
+                    id: data.bill.id,
+                    tenantId: data.bill.tenantId,
+                    roomId: data.bill.roomId,
+                    amount: Number(data.bill.amount),
+                    rentAmount: Number(data.bill.rentAmount),
+                    electricAmount: Number(data.bill.electricAmount),
+                    waterAmount: Number(data.bill.waterAmount),
+                    penaltyAmount: Number(data.bill.penaltyAmount),
+                    dueDate: data.bill.dueDate,
+                    status: data.bill.status,
+                    description: data.bill.description,
+                    reason: data.bill.reason,
+                    paidAt: data.bill.paidAt,
+                    createdAt: data.bill.createdAt,
+                    updatedAt: data.bill.updatedAt,
+                },
+                payments: data.payments.map((payment) => ({
+                    id: payment.id,
+                    billId: payment.billId,
+                    amount: payment.amount,
+                    status: payment.status,
+                    provider: payment.provider,
+                    providerTransactionId: payment.providerTransactionId,
+                    slipAmount: payment.slipAmount,
+                    transferAt: payment.transferAt,
+                    failureReason: payment.failureReason,
+                    verifiedAt: payment.verifiedAt,
+                    createdAt: payment.createdAt,
+                    updatedAt: payment.updatedAt,
+                })),
+                batches: data.batches.map((batch) => ({
+                    id: batch.id,
+                    payerUserId: batch.payerUserId,
+                    amount: batch.amount,
+                    status: batch.status,
+                    provider: batch.provider,
+                    slipAmount: batch.slipAmount,
+                    transferAt: batch.transferAt,
+                    providerTransactionId: batch.providerTransactionId,
+                    failureReason: batch.failureReason,
+                    verifiedAt: batch.verifiedAt,
+                    createdAt: batch.createdAt,
+                    updatedAt: batch.updatedAt,
+                })),
+            };
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Payment details retrieved', safeData));
         }
         catch (error) {
             return next(error);

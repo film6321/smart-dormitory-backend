@@ -28,6 +28,6 @@ router.delete('/:id', verifyToken, requireRole(['ADMIN']), MaintenanceController
 
 // Image uploading & downloading routes
 router.post('/upload', verifyToken, upload.single('image'), MaintenanceController.uploadImage);
-router.get('/images/:filename', MaintenanceController.serveImage);
+router.get('/images/:filename', verifyToken, requireRole(['ADMIN']), MaintenanceController.serveImage);
 
 export default router;

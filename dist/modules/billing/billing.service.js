@@ -87,7 +87,7 @@ class BillingService {
             tenantCount: room.tenants.length,
             tenants: room.tenants.map((t) => ({
                 id: t.id,
-                fullName: t.fullName || (t.user ? `${t.user.firstName || ''} ${t.user.lastName || ''}`.trim() : 'ไม่ระบุชื่อ'),
+                fullName: t.fullName || t.user?.username || t.user?.email || 'ไม่ระบุชื่อ',
                 studentId: t.studentId,
                 phone: t.phone,
                 email: t.email || t.user?.email,
@@ -150,7 +150,7 @@ class BillingService {
             },
             tenants: tenants.map((t) => ({
                 id: t.id,
-                fullName: t.fullName || (t.user ? `${t.user.firstName || ''} ${t.user.lastName || ''}`.trim() : 'ไม่ระบุชื่อ'),
+                fullName: t.fullName || t.user?.username || t.user?.email || 'ไม่ระบุชื่อ',
                 studentId: t.studentId,
             })),
             createdBills,

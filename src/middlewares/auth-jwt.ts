@@ -2,12 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from './error-handler';
 import { getJwtSecret } from '../shared/env';
+import { Role } from '@prisma/client';
 
 // ขยาย Interface ของ Request ให้รองรับคีย์ user ที่เราจะยัดตอนถอดรหัส
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: number;
-    role: string;
+    role: Role;
   };
 }
 
@@ -30,7 +31,7 @@ export const verifyToken = (req: AuthenticatedRequest, res: Response, next: Next
     const decoded = jwt.verify(
       resolvedToken,
       getJwtSecret()
-    ) as { id: number; role: string };
+    ) as { id: number; role: Role };
 
     // แปะข้อมูล user ลงใน Request เพื่อให้ Controller เอาไปใช้งานต่อได้
     req.user = decoded; 
@@ -41,7 +42,7 @@ export const verifyToken = (req: AuthenticatedRequest, res: Response, next: Next
 };
 
 // 2. Middleware แยกส่วนที่เอาไว้ตรวจจำกัดสิทธิ์เฉพาะบาง Role เช่น ADMIN เท่านั้น
-export const requireRole = (roles: string[]) => {
+export const requireRole = (roles: Role[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(new AppError('ไม่อนุญาตให้เข้าถึง: ไม่พบข้อมูลผู้ใช้', 401));

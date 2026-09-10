@@ -34,7 +34,7 @@ const accessLog = (req, res, next) => {
     res.on('finish', () => {
         const log = {
             method: req.method,
-            path: req.originalUrl,
+            path: req.path,
             ip: req.ip,
             userId: req.user?.id,
             duration: Date.now() - start,

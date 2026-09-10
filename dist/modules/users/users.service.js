@@ -13,7 +13,7 @@ class UsersService {
         if (!user) {
             return user;
         }
-        const displayName = user.username?.trim() || `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email || '';
+        const displayName = user.username?.trim() || user.email || '';
         return {
             ...user,
             displayName,
@@ -53,8 +53,6 @@ class UsersService {
             email,
             password: hashedPassword,
             username: username || null,
-            firstName: data.firstName?.trim() ?? null,
-            lastName: data.lastName?.trim() ?? null,
             role: (data.role ?? 'STUDENT').toUpperCase(),
         }, db);
         return UsersService.withDisplayName(user);
@@ -65,10 +63,6 @@ class UsersService {
             payload.email = data.email.trim().toLowerCase();
         if (data.username !== undefined)
             payload.username = data.username?.trim() ?? null;
-        if (data.firstName !== undefined)
-            payload.firstName = data.firstName?.trim() ?? null;
-        if (data.lastName !== undefined)
-            payload.lastName = data.lastName?.trim() ?? null;
         if (data.role)
             payload.role = data.role.toUpperCase();
         if (data.password) {

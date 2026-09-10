@@ -15,9 +15,9 @@ class BillingRepository {
                         user: {
                             select: {
                                 id: true,
+                                username: true,
                                 email: true,
-                                firstName: true,
-                                lastName: true,
+                                role: true,
                             },
                         },
                     },
@@ -33,7 +33,14 @@ class BillingRepository {
             include: {
                 tenant: {
                     include: {
-                        user: true,
+                        user: {
+                            select: {
+                                id: true,
+                                username: true,
+                                email: true,
+                                role: true,
+                            }
+                        }
                     },
                 },
                 room: true,
@@ -50,9 +57,9 @@ class BillingRepository {
                         user: {
                             select: {
                                 id: true,
+                                username: true,
                                 email: true,
-                                firstName: true,
-                                lastName: true,
+                                role: true,
                             },
                         },
                     },
@@ -77,7 +84,14 @@ class BillingRepository {
             include: {
                 tenant: {
                     include: {
-                        user: true,
+                        user: {
+                            select: {
+                                id: true,
+                                username: true,
+                                email: true,
+                                role: true,
+                            }
+                        }
                     },
                 },
                 room: true,
@@ -91,7 +105,14 @@ class BillingRepository {
             include: {
                 tenant: {
                     include: {
-                        user: true,
+                        user: {
+                            select: {
+                                id: true,
+                                username: true,
+                                email: true,
+                                role: true,
+                            }
+                        }
                     },
                 },
                 room: true,

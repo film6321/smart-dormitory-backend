@@ -4,7 +4,6 @@ import { prisma } from '../../database/db';
 export class RoomsRepository {
   static async listRooms(db = prisma) {
     return db.room.findMany({
-      include: { tenants: true, bills: true },
       orderBy: { roomNumber: 'asc' },
     });
   }
@@ -12,7 +11,6 @@ export class RoomsRepository {
   static async getRoomById(id: number, db = prisma) {
     return db.room.findUnique({
       where: { id },
-      include: { tenants: true, bills: true },
     });
   }
 

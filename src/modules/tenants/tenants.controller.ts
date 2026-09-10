@@ -28,11 +28,13 @@ export class TenantsController {
       if (!fs.existsSync(idCardsDir)) fs.mkdirSync(idCardsDir, { recursive: true });
       if (!fs.existsSync(slipsDir)) fs.mkdirSync(slipsDir, { recursive: true });
 
-      const idCardName = `${Date.now()}-idcard-${idCardFile.originalname.replace(/\s+/g, '_')}`;
+      const safeIdCardName = path.basename(idCardFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const idCardName = `${Date.now()}-idcard-${safeIdCardName}`;
       const idCardPath = path.join(idCardsDir, idCardName);
       await fs.promises.writeFile(idCardPath, idCardFile.buffer);
 
-      const slipName = `${Date.now()}-slip-${paymentSlipFile.originalname.replace(/\s+/g, '_')}`;
+      const safeSlipName = path.basename(paymentSlipFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const slipName = `${Date.now()}-slip-${safeSlipName}`;
       const slipPath = path.join(slipsDir, slipName);
       await fs.promises.writeFile(slipPath, paymentSlipFile.buffer);
 
@@ -61,7 +63,7 @@ export class TenantsController {
         idCardImagePath,
         paymentSlipPath,
         ocrData: ocrData ? {
-          citizenId: ocrData.citizenId || '',
+          citizenId: ocrData.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
           fullNameTh: ocrData.fullNameTh || '',
           birthDateTh: ocrData.birthDateTh || '',
           age: ocrData.age,

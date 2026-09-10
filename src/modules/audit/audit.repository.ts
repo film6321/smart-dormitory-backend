@@ -16,7 +16,7 @@ export class AuditRepository {
     const [items, total] = await Promise.all([
       prisma.accessLog.findMany({
         where,
-        include: { user: { select: { id: true, username: true, email: true, firstName: true, lastName: true } } },
+        include: { user: { select: { id: true, username: true, email: true, role: true } } },
         orderBy: { createdAt: 'desc' },
         skip: (options.page - 1) * options.limit,
         take: options.limit,
