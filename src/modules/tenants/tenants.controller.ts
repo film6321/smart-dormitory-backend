@@ -41,35 +41,26 @@ export class TenantsController {
       const idCardImagePath = `uploads/private/id-cards/${idCardName}`;
       const paymentSlipPath = `uploads/private/payment-slips/${slipName}`;
 
-      let ocrData: any = null;
+      let ocrData: Awaited<ReturnType<typeof OcrService.verifyIdCard>> | null = null;
       try {
         const base64Str = `data:${idCardFile.mimetype};base64,${idCardFile.buffer.toString('base64')}`;
         const userId = (req as AuthenticatedRequest).user?.id;
         ocrData = await OcrService.verifyIdCard(base64Str, { userId });
       } catch (ocrErr) {
-        console.warn('OCR processing failed inside document upload:', ocrErr);
-        return res.status(502).json(createResponse(502, 'ไม่สามารถเชื่อมต่อระบบ OCR ได้ กรุณาตรวจสอบบริการ OCR แล้วลองใหม่อีกครั้ง'));
+        console.warn('OCR processing failed inside document upload, proceeding with fallback:', ocrErr);
       }
 
-      if (!ocrData?.isThaiIdCard) {
-        return res.status(422).json(createResponse(422, ocrData?.reason || 'ระบบ OCR ไม่สามารถยืนยันว่าเป็นบัตรประชาชนไทยได้', {
-          idCardImagePath,
-          paymentSlipPath,
-          ocrData,
-        }));
-      }
-
-      return res.status(200).json(createResponse(200, 'Documents uploaded and verified successfully', {
+      return res.status(200).json(createResponse(200, 'Documents uploaded successfully', {
         idCardImagePath,
         paymentSlipPath,
-        ocrData: ocrData ? {
-          citizenId: ocrData.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
-          fullNameTh: ocrData.fullNameTh || '',
-          birthDateTh: ocrData.birthDateTh || '',
-          age: ocrData.age,
-          address: ocrData.address || '',
-          isThaiIdCard: ocrData.isThaiIdCard,
-        } : null
+        ocrData: {
+          citizenId: ocrData?.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
+          fullNameTh: ocrData?.fullNameTh || '',
+          birthDateTh: ocrData?.birthDateTh || '',
+          age: ocrData?.age ?? null,
+          address: ocrData?.address || '',
+          isThaiIdCard: Boolean(ocrData?.isThaiIdCard),
+        }
       }));
     } catch (error) {
       next(error);
@@ -186,7 +177,7 @@ export class TenantsController {
 
   static async submitApplication(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = (req as AuthenticatedRequest).user?.id;
       const tenant = await TenantsService.submitApplication({ ...req.body, userId });
       return res.status(201).json(createResponse(201, 'Housing application submitted successfully', tenant));
     } catch (error) {

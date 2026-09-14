@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 2026-09-13 — Full Type-Safety & ESLint Zero-Error Refactoring (Backend & Frontend)
+
+- **Core & Database**: เพิ่ม `DbClient` type (`PrismaClient | Prisma.TransactionClient`) ใน `src/database/db.ts` เพื่อรองรับ Database Transactions และ Prisma client injection แบบ type-safe 100%
+- **Tenant Module**: Refactor `TenantsRepository`, `TenantsService`, และ `TenantsController` โดยใช้ Prisma Input Types (`Prisma.TenantCreateInput`, `Prisma.TenantUpdateInput`, `Prisma.TenantWhereInput`) พร้อมกำจัด `any` และใช้ `AuthenticatedRequest`
+- **Users & Rooms & Visitor Modules**: Refactor CRUD services, repositories, และ controllers ทุกไฟล์ให้ใช้ `DbClient`, Prisma relation connect patterns และ strict types แทนการ cast
+- **Billing & Payment Batch**: ปรับปรุง `PaymentBatchService` ให้แปลงผลลัพธ์ผ่าน null-safe `toBatchResponse` mapping และแก้ไข typing ของ nested queries
+- **OCR & Face Verification**: กำจัด `any` casts ใน `OcrService` และ `FaceVerificationService`, แก้ไข nested relation connection สำหรับ OCR documents และเชื่อมโยง typed `CameraScanSnapshot`
+- **Notifications & Workers**: ปรับ `NotificationController` และ `notificationWorker` ให้ใช้ `AuthenticatedRequest` และ `DbClient` พร้อมล้าง unused imports
+- **Zero Suppression Policy**: ไม่ใช้ `eslint-disable`, `@ts-ignore` หรือ `any` เพื่อปิดบังข้อผิดพลาด โดยแก้ไขให้ตรงตาม type contract จริง
+- **Verification**: ตรวจสอบยืนยันด้วย `npm run lint` (0 errors, 0 warnings) และ `npm run build` (tsc) ผ่านสมบูรณ์
+
 ### 2026-09-11 — Auth, data exposure, and private file hardening
 
 - บังคับการสมัครสมาชิกทั่วไปให้สร้างผู้ใช้ด้วย role `STUDENT` จาก Backend โดยไม่รับ role จาก Frontend

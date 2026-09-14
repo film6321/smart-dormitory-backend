@@ -1,6 +1,8 @@
 # Architecture Documentation
 
-This folder contains the core technical documentation for the Smart Dormitory Management System.
+This folder contains early architecture and learning documentation for the Smart Dormitory Management System.
+
+> **Status: reference material, not an implementation contract.** Some examples predate the current route names and module layout. For active rules use `AGENTS.md` and `.docs/ai-context/`; for implemented behavior use `src/app.ts`, module route files, tests, and `prisma/schema.prisma`. `SYSTEM-DIAGRAMS.md` is the current navigation map.
 
 ## Files
 
@@ -14,6 +16,4 @@ This folder contains the core technical documentation for the Smart Dormitory Ma
 - [08-sequence-diagram.md](08-sequence-diagram.md)
 - [09-face-recognition-service.md](09-face-recognition-service.md)
 - [10-ocr-service.md](10-ocr-service.md)
-- [11-coding-standard.md](11-coding-standard.md)
-- [PROJECT_RULES.md](PROJECT_RULES.md)
-- [AI_CONTEXT.md](AI_CONTEXT.md)
+- Historical rule references are archived in [`.docs/archive/architecture-v1/`](../archive/architecture-v1/).

@@ -291,9 +291,10 @@ class OcrService {
             throw new error_handler_1.AppError('imageBase64 is required', 400);
         }
         const imagePath = await savePrivateOcrJobImage(imageBase64, sanitizedImage);
-        const createData = { imagePath };
-        if (options.userId)
-            createData.user = { connect: { id: options.userId } };
+        const createData = {
+            imagePath,
+            ...(options.userId ? { user: { connect: { id: options.userId } } } : {}),
+        };
         const job = await ocr_repository_1.OcrRepository.createOcrJob(createData);
         try {
             await (0, ocr_queue_1.enqueueOcrJob)(job.id);
@@ -431,9 +432,8 @@ class OcrService {
             reason: result.reason,
             ocrJobId: result.jobId,
             processingTimeMs: result.processingTimeMs,
+            ...(userId ? { user: { connect: { id: userId } } } : {}),
         };
-        if (userId)
-            createVerification.user = { connect: { id: userId } };
         const verification = await ocr_repository_1.OcrRepository.createIdCardVerification(createVerification);
         await invalidateIdCardVerificationListCache();
         return verification;
@@ -454,7 +454,6 @@ class OcrService {
     static async listIdCardVerifications(page = 1, limit = 20) {
         const safePage = Math.max(1, page);
         const safeLimit = Math.min(Math.max(1, limit), 100);
-        const skip = (safePage - 1) * safeLimit;
         const cacheKey = `${idCardVerificationListCachePrefix}:${safePage}:${safeLimit}`;
         const cached = await (0, cache_1.getJsonCache)(cacheKey);
         if (cached) {

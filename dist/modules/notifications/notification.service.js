@@ -6,7 +6,6 @@ const db_1 = require("../../database/db");
 const notification_repository_1 = require("./notification.repository");
 const notification_gateway_1 = require("../../realtime/notification-gateway");
 class NotificationService {
-    // Service uses static repository methods on NotificationRepository
     db;
     providerModule;
     constructor(db, providerModule) {
@@ -34,7 +33,15 @@ class NotificationService {
     async scheduleNotification(data) {
         const tenant = data.tenantId ? await notification_repository_1.NotificationRepository.findTenantById(data.tenantId, this.db) : null;
         const recipientPhone = data.recipientPhone ?? tenant?.phone ?? null;
-        const payload = { ...data, recipientPhone };
+        const payload = {
+            channel: data.channel,
+            type: data.type,
+            payload: data.payload,
+            recipientPhone,
+            scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+            ...(data.userId ? { user: { connect: { id: data.userId } } } : {}),
+            ...(data.tenantId ? { tenant: { connect: { id: data.tenantId } } } : {}),
+        };
         const notification = await notification_repository_1.NotificationRepository.createNotification(payload, this.db);
         (0, notification_gateway_1.publishNotificationAlert)(notification);
         return notification;
@@ -131,22 +138,27 @@ class NotificationService {
             return result;
         }
         catch (err) {
+            const errorObj = err;
+            const errorMessage = errorObj?.message || String(err);
             const nextAttempts = (notif.attempts ?? 0) + 1;
-            await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: String(err?.message ?? err), attempts: nextAttempts } });
-            await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: String(err?.message ?? err), attempts: nextAttempts });
+            await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: errorMessage, attempts: nextAttempts } });
+            await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: errorMessage, attempts: nextAttempts });
             if (nextAttempts >= 3) {
-                await this.createDeadLetter(notificationId, 'max_retries_exceeded', { error: String(err?.message ?? err), attempts: nextAttempts });
+                await this.createDeadLetter(notificationId, 'max_retries_exceeded', { error: errorMessage, attempts: nextAttempts });
             }
             throw err;
         }
     }
     async handleProviderWebhook(payload) {
         const db = this.db;
-        const notification = await db.notification.findFirst({ where: { providerMessageId: payload.MessageSid ?? payload.messageSid } });
+        const providerMessageId = (payload.MessageSid ?? payload.messageSid);
+        if (!providerMessageId)
+            return null;
+        const notification = await db.notification.findFirst({ where: { providerMessageId } });
         if (!notification) {
             return null;
         }
-        const status = payload.MessageStatus ?? payload.messageStatus ?? 'unknown';
+        const status = String(payload.MessageStatus ?? payload.messageStatus ?? 'unknown');
         const statusMap = {
             queued: 'PENDING',
             sent: 'SENT',

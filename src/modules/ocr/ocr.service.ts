@@ -397,8 +397,10 @@ export class OcrService {
     }
 
     const imagePath = await savePrivateOcrJobImage(imageBase64, sanitizedImage);
-    const createData: Prisma.OcrJobCreateInput = { imagePath } as unknown as Prisma.OcrJobCreateInput;
-    if (options.userId) (createData as any).user = { connect: { id: options.userId } };
+    const createData: Prisma.OcrJobCreateInput = {
+      imagePath,
+      ...(options.userId ? { user: { connect: { id: options.userId } } } : {}),
+    };
     const job = await OcrRepository.createOcrJob(createData);
 
     try {
@@ -558,8 +560,8 @@ export class OcrService {
       reason: result.reason,
       ocrJobId: result.jobId,
       processingTimeMs: result.processingTimeMs,
-    } as unknown as Prisma.IdCardVerificationCreateInput;
-    if (userId) (createVerification as any).user = { connect: { id: userId } };
+      ...(userId ? { user: { connect: { id: userId } } } : {}),
+    };
 
     const verification = await OcrRepository.createIdCardVerification(createVerification);
 
@@ -590,7 +592,6 @@ export class OcrService {
   static async listIdCardVerifications(page = 1, limit = 20): Promise<ListIdCardVerificationsResult> {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
-    const skip = (safePage - 1) * safeLimit;
     const cacheKey = `${idCardVerificationListCachePrefix}:${safePage}:${safeLimit}`;
     const cached = await getJsonCache<ListIdCardVerificationsResult>(cacheKey);
 

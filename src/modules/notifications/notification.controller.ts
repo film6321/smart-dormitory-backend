@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import type { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { createResponse } from '../../shared/api-response';
 import NotificationService from './notification.service';
 
@@ -14,7 +15,7 @@ export class NotificationController {
 
   static async listNotifications(req: Request, res: Response, next: NextFunction) {
     try {
-      const authUser = (req as any).user as { id?: number; role?: string } | undefined;
+      const authUser = (req as AuthenticatedRequest).user as { id?: number; role?: string } | undefined;
       const userId = authUser?.role === 'ADMIN' ? undefined : authUser?.id;
       const notifications = await NotificationController.getService().listNotifications(userId);
       return res.status(200).json(createResponse(200, 'Notifications fetched successfully', notifications));

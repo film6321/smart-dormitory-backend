@@ -1,10 +1,12 @@
 # PROJECT_RULES
 
+> **Status: historical reference.** When this file conflicts with `AGENTS.md` or `.docs/ai-context/`, the active documents take precedence.
+
 ## กฎของโปรเจกต์
 
 - ใช้ TypeScript ทุกไฟล์
 - ห้ามเขียน Business Logic ใน Controller
-- ทุก Module ต้องมี Controller, Service และ Repository
+- Modules use Controllers and Services. Add a Repository only when it centralizes meaningful database access; do not add one solely to satisfy a pattern.
 - ใช้ Prisma เป็น ORM เท่านั้น
 - Response ต้องอยู่ในรูปแบบเดียวกัน
 - Face Recognition และ OCR ติดต่อผ่าน REST API เท่านั้น

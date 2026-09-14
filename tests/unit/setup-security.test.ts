@@ -81,4 +81,52 @@ describe("setupSecurity cors policy", () => {
     assert.equal(response.headers.get("access-control-allow-origin"), origin);
     assert.deepEqual(body, { ok: true });
   });
+
+  it("allows origins configured via NGROK_DOMAIN", async () => {
+    process.env.NGROK_DOMAIN = "test-tunnel.ngrok-free.dev";
+    const app = express();
+    setupSecurity(app);
+    app.get("/probe-ngrok", (_req, res) => res.status(200).json({ ok: true }));
+
+    const testServer = app.listen(0);
+    const addr = testServer.address() as { port: number };
+    const ngrokOrigin = "https://test-tunnel.ngrok-free.dev";
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${addr.port}/probe-ngrok`, {
+        headers: { Origin: ngrokOrigin },
+      });
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("access-control-allow-origin"), ngrokOrigin);
+      assert.deepEqual(body, { ok: true });
+    } finally {
+      delete process.env.NGROK_DOMAIN;
+      testServer.close();
+    }
+  });
+
+  it("allows comma-separated origins in CORS_ORIGIN", async () => {
+    process.env.CORS_ORIGIN = "https://sub1.example.com, https://sub2.example.com";
+    const app = express();
+    setupSecurity(app);
+    app.get("/probe-multi", (_req, res) => res.status(200).json({ ok: true }));
+
+    const testServer = app.listen(0);
+    const addr = testServer.address() as { port: number };
+    const targetOrigin = "https://sub2.example.com";
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${addr.port}/probe-multi`, {
+        headers: { Origin: targetOrigin },
+      });
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("access-control-allow-origin"), targetOrigin);
+      assert.deepEqual(body, { ok: true });
+    } finally {
+      delete process.env.CORS_ORIGIN;
+      testServer.close();
+    }
+  });
 });

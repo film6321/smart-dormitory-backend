@@ -15,12 +15,12 @@ const verifyFaceGateToken = (req: Request, res: Response, next: NextFunction) =>
   const expectedToken = process.env.FACE_API_KEY?.trim();
 
   if (expectedToken && token && token === expectedToken) {
-    (req as any).user = { id: 0, role: 'ADMIN' };
+    (req as AuthenticatedRequest).user = { id: 0, role: 'ADMIN' };
     return next();
   }
 
   // Fallback to standard admin check
-  verifyToken(req as any, res, next);
+  verifyToken(req as AuthenticatedRequest, res, next);
 };
 
 const faceLimiter = rateLimit({

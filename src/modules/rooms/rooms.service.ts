@@ -1,5 +1,6 @@
 import { AppError } from '../../middlewares/error-handler';
 import { RoomsRepository } from './rooms.repository';
+import { type DbClient } from '../../database/db';
 import { getSettingValue } from '../settings/settings.service';
 
 export interface CreateRoomInput {
@@ -20,7 +21,7 @@ export class RoomsService {
     return RoomsRepository.getRoomById(id);
   }
 
-  static async createRoom(data: CreateRoomInput, db?: any) {
+  static async createRoom(data: CreateRoomInput, db?: DbClient) {
     const maxOccupants = Number(await getSettingValue('maxOccupants')) || 4;
     if ((data.capacity ?? 1) > maxOccupants) {
       throw new AppError(`Room capacity cannot exceed ${maxOccupants}`, 400);

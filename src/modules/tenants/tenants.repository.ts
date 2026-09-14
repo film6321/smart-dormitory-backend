@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
 
 export class TenantsRepository {
   private static readonly userSelect: Prisma.UserSelect = {
@@ -10,7 +10,7 @@ export class TenantsRepository {
     updatedAt: true,
   };
 
-  static async listTenants(userId?: number, role?: string, db = prisma) {
+  static async listTenants(userId?: number, role?: string, db: DbClient = prisma) {
     const where: Prisma.TenantWhereInput = role === 'ADMIN' ? {} : { userId };
 
     return db.tenant.findMany({
@@ -20,41 +20,41 @@ export class TenantsRepository {
     });
   }
 
-  static async getTenantById(id: number, db = prisma) {
+  static async getTenantById(id: number, db: DbClient = prisma) {
     return db.tenant.findUnique({
       where: { id },
       include: { user: { select: TenantsRepository.userSelect }, room: true },
     });
   }
 
-  static async getTenantByUserId(userId: number, db = prisma) {
+  static async getTenantByUserId(userId: number, db: DbClient = prisma) {
     return db.tenant.findUnique({
       where: { userId },
       include: { user: { select: TenantsRepository.userSelect }, room: true },
     });
   }
 
-  static async findUserById(id: number, db = prisma) {
+  static async findUserById(id: number, db: DbClient = prisma) {
     return db.user.findUnique({
       where: { id },
       select: { id: true },
     });
   }
 
-  static async findRoomById(id: number, db = prisma) {
+  static async findRoomById(id: number, db: DbClient = prisma) {
     return db.room.findUnique({ where: { id } });
   }
 
-  static async createTenant(data: Prisma.TenantCreateInput, db = prisma) {
+  static async createTenant(data: Prisma.TenantCreateInput | Prisma.TenantUncheckedCreateInput, db: DbClient = prisma) {
     return db.tenant.create({ data });
   }
 
-  static async updateTenant(id: number, data: Prisma.TenantUpdateInput, db = prisma) {
+  static async updateTenant(id: number, data: Prisma.TenantUpdateInput | Prisma.TenantUncheckedUpdateInput, db: DbClient = prisma) {
     return db.tenant.update({ where: { id }, data });
   }
 
-  static async deleteTenant(id: number, db = prisma) {
-    const deleteRelatedRecords = async (transaction: any) => {
+  static async deleteTenant(id: number, db: DbClient = prisma) {
+    const deleteRelatedRecords = async (transaction: Prisma.TransactionClient | typeof prisma) => {
       const visitors = await transaction.visitor.findMany({
         where: { tenantId: id },
         select: { id: true },
@@ -85,7 +85,7 @@ export class TenantsRepository {
     };
 
     if (typeof db.$transaction === 'function') {
-      return db.$transaction((transaction: any) => deleteRelatedRecords(transaction));
+      return (db as typeof prisma).$transaction((transaction: Prisma.TransactionClient) => deleteRelatedRecords(transaction));
     }
 
     return deleteRelatedRecords(db);

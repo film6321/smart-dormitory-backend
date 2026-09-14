@@ -38,12 +38,32 @@ describe('NotificationService (unit)', () => {
     };
 
     const original = NotificationService.prototype.listNotifications;
-    NotificationService.prototype.listNotifications = async () => [{ id: 1, status: 'PENDING' }];
+    NotificationService.prototype.listNotifications = async () => [{
+      id: 1,
+      providerId: null,
+      templateId: null,
+      tenantId: null,
+      userId: 2,
+      channel: 'SMS',
+      type: 'GENERIC',
+      recipientPhone: null,
+      recipientEmail: null,
+      payload: null,
+      status: 'PENDING',
+      providerMessageId: null,
+      attempts: 0,
+      lastError: null,
+      scheduledAt: null,
+      sentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }];
 
     try {
       await NotificationController.listNotifications(req, res, next);
       assert.equal(res.statusCode, 200);
-      assert.deepEqual(res.body.data, [{ id: 1, status: 'PENDING' }]);
+      assert.equal(res.body.data[0]?.id, 1);
+      assert.equal(res.body.data[0]?.status, 'PENDING');
     } finally {
       NotificationService.prototype.listNotifications = original;
     }
@@ -108,12 +128,21 @@ describe('NotificationService (unit)', () => {
     };
 
     const original = NotificationPreferenceController.prototype['getPreferences'];
-    NotificationPreferenceController.prototype['getPreferences'] = async () => [{ channel: 'SMS', optedOut: false }];
+    NotificationPreferenceController.prototype['getPreferences'] = async () => [{
+      id: 1,
+      tenantId: null,
+      userId: 7,
+      channel: 'SMS',
+      optedOut: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }];
 
     try {
       await NotificationPreferenceController.listPreferences(req, res, () => { throw new Error('next should not be called'); });
       assert.equal(res.statusCode, 200);
-      assert.deepEqual(res.body.data, [{ channel: 'SMS', optedOut: false }]);
+      assert.equal(res.body.data[0]?.channel, 'SMS');
+      assert.equal(res.body.data[0]?.optedOut, false);
     } finally {
       NotificationPreferenceController.prototype['getPreferences'] = original;
     }
@@ -134,7 +163,7 @@ describe('NotificationService (unit)', () => {
     };
 
     const svc = new NotificationService(mockDb);
-    await svc.scheduleNotification({ tenantId: 1, channel: 'SMS', type: 'GENERIC' });
+    await svc.scheduleNotification({ tenantId: 1, channel: 'SMS', type: 'GENERIC', payload: '{}' });
 
     assert.equal(created[0]?.recipientPhone, '+66912345678');
   });
@@ -228,7 +257,7 @@ describe('NotificationService (unit)', () => {
     const result = await svc.sendNotification(1);
 
     // Assert
-    assert.equal(typeof result.id, 'string');
+    assert.equal(typeof (result as any).id, 'string');
     assert.equal(updated?.where?.id, 1);
     assert.equal(updated?.data?.status, 'SENT');
     assert.equal(updated?.data?.attempts, 1);

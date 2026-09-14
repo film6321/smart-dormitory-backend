@@ -1,7 +1,8 @@
 import https from 'https';
+import type { NotificationProvider } from '@prisma/client';
+import type { ProviderSendPayload, ProviderSendResult } from './simpleProvider';
 
-export async function send(provider: any, notification: any) {
-  const config = provider?.config ? JSON.parse(provider.config) : {};
+export async function send(provider: NotificationProvider | null | undefined, notification: ProviderSendPayload): Promise<ProviderSendResult> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_FROM_NUMBER;

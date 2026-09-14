@@ -39,7 +39,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.send = send;
 const https_1 = __importDefault(require("https"));
 async function send(provider, notification) {
-    const config = provider?.config ? JSON.parse(provider.config) : {};
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const fromNumber = process.env.TWILIO_FROM_NUMBER;

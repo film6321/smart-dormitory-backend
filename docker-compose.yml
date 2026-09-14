@@ -69,6 +69,8 @@ services:
       - .env
     environment:
       PORT: "3000"
+      UV_THREADPOOL_SIZE: "64"
+      RATE_LIMIT_STORE: "redis"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespw}@pgbouncer:6432/${POSTGRES_DB:-projectdb}?schema=public
       REDIS_URL: redis://redis:6379
       PAYMENT_API_URL: http://payment:8002
@@ -77,6 +79,8 @@ services:
       OCR_API_BASE_URL: http://host.docker.internal:8000
       FACE_API_URL: http://face-recognition:8000
       FACE_API_KEY: ${FACE_API_KEY:-face-recognition-secret-key-change-me-in-production}
+    deploy:
+      replicas: 2
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -142,6 +146,7 @@ services:
       - "${NGINX_HOST_PORT:-3000}:80"
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../smart-dormitory-frontend/dist:/usr/share/nginx/html:ro
 
   prometheus:
     image: prom/prometheus:latest
@@ -172,6 +177,16 @@ services:
       - grafanadata:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: smart-dormitory-ngrok
+    restart: unless-stopped
+    command: http --url=${NGROK_DOMAIN} nginx:80
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      - nginx
 
 volumes:
   pgdata:

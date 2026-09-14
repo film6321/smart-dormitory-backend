@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -78,14 +79,24 @@ const includeBatchDetails = {
   },
 } as const;
 
-const toBatchResponse = (batch: any) => ({
+type PaymentBatchWithDetails = Prisma.PaymentBatchGetPayload<{
+  include: typeof includeBatchDetails;
+}>;
+
+type PaymentBatchItemWithBill = PaymentBatchWithDetails['items'][number];
+
+const toBatchResponse = (batch: PaymentBatchWithDetails | null) => {
+  if (!batch) {
+    throw new AppError('Payment batch not found', 404);
+  }
+  return {
   id: batch.id,
   amount: Number(batch.amount),
   status: batch.status,
   createdAt: batch.createdAt,
   updatedAt: batch.updatedAt,
   account: getAccountDetails(),
-  items: batch.items.map((item: any) => ({
+  items: batch.items.map((item: PaymentBatchItemWithBill) => ({
     billId: item.billId,
     amount: Number(item.amount),
     bill: {
@@ -97,7 +108,8 @@ const toBatchResponse = (batch: any) => ({
       penaltyAmount: Number(item.bill.penaltyAmount),
     },
   })),
-});
+  };
+};
 
 export class PaymentBatchService {
   static async create(userId: number, billIds: number[], idempotencyKey: string) {

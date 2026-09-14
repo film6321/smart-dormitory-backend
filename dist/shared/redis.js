@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.disconnectRedis = exports.getRedisClient = void 0;
+exports.releaseLock = exports.acquireLock = exports.disconnectRedis = exports.getRedisClient = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
 const logger_1 = require("../logger");
 let redisClient;
@@ -42,3 +42,25 @@ const disconnectRedis = async () => {
     redisClient = undefined;
 };
 exports.disconnectRedis = disconnectRedis;
+/**
+ * Acquire a distributed Redis lock using SET NX EX (atomic).
+ * Returns true if lock was acquired, false if already held by another process.
+ *
+ * @param key   - Unique lock key (e.g. 'lock:payment:bill:42')
+ * @param ttlMs - Lock time-to-live in milliseconds (auto-release on crash)
+ */
+const acquireLock = async (key, ttlMs = 30_000) => {
+    const result = await (0, exports.getRedisClient)().set(key, '1', 'PX', ttlMs, 'NX');
+    return result === 'OK';
+};
+exports.acquireLock = acquireLock;
+/**
+ * Release a distributed Redis lock.
+ * Safe to call even if lock has already expired.
+ *
+ * @param key - Same key used in acquireLock
+ */
+const releaseLock = async (key) => {
+    await (0, exports.getRedisClient)().del(key);
+};
+exports.releaseLock = releaseLock;

@@ -26,7 +26,6 @@ _หลีกเลี่ยงการโหลดเอกสารทั้�
 | **Blueprint สถาปัตยกรรม** | [.docs/ai-context/spec-blueprint.md](.docs/ai-context/spec-blueprint.md)                               | Core Flows (Bill/Visitor/Maintenance), Resilience Rules     |
 | **สเปก Backend**          | [.docs/ai-context/spec-backend.md](.docs/ai-context/spec-backend.md)                                   | Thin Controller, ApiResponse, OCC, Prisma Migration         |
 | **สเปก Frontend**         | [.docs/ai-context/spec-frontend.md](.docs/ai-context/spec-frontend.md)                                 | React/Vite, Axios, Socket.IO cleanup, Memory Leak           |
-| **กฎ Runtime**            | [.docs/ai-context/runtime-rules.md](.docs/ai-context/runtime-rules.md)                                 | Coding constraints ครบทุก layer, Redis rules, Test rules    |
 | **Data Consistency**      | [.docs/ai-context/spec-consistency.md](.docs/ai-context/spec-consistency.md)                           | State Authority, OCC, Distributed Lock, Trace Correlation   |
 | **Infra & DevOps**        | [.docs/ai-context/spec-infra-devops.md](.docs/ai-context/spec-infra-devops.md)                         | Docker Topology, Nginx, Prometheus/Grafana, SLO Targets     |
 | **Error Handling**        | [.docs/ai-context/spec-error-handling.md](.docs/ai-context/spec-error-handling.md)                     | OCR Retry Policy, Schema Versioning, Dead Job Handling      |
@@ -88,7 +87,6 @@ _ถ้าโค้ดขัดกับ AGENTS.md → แก้ที่โค�
     spec-infra-devops.md    Infrastructure, Docker, Observability
     spec-error-handling.md  OCR Retry, Schema Versioning, Dead Jobs
     spec-runtime-modes.md   Dev / Staging / Production behavior rules
-    runtime-rules.md        Runtime constraints ทุก Layer
     contracts/
       state-machine.md      Bill/Visitor/Maintenance state transitions
       api-contracts.md      REST API endpoints & JSON schemas

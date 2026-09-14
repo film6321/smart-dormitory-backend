@@ -146,14 +146,25 @@ export class AuthService {
       const user = await AuthRepository.createUser(createPayload);
       return { id: user.id, email: user.email, role: user.role };
     } catch (error) {
+      if (getPrismaErrorCode(error) === 'P2002') {
+        throw new AppError('อีเมลหรือชื่อผู้ใช้นี้ถูกใช้งานแล้ว', 400);
+      }
+
       if (finalUsername && getPrismaErrorCode(error) === 'P2022') {
         logger.warn({ error }, 'Username column is not available yet, creating user without username');
-        const user = await AuthRepository.createUser({
-          email,
-          password: hashedPassword,
-          role: Role.STUDENT,
-        });
-        return { id: user.id, email: user.email, role: user.role };
+        try {
+          const user = await AuthRepository.createUser({
+            email,
+            password: hashedPassword,
+            role: Role.STUDENT,
+          });
+          return { id: user.id, email: user.email, role: user.role };
+        } catch (innerError) {
+          if (getPrismaErrorCode(innerError) === 'P2002') {
+            throw new AppError('อีเมลนี้ถูกใช้งานแล้ว', 400);
+          }
+          throw innerError;
+        }
       }
 
       throw error;

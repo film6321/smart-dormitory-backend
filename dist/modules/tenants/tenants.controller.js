@@ -76,27 +76,19 @@ class TenantsController {
                 ocrData = await ocr_service_1.OcrService.verifyIdCard(base64Str, { userId });
             }
             catch (ocrErr) {
-                console.warn('OCR processing failed inside document upload:', ocrErr);
-                return res.status(502).json((0, api_response_1.createResponse)(502, 'ไม่สามารถเชื่อมต่อระบบ OCR ได้ กรุณาตรวจสอบบริการ OCR แล้วลองใหม่อีกครั้ง'));
+                console.warn('OCR processing failed inside document upload, proceeding with fallback:', ocrErr);
             }
-            if (!ocrData?.isThaiIdCard) {
-                return res.status(422).json((0, api_response_1.createResponse)(422, ocrData?.reason || 'ระบบ OCR ไม่สามารถยืนยันว่าเป็นบัตรประชาชนไทยได้', {
-                    idCardImagePath,
-                    paymentSlipPath,
-                    ocrData,
-                }));
-            }
-            return res.status(200).json((0, api_response_1.createResponse)(200, 'Documents uploaded and verified successfully', {
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Documents uploaded successfully', {
                 idCardImagePath,
                 paymentSlipPath,
-                ocrData: ocrData ? {
-                    citizenId: ocrData.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
-                    fullNameTh: ocrData.fullNameTh || '',
-                    birthDateTh: ocrData.birthDateTh || '',
-                    age: ocrData.age,
-                    address: ocrData.address || '',
-                    isThaiIdCard: ocrData.isThaiIdCard,
-                } : null
+                ocrData: {
+                    citizenId: ocrData?.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
+                    fullNameTh: ocrData?.fullNameTh || '',
+                    birthDateTh: ocrData?.birthDateTh || '',
+                    age: ocrData?.age ?? null,
+                    address: ocrData?.address || '',
+                    isThaiIdCard: Boolean(ocrData?.isThaiIdCard),
+                }
             }));
         }
         catch (error) {

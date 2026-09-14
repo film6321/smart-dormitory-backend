@@ -1,7 +1,8 @@
 import { logger } from '../logger';
 import NotificationService from '../modules/notifications/notification.service';
+import { type DbClient } from '../database/db';
 
-const getDbClient = (dbClient?: any) => {
+const getDbClient = (dbClient?: DbClient) => {
   if (dbClient) {
     return dbClient;
   }
@@ -35,7 +36,7 @@ let failedCount = 0;
 let lastRunAt = 0;
 let workerIntervalMs = Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS ?? 5000);
 
-export async function processPendingNotifications(dbClient?: any) {
+export async function processPendingNotifications(dbClient?: DbClient) {
   if (isProcessing) {
     return;
   }
@@ -94,7 +95,7 @@ export async function processPendingNotifications(dbClient?: any) {
   }
 }
 
-export function startNotificationWorker(dbClient?: any, intervalMs = Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS ?? 5000)) {
+export function startNotificationWorker(dbClient?: DbClient, intervalMs = Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS ?? 5000)) {
   if (workerTimer) {
     return workerTimer;
   }

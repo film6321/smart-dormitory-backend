@@ -229,19 +229,18 @@ class FaceVerificationController {
     static async detections(req, res, next) {
         try {
             const payload = req.body || {};
-            const { id, confidence, scanned_at, bounding_box, device_code, direction } = payload;
+            const { id, confidence, scanned_at, device_code, direction } = payload;
             if (!id || !scanned_at) {
                 return res.status(400).json({ status: 'ignored', reason: 'missing_required_fields' });
             }
             const scan = {
-                id: id,
+                id: String(id),
                 student_code: payload.student_code || '',
                 direction: direction === 'OUT' ? 'OUT' : 'IN',
                 confidence: confidence !== undefined ? Number(confidence) : 0,
                 scanned_at,
                 device_code,
                 action: payload.action,
-                bounding_box: payload.bounding_box,
                 student: payload.student,
             };
             // Record to monitoring bus (will broadcast SSE 'scan')

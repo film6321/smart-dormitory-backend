@@ -4,7 +4,7 @@ import { AppError } from '../../middlewares/error-handler';
 import { requireRole, verifyToken } from '../../middlewares/auth-jwt';
 import { validateDto } from '../shared/dto-validation';
 import { BillingController } from './billing.controller';
-import { generateRoomBillSchema, updateBillStatusSchema, uploadSlipSchema } from './billing.dto';
+import { generateRoomBillSchema, updateBillStatusSchema } from './billing.dto';
 
 const router = Router();
 

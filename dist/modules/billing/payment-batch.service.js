@@ -75,26 +75,31 @@ const includeBatchDetails = {
         },
     },
 };
-const toBatchResponse = (batch) => ({
-    id: batch.id,
-    amount: Number(batch.amount),
-    status: batch.status,
-    createdAt: batch.createdAt,
-    updatedAt: batch.updatedAt,
-    account: getAccountDetails(),
-    items: batch.items.map((item) => ({
-        billId: item.billId,
-        amount: Number(item.amount),
-        bill: {
-            ...item.bill,
-            amount: Number(item.bill.amount),
-            rentAmount: Number(item.bill.rentAmount),
-            electricAmount: Number(item.bill.electricAmount),
-            waterAmount: Number(item.bill.waterAmount),
-            penaltyAmount: Number(item.bill.penaltyAmount),
-        },
-    })),
-});
+const toBatchResponse = (batch) => {
+    if (!batch) {
+        throw new error_handler_1.AppError('Payment batch not found', 404);
+    }
+    return {
+        id: batch.id,
+        amount: Number(batch.amount),
+        status: batch.status,
+        createdAt: batch.createdAt,
+        updatedAt: batch.updatedAt,
+        account: getAccountDetails(),
+        items: batch.items.map((item) => ({
+            billId: item.billId,
+            amount: Number(item.amount),
+            bill: {
+                ...item.bill,
+                amount: Number(item.bill.amount),
+                rentAmount: Number(item.bill.rentAmount),
+                electricAmount: Number(item.bill.electricAmount),
+                waterAmount: Number(item.bill.waterAmount),
+                penaltyAmount: Number(item.bill.penaltyAmount),
+            },
+        })),
+    };
+};
 class PaymentBatchService {
     static async create(userId, billIds, idempotencyKey) {
         const uniqueBillIds = [...new Set(billIds)];

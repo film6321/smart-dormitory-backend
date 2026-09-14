@@ -31,6 +31,9 @@ const health_1 = __importDefault(require("./routes/health"));
 const audit_routes_1 = __importDefault(require("./modules/audit/audit.routes"));
 const settings_routes_1 = __importDefault(require("./modules/settings/settings.routes"));
 const app = (0, express_1.default)();
+// Trust the first proxy hop (Nginx) so req.ip reflects the real client IP
+// from the X-Forwarded-For header — required for accurate Rate Limiting in replicated setup
+app.set('trust proxy', 1);
 // Serve static files from public folder (e.g., live camera feed)
 app.use(express_1.default.static(path_1.default.join(process.cwd(), 'public')));
 // Initialize system components

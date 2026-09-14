@@ -44,3 +44,25 @@ export const disconnectRedis = async (): Promise<void> => {
   await redisClient.quit();
   redisClient = undefined;
 };
+
+/**
+ * Acquire a distributed Redis lock using SET NX EX (atomic).
+ * Returns true if lock was acquired, false if already held by another process.
+ *
+ * @param key   - Unique lock key (e.g. 'lock:payment:bill:42')
+ * @param ttlMs - Lock time-to-live in milliseconds (auto-release on crash)
+ */
+export const acquireLock = async (key: string, ttlMs: number = 30_000): Promise<boolean> => {
+  const result = await getRedisClient().set(key, '1', 'PX', ttlMs, 'NX');
+  return result === 'OK';
+};
+
+/**
+ * Release a distributed Redis lock.
+ * Safe to call even if lock has already expired.
+ *
+ * @param key - Same key used in acquireLock
+ */
+export const releaseLock = async (key: string): Promise<void> => {
+  await getRedisClient().del(key);
+};

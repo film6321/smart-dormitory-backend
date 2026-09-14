@@ -12,7 +12,7 @@ export class VisitorService {
   }
 
   static async registerVisitor(data: { guestName: string; purpose?: string; roomId?: number; tenantId?: number; expectedEntryTime?: Date }) {
-    const createData: any = {
+    const createData: Prisma.VisitorCreateInput = {
       guestName: data.guestName,
       purpose: data.purpose,
       expectedEntryTime: data.expectedEntryTime,

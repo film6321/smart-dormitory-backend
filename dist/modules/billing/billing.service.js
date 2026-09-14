@@ -11,6 +11,7 @@ const notification_service_1 = __importDefault(require("../notifications/notific
 const notification_gateway_1 = require("../../realtime/notification-gateway");
 const billing_repository_1 = require("./billing.repository");
 const payment_provider_1 = require("./payment.provider");
+const redis_1 = require("../../shared/redis");
 class BillingService {
     static async listBills(userId, role) {
         return billing_repository_1.BillingRepository.listBills(userId, role);
@@ -169,110 +170,123 @@ class BillingService {
         });
     }
     static async verifyPaymentSlip(billId, userId, idempotencyKey, file) {
-        const bill = await billing_repository_1.BillingRepository.findBillById(billId);
-        if (!bill) {
-            throw new error_handler_1.AppError('Bill not found', 404);
+        // Distributed lock: prevent double-submit across replicas
+        // SET NX PX is atomic — only one replica can acquire this lock at a time
+        const lockKey = `lock:payment:bill:${billId}`;
+        const lockAcquired = await (0, redis_1.acquireLock)(lockKey, 30_000);
+        if (!lockAcquired) {
+            throw new error_handler_1.AppError('Payment is already being processed, please wait a moment and try again', 409);
         }
-        if (bill.tenant.userId !== userId) {
-            throw new error_handler_1.AppError('You are not allowed to pay this bill', 403);
-        }
-        if (bill.status !== 'UNPAID' && bill.status !== 'OVERDUE') {
-            throw new error_handler_1.AppError('This bill cannot receive a payment', 409);
-        }
-        const slipHash = crypto_1.default.createHash('sha256').update(file.buffer).digest('hex');
-        const existingPayment = await db_1.prisma.payment.findFirst({
-            where: {
-                OR: [{ idempotencyKey }, { slipHash }],
-            },
-        });
-        if (existingPayment) {
-            throw new error_handler_1.AppError('This payment has already been submitted', 409);
-        }
-        const payment = await db_1.prisma.$transaction(async (transaction) => {
-            const updatedBill = await transaction.bill.updateMany({
-                where: {
-                    id: billId,
-                    version: bill.version,
-                    status: bill.status,
-                },
-                data: {
-                    status: 'VERIFYING',
-                    slipHash,
-                    reason: 'Payment provider verification pending',
-                    version: { increment: 1 },
-                },
-            });
-            if (updatedBill.count !== 1) {
-                throw new error_handler_1.AppError('Bill was updated by another request', 409);
-            }
-            return transaction.payment.create({
-                data: {
-                    billId,
-                    payerUserId: userId,
-                    amount: bill.amount,
-                    status: 'VERIFYING',
-                    idempotencyKey,
-                    slipHash,
-                },
-            });
-        });
-        let verification;
         try {
-            verification = await payment_provider_1.PaymentProviderClient.verifySlip(file);
-        }
-        catch (error) {
-            await db_1.prisma.payment.update({
-                where: { id: payment.id },
-                data: {
-                    status: 'MANUAL_REVIEW',
-                    failureReason: error instanceof Error ? error.message : 'Payment provider request failed',
-                },
-            });
-            throw error;
-        }
-        const expectedAmount = Number(bill.amount);
-        const amountMatches = verification.amount !== null && verification.amount === expectedAmount;
-        const verified = verification.success
-            && verification.recipientMatched
-            && !verification.duplicate
-            && amountMatches;
-        const failureReason = verification.duplicate
-            ? 'Duplicate slip'
-            : !verification.recipientMatched
-                ? 'Recipient account does not match'
-                : !amountMatches
-                    ? 'Payment amount does not match bill amount'
-                    : verification.message;
-        const result = await db_1.prisma.$transaction(async (transaction) => {
-            const currentBill = await transaction.bill.findUnique({ where: { id: billId } });
-            if (!currentBill || currentBill.status !== 'VERIFYING') {
-                throw new error_handler_1.AppError('Bill verification state changed unexpectedly', 409);
+            const bill = await billing_repository_1.BillingRepository.findBillById(billId);
+            if (!bill) {
+                throw new error_handler_1.AppError('Bill not found', 404);
             }
-            const updatedBill = await transaction.bill.updateMany({
-                where: { id: billId, version: currentBill.version, status: 'VERIFYING' },
-                data: {
-                    status: verified ? 'PAID' : 'FAILED',
-                    paidAt: verified ? new Date() : null,
-                    reason: verified ? 'Payment verified' : failureReason,
-                    version: { increment: 1 },
-                },
-            });
-            if (updatedBill.count !== 1) {
-                throw new error_handler_1.AppError('Bill was updated by another request', 409);
+            if (bill.tenant.userId !== userId) {
+                throw new error_handler_1.AppError('You are not allowed to pay this bill', 403);
             }
-            const updatedPayment = await transaction.payment.update({
-                where: { id: payment.id },
-                data: {
-                    status: verified ? 'PAID' : 'FAILED',
-                    providerResponse: JSON.stringify(verification.rawData),
-                    failureReason: verified ? null : failureReason,
-                    verifiedAt: verified ? new Date() : null,
+            if (bill.status !== 'UNPAID' && bill.status !== 'OVERDUE') {
+                throw new error_handler_1.AppError('This bill cannot receive a payment', 409);
+            }
+            const slipHash = crypto_1.default.createHash('sha256').update(file.buffer).digest('hex');
+            const existingPayment = await db_1.prisma.payment.findFirst({
+                where: {
+                    OR: [{ idempotencyKey }, { slipHash }],
                 },
             });
-            return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
-        });
-        (0, notification_gateway_1.publishAdminAlert)(billId, 'PAYMENT_SLIP', result.billStatus === 'PAID' ? `ตรวจสลิปบิล #${billId}: ชำระเงินแล้ว` : `ตรวจสลิปบิล #${billId}: ไม่ผ่าน (${failureReason})`, result.billStatus);
-        return result;
+            if (existingPayment) {
+                throw new error_handler_1.AppError('This payment has already been submitted', 409);
+            }
+            const payment = await db_1.prisma.$transaction(async (transaction) => {
+                const updatedBill = await transaction.bill.updateMany({
+                    where: {
+                        id: billId,
+                        version: bill.version,
+                        status: bill.status,
+                    },
+                    data: {
+                        status: 'VERIFYING',
+                        slipHash,
+                        reason: 'Payment provider verification pending',
+                        version: { increment: 1 },
+                    },
+                });
+                if (updatedBill.count !== 1) {
+                    throw new error_handler_1.AppError('Bill was updated by another request', 409);
+                }
+                return transaction.payment.create({
+                    data: {
+                        billId,
+                        payerUserId: userId,
+                        amount: bill.amount,
+                        status: 'VERIFYING',
+                        idempotencyKey,
+                        slipHash,
+                    },
+                });
+            });
+            let verification;
+            try {
+                verification = await payment_provider_1.PaymentProviderClient.verifySlip(file);
+            }
+            catch (error) {
+                await db_1.prisma.payment.update({
+                    where: { id: payment.id },
+                    data: {
+                        status: 'MANUAL_REVIEW',
+                        failureReason: error instanceof Error ? error.message : 'Payment provider request failed',
+                    },
+                });
+                throw error;
+            }
+            const expectedAmount = Number(bill.amount);
+            const amountMatches = verification.amount !== null && verification.amount === expectedAmount;
+            const verified = verification.success
+                && verification.recipientMatched
+                && !verification.duplicate
+                && amountMatches;
+            const failureReason = verification.duplicate
+                ? 'Duplicate slip'
+                : !verification.recipientMatched
+                    ? 'Recipient account does not match'
+                    : !amountMatches
+                        ? 'Payment amount does not match bill amount'
+                        : verification.message;
+            const result = await db_1.prisma.$transaction(async (transaction) => {
+                const currentBill = await transaction.bill.findUnique({ where: { id: billId } });
+                if (!currentBill || currentBill.status !== 'VERIFYING') {
+                    throw new error_handler_1.AppError('Bill verification state changed unexpectedly', 409);
+                }
+                const updatedBill = await transaction.bill.updateMany({
+                    where: { id: billId, version: currentBill.version, status: 'VERIFYING' },
+                    data: {
+                        status: verified ? 'PAID' : 'FAILED',
+                        paidAt: verified ? new Date() : null,
+                        reason: verified ? 'Payment verified' : failureReason,
+                        version: { increment: 1 },
+                    },
+                });
+                if (updatedBill.count !== 1) {
+                    throw new error_handler_1.AppError('Bill was updated by another request', 409);
+                }
+                const updatedPayment = await transaction.payment.update({
+                    where: { id: payment.id },
+                    data: {
+                        status: verified ? 'PAID' : 'FAILED',
+                        providerResponse: JSON.stringify(verification.rawData),
+                        failureReason: verified ? null : failureReason,
+                        verifiedAt: verified ? new Date() : null,
+                    },
+                });
+                return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
+            });
+            (0, notification_gateway_1.publishAdminAlert)(billId, 'PAYMENT_SLIP', result.billStatus === 'PAID' ? `ตรวจสลิปบิล #${billId}: ชำระเงินแล้ว` : `ตรวจสลิปบิล #${billId}: ไม่ผ่าน (${failureReason})`, result.billStatus);
+            return result;
+        }
+        finally {
+            // Always release lock — even if an error was thrown
+            await (0, redis_1.releaseLock)(lockKey);
+        }
     }
     static async updateBillStatus(billId, status, reason) {
         const existing = await billing_repository_1.BillingRepository.findBillById(billId);

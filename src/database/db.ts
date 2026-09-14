@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -11,3 +11,5 @@ const schema = new URL(connectionString).searchParams.get('schema') ?? 'public';
 const adapter = new PrismaPg({ connectionString }, { schema });
 
 export const prisma = new PrismaClient({ adapter });
+
+export type DbClient = PrismaClient | Prisma.TransactionClient;

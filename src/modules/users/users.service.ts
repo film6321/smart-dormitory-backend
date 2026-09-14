@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../middlewares/error-handler';
 import { resolveUsersPresence } from '../../shared/presence';
 import { UsersRepository } from './users.repository';
+import { type DbClient } from '../../database/db';
 
 export interface CreateUserInput {
   email: string;
@@ -32,7 +33,7 @@ export class UsersService {
     };
   }
 
-  static async listUsers(db?: any) {
+  static async listUsers(db?: DbClient) {
     const users = await UsersRepository.listUsers(db);
     const presence = await resolveUsersPresence(users.map((user) => ({ id: user.id, lastLogin: user.lastLogin })));
     return users.map((user) => UsersService.withDisplayName({
@@ -41,7 +42,7 @@ export class UsersService {
     }));
   }
 
-  static async getUserById(id: number, db?: any) {
+  static async getUserById(id: number, db?: DbClient) {
     const user = await UsersRepository.getUserById(id, db);
     const presence = await resolveUsersPresence(user ? [{ id: user.id, lastLogin: user.lastLogin }] : []);
     return UsersService.withDisplayName(user ? {
@@ -50,7 +51,7 @@ export class UsersService {
     } : user);
   }
 
-  static async createUser(data: CreateUserInput, db?: any) {
+  static async createUser(data: CreateUserInput, db?: DbClient) {
     const email = data.email.trim().toLowerCase();
     const username = typeof data.username === 'string' ? data.username.trim() : undefined;
     const existing = await UsersRepository.findByEmail(email, db);
@@ -72,7 +73,7 @@ export class UsersService {
     return UsersService.withDisplayName(user);
   }
 
-  static async updateUser(id: number, data: Partial<CreateUserInput>, db?: any) {
+  static async updateUser(id: number, data: Partial<CreateUserInput>, db?: DbClient) {
     const payload: Record<string, unknown> = {};
     if (data.email) payload.email = data.email.trim().toLowerCase();
     if (data.username !== undefined) payload.username = data.username?.trim() ?? null;
@@ -85,7 +86,7 @@ export class UsersService {
     return UsersService.withDisplayName(user);
   }
 
-  static async deleteUser(id: number, db?: any) {
+  static async deleteUser(id: number, db?: DbClient) {
     return UsersRepository.deleteUser(id, db);
   }
 }

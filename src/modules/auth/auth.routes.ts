@@ -11,7 +11,14 @@ const router = Router();
 const loginLimiter = rateLimit({
   store: createRateLimitStore('rl:auth:login:'),
   windowMs: 5 * 60 * 1000, // 5 นาที
-  max: 5, // จำกัด 5 ครั้ง
+  max: Number(process.env.LOGIN_RATE_LIMIT_MAX || 5), // จำกัด 5 ครั้งต่อ 1 IP
+  keyGenerator: (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      return String(forwarded).split(',')[0].trim();
+    }
+    return req.ip || '127.0.0.1';
+  },
   message: { status: 429, message: 'Too many login attempts, please try again in 5 minutes' },
   skipSuccessfulRequests: true, // ไม่นับ login สำเร็จ
   standardHeaders: true,
@@ -22,7 +29,14 @@ const loginLimiter = rateLimit({
 const registerLimiter = rateLimit({
   store: createRateLimitStore('rl:auth:register:'),
   windowMs: 60 * 60 * 1000, // 1 ชั่วโมง
-  max: 3, // จำกัด 3 ครั้ง
+  max: Number(process.env.REGISTER_RATE_LIMIT_MAX || 3), // จำกัด 3 ครั้งต่อ 1 IP
+  keyGenerator: (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      return String(forwarded).split(',')[0].trim();
+    }
+    return req.ip || '127.0.0.1';
+  },
   message: { status: 429, message: 'Too many registration attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,

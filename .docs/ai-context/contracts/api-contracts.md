@@ -1,221 +1,55 @@
-# REST API Contracts
+# REST API Contract Index
 
-**Base Path:** `/api`
+**Base path:** `/api`
 
----
+**Implementation source:** `src/app.ts` and the corresponding `src/modules/*/*.routes.ts` files.
+**Updated:** 2026-09-12
 
-## 1. Standard Response Wrapper
+This index records routes mounted by the current backend. DTO details and validation must be taken from the route/controller and its DTO file; do not infer a payload from an older document.
 
-ทุก Endpoint ต้องคืนค่าด้วย `ApiResponse<T>`:
+## Response rule
+
+REST endpoints return the shared `ApiResponse<T>` envelope unless they intentionally stream a file or are a health/metrics endpoint. The HTTP status must match `statusCode` in the response body.
 
 ```json
-{ "statusCode": 200, "success": true, "message": "สำเร็จ", "data": {} }
+{ "statusCode": 200, "success": true, "message": "Success", "data": {} }
 ```
 
-Validation Error:
-```json
-{
-  "statusCode": 400, "success": false, "message": "Validation Failed",
-  "errors": [{ "property": "email", "constraints": { "isEmail": "email must be an email" } }]
-}
-```
+## Route index
 
-**กฎ:** HTTP Status Code ของ Express ต้องตรงกับ `statusCode` ใน body เสมอ รวมถึงใน Error Middleware
+| Prefix | Registered routes | Access summary |
+|---|---|---|
+| `/health`, `/api/health` | `GET /` | Health check |
+| `/api/auth` | `POST /login`, `POST /register`, `POST /heartbeat`, `POST /logout`, `GET /me`, `GET /admin-only` | Login/register have rate limits; protected routes use JWT; `admin-only` requires ADMIN |
+| `/api/users` | `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` | ADMIN |
+| `/api/tenants` | `GET /`, `GET /me`, document reads, `POST /upload-documents`, `POST /apply`, `POST /`, `PATCH /:id`, `DELETE /:id` | JWT; admin restrictions are declared in `tenants.routes.ts` |
+| `/api/rooms` | `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` | Reads: ADMIN/STUDENT; writes: ADMIN |
+| `/api/billing` | Bill list/report, QR, room info, room-bill generation, single-bill slip upload, status update, delete | See `billing.routes.ts` |
+| `/api/payment-batches` | `POST /`, `GET /:id`, `GET /:id/payment-qr`, `GET /:id/status`, `POST /:id/upload-slip`, admin bill payment/slip reads | JWT; admin routes require ADMIN |
+| `/api/maintenance` | Ticket create/list/status/delete and image upload/read | See `maintenance.routes.ts` |
+| `/api/visitor` | `POST /register`, `GET /`, `PATCH /:id/status` | JWT; list/status require ADMIN |
+| `/api/ocr` | ID-card verification, jobs and admin verification records | Upload routes are rate-limited; admin reads require ADMIN |
+| `/api/face-verification` | Dashboard, FaceGate.Edge, device and template routes | See `face-verification.routes.ts` for JWT/FaceGate token rules |
+| `/api/notifications` | Notification list, delivery, dead letters, audit logs, provider webhook | See `notification.routes.ts` |
+| `/api/notifications/preferences` | `GET /`, `PUT /` | JWT |
+| `/api/audit-logs` | `GET /` | ADMIN |
+| `/api/settings` | `GET /`, `PATCH /` | ADMIN |
 
----
+## Authentication
 
-## 2. Authentication — `/api/auth`
+`POST /api/auth/login` accepts an email and password. On success the server returns a token and a user summary containing `id`, `email`, optional `username`, `role`, `lastLogin`, and `isOnline`; it also sets the HttpOnly `access_token` cookie. The current `User` schema has no `firstName` or `lastName` fields.
+
+## Billing and payment
+
+Two payment paths are registered and must remain distinguishable in clients and tests:
 
 ```text
-POST /api/auth/login          — Rate limit: 5 ครั้ง / 5 นาที
-POST /api/auth/register       — Rate limit: 3 ครั้ง / 1 ชั่วโมง
-GET  /api/auth/me             — ต้องการ JWT Token
-GET  /api/auth/admin-only     — ต้องการ JWT + Role: ADMIN
+Single bill:   POST /api/billing/:id/upload-slip
+Payment batch: POST /api/payment-batches
+               GET  /api/payment-batches/:id/payment-qr
+               POST /api/payment-batches/:id/upload-slip
 ```
 
-**Login Request:**
-```json
-{ "email": "student@dorm.ac.th", "password": "Password123" }
-```
-**Login Response `data`:**
-```json
-{
-  "token": "JWT_ACCESS_TOKEN",
-  "user": { "id": 1, "email": "...", "role": "STUDENT", "firstName": "สมชาย", "lastName": "เรียนดี" }
-}
-```
+The payment-batch creation request requires an idempotency key. Its slip files are private; internal provider response, slip path, slip hash, and idempotency values are not public API response fields.
 
----
-
-## 3. OCR Verification — `/api/ocr`
-
-```text
-POST /api/ocr/verify-id-card                  — Synchronous, Rate limit: 10/นาที
-POST /api/ocr/verify-id-card/jobs             — Async job, Rate limit: 10/นาที
-GET  /api/ocr/verify-id-card/jobs/:jobId      — ตรวจสอบผล
-GET  /api/ocr/id-card-verifications           — ADMIN only: ดูประวัติทั้งหมด
-GET  /api/ocr/id-card-verifications/:id       — ADMIN only: ดูรายการเดียว
-GET  /api/ocr/id-card-verifications/:id/image — ADMIN only: ดูภาพต้นฉบับ
-DELETE /api/ocr/id-card-verifications/:id     — ADMIN only: ลบรายการ
-```
-
-**Request Format:** Multipart Form-data (ฟิลด์: `file` | `image` | `idCard` | `document`, ≤5MB, JPG/PNG/WebP)
-
-**Sync Response `data`:**
-```json
-{
-  "isThaiIdCard": true,
-  "fullNameTh": "นาย สมชาย เรียนดี",
-  "citizenIdMasked": "1-2345-XXXXX-XX-X",
-  "citizenIdHash": "SHA256_HASH",
-  "birthDateTh": "2543-01-01",
-  "idPresent": true,
-  "idChecksumValid": true
-}
-```
-
-**Async Job Response `data`:**
-```json
-{ "jobId": "uuid", "status": "PENDING", "createdAt": "2026-06-29T12:00:00Z" }
-```
-
----
-
-## 4. Billing — `/api/billing`
-
-```text
-GET    /api/billing                   — ดูบิล (STUDENT: เฉพาะตัวเอง, ADMIN: ทั้งหมด)
-GET    /api/billing/:id               — ดูบิลรายการเดียว
-POST   /api/billing/generate-room-bill — ADMIN: สร้างบิลจากค่าใช้จ่ายของห้อง
-POST   /api/billing/:id/upload-slip   — ผู้เช่าส่งสลิป (Multipart, ฟิลด์: slipImage)
-PATCH  /api/billing/:id/status        — ADMIN: แก้ไขสถานะ Manual
-```
-
-**Generate Room Bill Request:**
-```json
-{
-  "roomNumber": "207",
-  "electricUnits": 0,
-  "customRent": 100,
-  "waterAmount": 0,
-  "billingMonth": "กันยายน 2569"
-}
-```
-
-`customRent` คือค่าเช่าห้องรวมของรอบบิล หน่วยเป็นบาทไทย (THB) และจะถูกหารตามจำนวนผู้พักในห้อง จากนั้นยอดที่บันทึกใน `Bill.amount` จะเป็นแหล่งเดียวที่ใช้สร้าง QR และ payment batch เพื่อป้องกันยอดไม่ตรงกัน
-
-**Upload Slip Response `data`:**
-```json
-{ "billId": 101, "status": "VERIFYING", "message": "ส่งสลิปสำเร็จ รอ OCR ตรวจสอบ" }
-```
-
----
-
-## 5. Maintenance — `/api/maintenance`
-
-```text
-POST   /api/maintenance           — STUDENT: แจ้งซ่อมใหม่
-GET    /api/maintenance           — ADMIN: ดูทั้งหมด | STUDENT: เฉพาะของตัวเอง
-GET    /api/maintenance/:id       — ดูรายการเดียว
-PATCH  /api/maintenance/:id/status — ADMIN: เปลี่ยนสถานะ
-```
-
-**Create Request:**
-```json
-{
-  "roomNumber": "402",
-  "category": "PLUMBING",
-  "description": "ท่อน้ำรั่วในห้องน้ำ",
-  "contactTime": "2026-06-30T10:00:00Z"
-}
-```
-
-**Status Update Request (ADMIN):**
-```json
-{ "status": "APPROVED", "assignedTechnicianId": 12, "note": "ส่งช่างโสภณ" }
-```
-
----
-
-## 6. Visitor — `/api/visitor`
-
-```text
-POST /api/visitor/register         — ลงทะเบียนนัดล่วงหน้า
-GET  /api/visitor                  — ADMIN: ดูรายการผู้ติดต่อทั้งหมด
-GET  /api/visitor/:id              — ดูรายการเดียว
-POST /api/visitor/:id/checkin      — สแกนผ่านประตู (APPROVED → CHECKED_IN)
-POST /api/visitor/:id/checkout     — สแกนออก (CHECKED_IN → CHECKED_OUT)
-```
-
-**Register Request:**
-```json
-{
-  "guestName": "นาย ขยัน มาเยือน",
-  "purpose": "ส่งพัสดุ",
-  "roomNumber": "305",
-  "expectedEntryTime": "2026-06-30T13:00:00Z"
-}
-```
-
----
-
-## 7. Face Verification & FaceGate.Edge — `/api/face-verification`
-
-### 7.1 Web Dashboard (JWT Auth)
-
-```text
-POST /api/face-verification/register          — ADMIN: ลงทะเบียนใบหน้า (Multipart: file/image)
-POST /api/face-verification/verify            — Rate limit: 20/นาที, ตรวจเทียบใบหน้า (Multipart)
-GET  /api/face-verification/:templateId       — ADMIN: ดูข้อมูล embedding
-PUT  /api/face-verification/:templateId       — ADMIN: อัปเดตใบหน้า (Multipart)
-DELETE /api/face-verification/:templateId     — ADMIN: ลบ template
-```
-
-### 7.2 C# FaceGate.Edge (Bearer Token: FACE_API_KEY)
-
-```text
-GET  /api/face-verification/embeddings                   — ดึง embedding ทั้งหมด (?since=ISO8601)
-GET  /api/face-verification/enrollment/pending            — รายชื่อที่รอสร้าง embedding
-GET  /api/face-verification/enrollment/photo/:id          — สตรีมไฟล์รูป enroll
-POST /api/face-verification/enrollment/:studentId/embeddings — รับ embedding จาก Edge
-POST /api/face-verification/attendance/scan               — รับผลสแกนจาก Edge
-POST /api/face-verification/devices/heartbeat             — heartbeat กล้อง
-POST /api/face-verification/devices/live-frame            — เฟรมสดจากกล้อง
-```
-
-**Scan Request:**
-```json
-{
-  "student_code": "user_99",
-  "direction": "IN",
-  "confidence": 0.95,
-  "scanned_at": "2026-07-18T12:00:00Z",
-  "device_code": "CAMERA_01",
-  "snapshot_base64": "optional_base64_string"
-}
-```
-
-**Store Embeddings Request:**
-```json
-{
-  "model_version": "buffalo_l",
-  "embeddings": [[0.1, 0.2, ...]],
-  "quality_scores": [0.95]
-}
-```
-
----
-
-## 8. HTTP Error Status Codes
-
-| Code | ความหมาย |
-| ---: | :--- |
-| 400 | Validation ไม่ผ่าน หรือข้อมูลผิดรูปแบบ |
-| 401 | ไม่มี Token หรือ Token หมดอายุ |
-| 403 | Role ไม่เพียงพอ |
-| 404 | ไม่พบทรัพยากรที่ร้องขอ |
-| 409 | สลิปซ้ำ หรือ OCC Conflict |
-| 429 | เกิน Rate Limit |
-| 500 | Server Error ที่ไม่คาดคิด |
-| 503 | External API (OCR/Face) ไม่พร้อมใช้งาน |
-
+For valid bill, visitor, and maintenance state changes, use `state-machine.md`. Before changing a route, reconcile this index with its route file and automated tests.

@@ -15,10 +15,18 @@ const setupSecurity = (app) => {
     app.use((0, helmet_1.default)({
         crossOriginResourcePolicy: { policy: "cross-origin" },
     }));
-    const configuredOrigins = [
+    const rawConfiguredOrigins = [
         process.env.FRONTEND_URL,
         process.env.CORS_ORIGIN,
     ].filter(Boolean);
+    const splitOrigins = rawConfiguredOrigins.flatMap((origin) => origin.split(",").map((o) => o.trim()).filter(Boolean));
+    const ngrokOrigins = [];
+    if (process.env.NGROK_DOMAIN) {
+        const domain = process.env.NGROK_DOMAIN.trim().replace(/^https?:\/\//, "");
+        if (domain) {
+            ngrokOrigins.push(`https://${domain}`, `http://${domain}`);
+        }
+    }
     const nginxHostPort = process.env.NGINX_HOST_PORT || "3000";
     const fallbackOrigins = [
         "http://localhost:3000",
@@ -30,7 +38,7 @@ const setupSecurity = (app) => {
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
     ];
-    const allowedOrigins = Array.from(new Set([...configuredOrigins, ...fallbackOrigins]));
+    const allowedOrigins = Array.from(new Set([...splitOrigins, ...ngrokOrigins, ...fallbackOrigins]));
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
             if (!origin || allowedOrigins.includes(origin)) {

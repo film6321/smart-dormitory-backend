@@ -1,18 +1,32 @@
-// Simple provider stub that simulates sending SMS/Email
-// Keeps implementation intentionally minimal for tests and local runs.
+import type { Notification, NotificationProvider } from '@prisma/client';
 
-export async function send(provider: any, notification: any) {
-  // If no provider configured, simulate success with a generated id
+export interface ProviderSendPayload extends Partial<Notification> {
+  body?: string;
+  recipientPhone?: string | null;
+}
+
+export interface ProviderSendResult {
+  id: string;
+  status: string;
+  raw?: string;
+  provider?: string;
+}
+
+export interface NotificationProviderModule {
+  send(provider: NotificationProvider | null | undefined, notification: ProviderSendPayload): Promise<ProviderSendResult>;
+}
+
+export async function send(provider: NotificationProvider | null | undefined, _notification: ProviderSendPayload): Promise<ProviderSendResult> {
   const providerId = provider?.id ?? 'local-stub';
-  // Simulate network latency
   await new Promise((r) => setTimeout(r, 5));
 
-  // For failure simulation, provider config can include {shouldFail: true} in JSON stored in provider.config
   try {
     const cfg = provider?.config ? JSON.parse(provider.config) : {};
     if (cfg.shouldFail) throw new Error('provider simulated failure');
-  } catch (e) {
-    // ignore JSON parse errors and treat as success
+  } catch (error) {
+    if (error instanceof Error && error.message === 'provider simulated failure') {
+      throw error;
+    }
   }
 
   return { id: `stub-${providerId}-${Date.now()}`, status: 'ok' };

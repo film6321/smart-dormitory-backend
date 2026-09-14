@@ -1,20 +1,30 @@
 import { logger } from '../../logger';
-import { prisma } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
 import { NotificationRepository } from './notification.repository';
-import { Prisma } from '@prisma/client';
+import type { NotificationChannel, NotificationProvider, NotificationType, Prisma } from '@prisma/client';
 import { publishNotificationAlert } from '../../realtime/notification-gateway';
+import type { NotificationProviderModule, ProviderSendPayload, ProviderSendResult } from './provider/simpleProvider';
+
+export interface ScheduleNotificationInput {
+  tenantId?: number;
+  userId?: number;
+  channel: string | NotificationChannel;
+  type: string | NotificationType;
+  payload: string;
+  recipientPhone?: string | null;
+  scheduledAt?: Date | string | null;
+}
 
 export class NotificationService {
-  // Service uses static repository methods on NotificationRepository
-  private db: any;
-  private providerModule?: any;
+  private db: DbClient;
+  private providerModule?: NotificationProviderModule;
 
-  constructor(db?: any, providerModule?: any) {
-    this.db = db ?? (prisma as any);
+  constructor(db?: DbClient, providerModule?: NotificationProviderModule) {
+    this.db = db ?? prisma;
     this.providerModule = providerModule;
   }
 
-  private async resolveRecipientPhone(data: any) {
+  private async resolveRecipientPhone(data: { recipientPhone?: string | null; tenantId?: number | null; userId?: number | null }): Promise<string | null> {
     if (data.recipientPhone) return data.recipientPhone;
 
     if (data.tenantId) {
@@ -34,11 +44,19 @@ export class NotificationService {
     return NotificationRepository.listNotifications(userId, this.db);
   }
 
-  async scheduleNotification(data: any) {
+  async scheduleNotification(data: ScheduleNotificationInput) {
     const tenant = data.tenantId ? await NotificationRepository.findTenantById(data.tenantId, this.db) : null;
     const recipientPhone = data.recipientPhone ?? tenant?.phone ?? null;
-    const payload = { ...data, recipientPhone };
-    const notification = await NotificationRepository.createNotification(payload as Prisma.NotificationCreateInput, this.db);
+    const payload: Prisma.NotificationCreateInput = {
+      channel: data.channel as NotificationChannel,
+      type: data.type as NotificationType,
+      payload: data.payload,
+      recipientPhone,
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+      ...(data.userId ? { user: { connect: { id: data.userId } } } : {}),
+      ...(data.tenantId ? { tenant: { connect: { id: data.tenantId } } } : {}),
+    };
+    const notification = await NotificationRepository.createNotification(payload, this.db);
     publishNotificationAlert(notification);
     return notification;
   }
@@ -88,14 +106,14 @@ export class NotificationService {
     return NotificationRepository.createDeadLetter(notificationId, reason, details, this.db);
   }
 
-  private async getProviderModule() {
+  private async getProviderModule(): Promise<NotificationProviderModule> {
     if (this.providerModule) return this.providerModule;
     return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
       ? require('./provider/twilioProvider')
       : require('./provider/simpleProvider');
   }
 
-  private async sendWithRetry(notif: any, providerModule: any, provider: any) {
+  private async sendWithRetry(notif: ProviderSendPayload, providerModule: NotificationProviderModule, provider: NotificationProvider | null | undefined): Promise<ProviderSendResult> {
     const maxAttempts = 3;
     let lastError: unknown;
 
@@ -146,28 +164,33 @@ export class NotificationService {
       await db.notification.update({ where: { id: notificationId }, data: { status: 'SENT', providerMessageId: result.id, attempts: (notif.attempts ?? 0) + 1, sentAt: new Date() } });
       await this.createAuditLog(notificationId, 'DELIVERY_SENT', { providerMessageId: result.id, status: 'SENT' });
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string } | undefined;
+      const errorMessage = errorObj?.message || String(err);
       const nextAttempts = (notif.attempts ?? 0) + 1;
-      await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: String(err?.message ?? err), attempts: nextAttempts } });
-      await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: String(err?.message ?? err), attempts: nextAttempts });
+      await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: errorMessage, attempts: nextAttempts } });
+      await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: errorMessage, attempts: nextAttempts });
 
       if (nextAttempts >= 3) {
-        await this.createDeadLetter(notificationId, 'max_retries_exceeded', { error: String(err?.message ?? err), attempts: nextAttempts });
+        await this.createDeadLetter(notificationId, 'max_retries_exceeded', { error: errorMessage, attempts: nextAttempts });
       }
 
       throw err;
     }
   }
 
-  async handleProviderWebhook(payload: Record<string, any>) {
+  async handleProviderWebhook(payload: Record<string, unknown>) {
     const db = this.db;
-    const notification = await db.notification.findFirst({ where: { providerMessageId: payload.MessageSid ?? payload.messageSid } });
+    const providerMessageId = (payload.MessageSid ?? payload.messageSid) as string | undefined;
+    if (!providerMessageId) return null;
+
+    const notification = await db.notification.findFirst({ where: { providerMessageId } });
     if (!notification) {
       return null;
     }
 
-    const status = payload.MessageStatus ?? payload.messageStatus ?? 'unknown';
-    const statusMap: Record<string, string> = {
+    const status = String(payload.MessageStatus ?? payload.messageStatus ?? 'unknown');
+    const statusMap: Record<string, 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED'> = {
       queued: 'PENDING',
       sent: 'SENT',
       delivered: 'SENT',

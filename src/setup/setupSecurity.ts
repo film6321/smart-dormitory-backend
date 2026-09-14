@@ -14,10 +14,23 @@ export const setupSecurity = (app: Express) => {
     })
   );
 
-  const configuredOrigins = [
+  const rawConfiguredOrigins = [
     process.env.FRONTEND_URL,
     process.env.CORS_ORIGIN,
   ].filter(Boolean) as string[];
+
+  const splitOrigins = rawConfiguredOrigins.flatMap((origin) =>
+    origin.split(",").map((o) => o.trim()).filter(Boolean)
+  );
+
+  const ngrokOrigins: string[] = [];
+  if (process.env.NGROK_DOMAIN) {
+    const domain = process.env.NGROK_DOMAIN.trim().replace(/^https?:\/\//, "");
+    if (domain) {
+      ngrokOrigins.push(`https://${domain}`, `http://${domain}`);
+    }
+  }
+
   const nginxHostPort = process.env.NGINX_HOST_PORT || "3000";
   const fallbackOrigins = [
     "http://localhost:3000",
@@ -30,7 +43,7 @@ export const setupSecurity = (app: Express) => {
     "http://127.0.0.1:5175",
   ];
   const allowedOrigins = Array.from(
-    new Set([...configuredOrigins, ...fallbackOrigins]),
+    new Set([...splitOrigins, ...ngrokOrigins, ...fallbackOrigins]),
   );
 
   app.use(

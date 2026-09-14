@@ -31,6 +31,10 @@ import settingsRoutes from './modules/settings/settings.routes';
 
 const app = express();
 
+// Trust the first proxy hop (Nginx) so req.ip reflects the real client IP
+// from the X-Forwarded-For header — required for accurate Rate Limiting in replicated setup
+app.set('trust proxy', 1);
+
 // Serve static files from public folder (e.g., live camera feed)
 app.use(express.static(path.join(process.cwd(), 'public')));
 

@@ -19,12 +19,20 @@ class MaintenanceController {
             if (!tenant) {
                 return res.status(404).json((0, api_response_1.createResponse)(404, 'Tenant profile not found. Please complete your registration first.'));
             }
+            // Validate contactTime upfront — prevent invalid dates from reaching PostgreSQL
+            let parsedContactTime;
+            if (contactTime !== undefined && contactTime !== null) {
+                parsedContactTime = new Date(contactTime);
+                if (isNaN(parsedContactTime.getTime())) {
+                    return res.status(400).json((0, api_response_1.createResponse)(400, 'contactTime must be a valid ISO 8601 date string (e.g. 2026-09-14T10:00:00.000Z)'));
+                }
+            }
             const ticket = await maintenance_service_1.MaintenanceService.createTicket({
                 tenantId: tenant.id,
                 roomId: roomId ?? tenant.roomId ?? undefined,
                 category,
                 description,
-                contactTime: contactTime ? new Date(contactTime) : undefined,
+                contactTime: parsedContactTime,
             });
             return res.status(201).json((0, api_response_1.createResponse)(201, 'Maintenance ticket created', ticket));
         }

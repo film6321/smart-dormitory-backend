@@ -1,4 +1,5 @@
-import { prisma } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
+import type { Prisma, Room, Tenant } from '@prisma/client';
 import { AppError } from '../../middlewares/error-handler';
 import { TenantsRepository } from './tenants.repository';
 import path from 'path';
@@ -57,7 +58,7 @@ export interface SubmitApplicationInput {
   };
   idCardImagePath?: string;
   paymentSlipPath?: string;
-  contractData?: Record<string, any>;
+  contractData?: Record<string, unknown>;
   userId?: number;
 }
 
@@ -73,15 +74,15 @@ export class TenantsService {
     }
   }
 
-  static async listTenants(db?: any) {
+  static async listTenants(db?: DbClient) {
     return TenantsRepository.listTenants(undefined, undefined, db);
   }
 
-  static async getTenantById(id: number, db?: any) {
+  static async getTenantById(id: number, db?: DbClient) {
     return TenantsRepository.getTenantById(id, db);
   }
 
-  static async getTenantByUserId(userId: number, db?: any) {
+  static async getTenantByUserId(userId: number, db?: DbClient) {
     return TenantsRepository.getTenantByUserId(userId, db);
   }
 
@@ -101,14 +102,14 @@ export class TenantsService {
     return resolvedPath;
   }
 
-  static async submitApplication(data: SubmitApplicationInput, db?: any) {
+  static async submitApplication(data: SubmitApplicationInput, db?: DbClient) {
     const { personalInformation, emergencyContact, roomPreference, ocrData, idCardImagePath, paymentSlipPath, contractData, userId } = data;
 
     if (!personalInformation?.fullName?.trim()) {
       throw new AppError('Full Name is required', 400);
     }
 
-    const tenantPayload: any = {
+    const tenantPayload: Prisma.TenantCreateInput = {
       fullName: personalInformation.fullName.trim(),
       studentId: personalInformation.studentId?.trim(),
       course: personalInformation.course?.trim(),
@@ -159,7 +160,7 @@ export class TenantsService {
       });
 
       const maxOccupants = await this.getMaxOccupants();
-      const openRooms = availableRooms.filter((r: any) => (r.tenants?.length ?? 0) < Math.min(r.capacity ?? maxOccupants, maxOccupants));
+      const openRooms = availableRooms.filter((r: Room & { tenants?: Tenant[] }) => (r.tenants?.length ?? 0) < Math.min(r.capacity ?? maxOccupants, maxOccupants));
       if (openRooms.length > 0) {
         const randomIndex = Math.floor(Math.random() * openRooms.length);
         targetRoomId = openRooms[randomIndex].id;
@@ -184,7 +185,7 @@ export class TenantsService {
     return client.tenant.create({ data: tenantPayload });
   }
 
-  static async createTenant(data: CreateTenantInput, db?: any) {
+  static async createTenant(data: CreateTenantInput, db?: DbClient) {
     if (data.userId !== undefined && data.userId !== null) {
       const user = await TenantsRepository.findUserById(data.userId, db);
       if (!user) {
@@ -213,7 +214,7 @@ export class TenantsService {
         checkInDate: data.checkInDate ? new Date(data.checkInDate) : null,
         checkOutDate: data.checkOutDate ? new Date(data.checkOutDate) : null,
         isActive: data.isActive ?? true,
-      } as any, db);
+      } as Prisma.TenantUncheckedCreateInput, db);
     }
 
     return TenantsRepository.createTenant({
@@ -228,7 +229,7 @@ export class TenantsService {
     }, db);
   }
 
-  static async updateTenant(id: number, data: Partial<CreateTenantInput>, db?: any) {
+  static async updateTenant(id: number, data: Partial<CreateTenantInput>, db?: DbClient) {
     const client = db || prisma;
 
     if (data.status !== undefined && !['PENDING', 'APPROVED', 'REJECTED', 'ACTIVE', 'INACTIVE'].includes(data.status)) {
@@ -243,7 +244,7 @@ export class TenantsService {
       throw new AppError('Tenant not found', 404);
     }
 
-    const updateData: any = {
+    const updateData: Prisma.TenantUpdateInput = {
       fullName: data.fullName?.trim(),
       phone: data.phone?.trim(),
       emergencyContact: data.emergencyContact?.trim(),
@@ -273,7 +274,7 @@ export class TenantsService {
         include: { tenants: true },
       });
       const maxOccupants = await this.getMaxOccupants();
-      const availableRooms = rooms.filter((r: any) => r.tenants.length < Math.min(r.capacity ?? maxOccupants, maxOccupants));
+      const availableRooms = rooms.filter((r: Room & { tenants: Tenant[] }) => r.tenants.length < Math.min(r.capacity ?? maxOccupants, maxOccupants));
 
       if (availableRooms.length > 0) {
         const randomIndex = Math.floor(Math.random() * availableRooms.length);
@@ -352,7 +353,7 @@ export class TenantsService {
         include: { tenants: true },
       });
       // The current tenant might not be linked in the relations yet (if status was pending)
-      const hasSelf = currentRoom?.tenants?.some((t: any) => t.id === tenant.id);
+      const hasSelf = currentRoom?.tenants?.some((t: Tenant) => t.id === tenant.id);
       const occupantsCount = (currentRoom?.tenants?.length ?? 0) + (hasSelf ? 0 : 1);
       const isNowOccupied = occupantsCount >= (currentRoom?.capacity ?? 4);
       await client.room.update({
@@ -364,7 +365,7 @@ export class TenantsService {
     return TenantsRepository.updateTenant(id, updateData, client);
   }
 
-  static async deleteTenant(id: number, db?: any) {
+  static async deleteTenant(id: number, db?: DbClient) {
     const tenant = await TenantsRepository.getTenantById(id, db);
     if (!tenant) {
       throw new AppError('Tenant not found', 404);

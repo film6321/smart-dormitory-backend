@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
 
 export class UsersRepository {
   private static readonly baseUserSelect = {
@@ -15,7 +15,7 @@ export class UsersRepository {
     username: true,
   } satisfies Prisma.UserSelect;
 
-  static async listUsers(db = prisma) {
+  static async listUsers(db: DbClient = prisma) {
     try {
       return await db.user.findMany({
         select: UsersRepository.usernameUserSelect,
@@ -33,7 +33,7 @@ export class UsersRepository {
     }
   }
 
-  static async getUserById(id: number, db = prisma) {
+  static async getUserById(id: number, db: DbClient = prisma) {
     try {
       return await db.user.findUnique({
         where: { id },
@@ -51,7 +51,7 @@ export class UsersRepository {
     }
   }
 
-  static async findByEmail(email: string, db = prisma) {
+  static async findByEmail(email: string, db: DbClient = prisma) {
     return db.user.findUnique({
       where: { email },
       select: {
@@ -66,7 +66,7 @@ export class UsersRepository {
     username?: string | null;
     lastLogin?: Date | string | null;
     role: string;
-  }, db = prisma) {
+  }, db: DbClient = prisma) {
     try {
       return await db.user.create({
         data: data as Prisma.UserCreateInput,
@@ -94,11 +94,11 @@ export class UsersRepository {
     }
   }
 
-  static async updateUser(id: number, data: Partial<Prisma.UserUpdateInput>, db = prisma) {
+  static async updateUser(id: number, data: Partial<Prisma.UserUpdateInput>, db: DbClient = prisma) {
     return db.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
   }
 
-  static async deleteUser(id: number, db = prisma) {
+  static async deleteUser(id: number, db: DbClient = prisma) {
     return db.user.delete({ where: { id } });
   }
 }

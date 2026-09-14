@@ -73,3 +73,21 @@ logger.info({ correlationId, userId, roomId, event: "BILL_VERIFYING_STARTED" }, 
 ## 4. Broadcast Ordering (กฎลำดับการ Broadcast)
 
 **ทุก state change ต้อง persist ใน PostgreSQL ก่อน** แล้วจึง broadcast ผ่าน Socket.IO ห้ามส่ง event ก่อน save สำเร็จ เพื่อป้องกัน phantom state บนหน้าจอผู้ใช้
+
+---
+
+## 5. User Registration & Concurrency Guard (การป้องกัน Race Condition)
+
+เพื่อรับมือกับเหตุการณ์ที่มีผู้ใช้กดสมัครสมาชิก (`POST /api/auth/register`) ด้วย Email หรือ Username เดียวกันพร้อมกันในระดับเสี้ยววินาที ($t=0$):
+
+1. **Prisma Unique Constraint Handling (P2002 Guard):**
+   - ใน `AuthService.register` เมื่อเกิดการแย่ง Insert ข้อมูลที่ชน Unique Index (`email`, `username`) ใน PostgreSQL พร้อมกัน ให้ดักจับ Prisma Error code `P2002` เสมอ
+   - แปลง Error `P2002` เป็น `AppError('อีเมลหรือชื่อผู้ใช้นี้ถูกใช้งานแล้ว', 400)` ทันที **ห้ามปล่อยให้หลุดไปเป็น HTTP 500 Internal Server Error**
+2. **Bcrypt Threadpool Optimization:**
+   - การแฮชรหัสผ่าน `bcrypt.hash(password, 10)` เป็นงานที่ใช้ Libuv C++ Threadpool
+   - ระบบกำหนด `UV_THREADPOOL_SIZE=64` ใน Container Environment เพื่อป้องกัน Threadpool Queue Saturation เมื่อมีคำขอเข้ามาพร้อมกันหลายสิบคำขอ
+3. **Multi-Worker Horizontal Scaling:**
+   - รัน Backend Service อย่างน้อย 2 Replicas หลัง Nginx Reverse Proxy (Round-Robin) เพื่อให้ใช้ประโยชน์จาก CPU Multi-Core ได้อย่างเต็มที่ รองรับ Throughput ได้มากกว่า 340+ RPS
+4. **Proxy-Aware Rate Limiting:**
+   - Rate Limiter ของ Register ต้องดึง Client IP จาก `X-Forwarded-For` ตัวซ้ายสุด (Original Client) ผ่าน `keyGenerator` เพื่อให้การจำกัดสิทธิ์ต่อ IP ถูกต้องแม่นยำแม้รันหลัง Nginx Reverse Proxy
+

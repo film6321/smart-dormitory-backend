@@ -15,7 +15,9 @@
     "dev:full": "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Start-Process -FilePath 'cmd.exe' -ArgumentList '/k', 'npm run dev' -WorkingDirectory '.'; Start-Process -FilePath 'cmd.exe' -ArgumentList '/k', 'cd ..\\smart-dormitory-frontend && npm run dev' -WorkingDirectory '.'\"",
     "build": "tsc",
     "lint": "eslint \"src/**/*.ts\" --fix",
-    "load:k6": "k6 run tests/load/k6-smoke.js"
+    "load:k6": "k6 run tests/load/k6-smoke.js",
+    "tunnel:logs": "docker logs -f smart-dormitory-ngrok",
+    "tunnel:restart": "docker compose restart ngrok"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
