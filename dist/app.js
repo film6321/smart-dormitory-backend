@@ -30,6 +30,7 @@ const notification_preferences_routes_1 = __importDefault(require("./modules/not
 const health_1 = __importDefault(require("./routes/health"));
 const audit_routes_1 = __importDefault(require("./modules/audit/audit.routes"));
 const settings_routes_1 = __importDefault(require("./modules/settings/settings.routes"));
+const analytics_routes_1 = __importDefault(require("./modules/analytics/analytics.routes"));
 const app = (0, express_1.default)();
 // Trust the first proxy hop (Nginx) so req.ip reflects the real client IP
 // from the X-Forwarded-For header — required for accurate Rate Limiting in replicated setup
@@ -58,6 +59,7 @@ app.use('/api/notifications', notification_routes_1.default);
 app.use('/api/notifications/preferences', notification_preferences_routes_1.default);
 app.use('/api/audit-logs', audit_routes_1.default);
 app.use('/api/settings', settings_routes_1.default);
+app.use('/api/analytics', analytics_routes_1.default);
 // Temporary health check for /api prefix
 app.get('/api/ping', (_req, res) => res.status(200).send('pong'));
 // Error handling

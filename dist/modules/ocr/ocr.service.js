@@ -12,6 +12,7 @@ const error_handler_1 = require("../../middlewares/error-handler");
 const cache_1 = require("../../shared/cache");
 const ocr_repository_1 = require("./ocr.repository");
 const ocr_queue_1 = require("./ocr.queue");
+const date_utils_1 = require("../../shared/date-utils");
 const normalizeBaseUrl = (url) => url.replace(/\/+$/, '');
 const uploadRoot = path_1.default.resolve(process.env.UPLOAD_ROOT || path_1.default.join(process.cwd(), 'uploads/private'));
 const privateUploadRoot = path_1.default.join(uploadRoot, 'id-cards');
@@ -117,61 +118,6 @@ const getStringValue = (value) => {
     }
     const trimmed = value.trim();
     return trimmed && trimmed !== '-' ? trimmed : undefined;
-};
-const thaiMonths = {
-    มกราคม: 1,
-    กุมภาพันธ์: 2,
-    มีนาคม: 3,
-    เมษายน: 4,
-    พฤษภาคม: 5,
-    มิถุนายน: 6,
-    กรกฎาคม: 7,
-    สิงหาคม: 8,
-    กันยายน: 9,
-    ตุลาคม: 10,
-    พฤศจิกายน: 11,
-    ธันวาคม: 12,
-};
-const calculateAgeFromBirthDate = (birthDate) => {
-    if (!birthDate)
-        return undefined;
-    const numbers = birthDate.match(/\d+/gu)?.map(Number) ?? [];
-    const monthName = Object.keys(thaiMonths).find((month) => birthDate.includes(month));
-    let day;
-    let month;
-    let year;
-    if (monthName && numbers.length >= 2) {
-        day = numbers[0];
-        month = thaiMonths[monthName];
-        year = numbers[numbers.length - 1];
-    }
-    else if (numbers.length >= 3) {
-        const [first, second, third] = numbers;
-        if (first > 31) {
-            year = first;
-            month = second;
-            day = third;
-        }
-        else {
-            day = first;
-            month = second;
-            year = third;
-        }
-    }
-    else {
-        return undefined;
-    }
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const normalizedYear = year > currentYear + 100 ? year - 543 : year;
-    if (day < 1 || day > 31 || month < 1 || month > 12 || normalizedYear < 1900 || normalizedYear > currentYear) {
-        return undefined;
-    }
-    let age = currentYear - normalizedYear;
-    const birthday = new Date(currentYear, month - 1, day);
-    if (now < birthday)
-        age -= 1;
-    return age >= 0 ? age : undefined;
 };
 const stripDataUrlPrefix = (imageBase64) => {
     const commaIndex = imageBase64.indexOf(',');
@@ -401,7 +347,7 @@ class OcrService {
             citizenIdMasked: normalizedCitizenId ? maskCitizenId(normalizedCitizenId) : undefined,
             citizenId: normalizedCitizenId,
             address,
-            age: calculateAgeFromBirthDate(birthDateTh),
+            age: (0, date_utils_1.calculateAge)(birthDateTh),
             citizenIdHash: normalizedCitizenId ? hashCitizenId(normalizedCitizenId) : undefined,
             fullNameTh,
             birthDateTh,

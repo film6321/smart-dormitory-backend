@@ -215,7 +215,7 @@ describe('FaceVerificationService (unit)', () => {
   it('records attendance scan for user and visitor', async () => {
     // mock user check
     db.user.findUnique = (async ({ where }: any) => {
-      if (where.id === 99) return { id: 99, firstName: 'John', lastName: 'Doe' };
+      if (where.id === 99) return { id: 99, username: 'John Doe', tenant: { fullName: 'John Doe' } };
       return null;
     }) as any;
 

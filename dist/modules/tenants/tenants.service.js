@@ -9,6 +9,7 @@ const error_handler_1 = require("../../middlewares/error-handler");
 const tenants_repository_1 = require("./tenants.repository");
 const path_1 = __importDefault(require("path"));
 const settings_service_1 = require("../settings/settings.service");
+const date_utils_1 = require("../../shared/date-utils");
 class TenantsService {
     static async getMaxOccupants() {
         return Number(await (0, settings_service_1.getSettingValue)('maxOccupants')) || 4;
@@ -20,13 +21,29 @@ class TenantsService {
         }
     }
     static async listTenants(db) {
-        return tenants_repository_1.TenantsRepository.listTenants(undefined, undefined, db);
+        const tenants = await tenants_repository_1.TenantsRepository.listTenants(undefined, undefined, db);
+        return tenants.map((tenant) => ({
+            ...tenant,
+            age: (0, date_utils_1.calculateAge)(tenant.birthDate),
+        }));
     }
     static async getTenantById(id, db) {
-        return tenants_repository_1.TenantsRepository.getTenantById(id, db);
+        const tenant = await tenants_repository_1.TenantsRepository.getTenantById(id, db);
+        if (!tenant)
+            return null;
+        return {
+            ...tenant,
+            age: (0, date_utils_1.calculateAge)(tenant.birthDate),
+        };
     }
     static async getTenantByUserId(userId, db) {
-        return tenants_repository_1.TenantsRepository.getTenantByUserId(userId, db);
+        const tenant = await tenants_repository_1.TenantsRepository.getTenantByUserId(userId, db);
+        if (!tenant)
+            return null;
+        return {
+            ...tenant,
+            age: (0, date_utils_1.calculateAge)(tenant.birthDate),
+        };
     }
     static resolveTenantDocumentPath(documentPath) {
         if (!documentPath) {

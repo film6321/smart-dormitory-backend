@@ -3,7 +3,14 @@ import { prisma } from '../../database/db';
 
 export class VisitorRepository {
   static async getVisitorById(id: number, db = prisma) {
-    return db.visitor.findUnique({ where: { id } });
+    return db.visitor.findUnique({
+      where: { id },
+      include: {
+        logs: { orderBy: { createdAt: 'asc' } },
+        room: { select: { roomNumber: true } },
+        tenant: { select: { fullName: true, studentId: true } },
+      },
+    });
   }
 
   static async registerVisitor(data: Prisma.VisitorCreateInput, db = prisma) {

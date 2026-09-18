@@ -6,6 +6,7 @@ import { TenantsService } from './tenants.service';
 import { OcrService } from '../ocr/ocr.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { AppError } from '../../middlewares/error-handler';
+import { logger } from '../../logger';
 
 export class TenantsController {
   static async uploadDocuments(req: Request, res: Response, next: NextFunction) {
@@ -47,7 +48,7 @@ export class TenantsController {
         const userId = (req as AuthenticatedRequest).user?.id;
         ocrData = await OcrService.verifyIdCard(base64Str, { userId });
       } catch (ocrErr) {
-        console.warn('OCR processing failed inside document upload, proceeding with fallback:', ocrErr);
+        logger.warn({ err: ocrErr }, 'OCR processing failed inside document upload, proceeding with fallback');
       }
 
       return res.status(200).json(createResponse(200, 'Documents uploaded successfully', {

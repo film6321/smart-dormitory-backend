@@ -4,6 +4,7 @@ import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 import { publishAdminAlert } from '../../realtime/notification-gateway';
+import { logger } from '../../logger';
 
 export class MaintenanceService {
   static async getTenantByUserId(userId: number) {
@@ -34,7 +35,7 @@ export class MaintenanceService {
       });
     } catch (notifErr) {
       // Log but don't propagate - ticket is already saved
-      console.warn('[MaintenanceService] Notification scheduling failed (non-critical):', notifErr);
+      logger.warn({ err: notifErr }, '[MaintenanceService] Notification scheduling failed (non-critical)');
     }
 
     return ticket;

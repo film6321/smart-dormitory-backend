@@ -9,9 +9,11 @@ require("ts-node/register");
 
 require("./unit/api-response.test.ts");
 require("./unit/auth-jwt.test.ts");
+require("./unit/date-utils.test.ts");
 require("./unit/notification.test.ts");
 require("./unit/setup-security.test.ts");
 require("./unit/core-domain.test.ts");
+require("./unit/analytics.test.ts");
 require("./unit/route-aliases.test.ts");
 require("./unit/route-aliases-additional.test.ts");
 require("./unit/face-verification.test.ts");

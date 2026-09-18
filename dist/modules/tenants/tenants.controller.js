@@ -40,6 +40,7 @@ const api_response_1 = require("../../shared/api-response");
 const tenants_service_1 = require("./tenants.service");
 const ocr_service_1 = require("../ocr/ocr.service");
 const error_handler_1 = require("../../middlewares/error-handler");
+const logger_1 = require("../../logger");
 class TenantsController {
     static async uploadDocuments(req, res, next) {
         try {
@@ -76,7 +77,7 @@ class TenantsController {
                 ocrData = await ocr_service_1.OcrService.verifyIdCard(base64Str, { userId });
             }
             catch (ocrErr) {
-                console.warn('OCR processing failed inside document upload, proceeding with fallback:', ocrErr);
+                logger_1.logger.warn({ err: ocrErr }, 'OCR processing failed inside document upload, proceeding with fallback');
             }
             return res.status(200).json((0, api_response_1.createResponse)(200, 'Documents uploaded successfully', {
                 idCardImagePath,

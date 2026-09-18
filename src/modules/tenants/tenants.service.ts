@@ -4,6 +4,7 @@ import { AppError } from '../../middlewares/error-handler';
 import { TenantsRepository } from './tenants.repository';
 import path from 'path';
 import { getSettingValue } from '../settings/settings.service';
+import { calculateAge } from '../../shared/date-utils';
 
 export interface CreateTenantInput {
   userId?: number | null;
@@ -75,15 +76,29 @@ export class TenantsService {
   }
 
   static async listTenants(db?: DbClient) {
-    return TenantsRepository.listTenants(undefined, undefined, db);
+    const tenants = await TenantsRepository.listTenants(undefined, undefined, db);
+    return tenants.map((tenant) => ({
+      ...tenant,
+      age: calculateAge(tenant.birthDate),
+    }));
   }
 
   static async getTenantById(id: number, db?: DbClient) {
-    return TenantsRepository.getTenantById(id, db);
+    const tenant = await TenantsRepository.getTenantById(id, db);
+    if (!tenant) return null;
+    return {
+      ...tenant,
+      age: calculateAge(tenant.birthDate),
+    };
   }
 
   static async getTenantByUserId(userId: number, db?: DbClient) {
-    return TenantsRepository.getTenantByUserId(userId, db);
+    const tenant = await TenantsRepository.getTenantByUserId(userId, db);
+    if (!tenant) return null;
+    return {
+      ...tenant,
+      age: calculateAge(tenant.birthDate),
+    };
   }
 
   static resolveTenantDocumentPath(documentPath: string | null | undefined) {

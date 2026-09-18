@@ -10,6 +10,7 @@ const client_1 = require("@prisma/client");
 const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
 const notification_gateway_1 = require("../../realtime/notification-gateway");
+const logger_1 = require("../../logger");
 class MaintenanceService {
     static async getTenantByUserId(userId) {
         return db_1.prisma.tenant.findFirst({ where: { userId } });
@@ -37,7 +38,7 @@ class MaintenanceService {
         }
         catch (notifErr) {
             // Log but don't propagate - ticket is already saved
-            console.warn('[MaintenanceService] Notification scheduling failed (non-critical):', notifErr);
+            logger_1.logger.warn({ err: notifErr }, '[MaintenanceService] Notification scheduling failed (non-critical)');
         }
         return ticket;
     }

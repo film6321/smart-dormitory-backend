@@ -462,7 +462,12 @@ class FaceVerificationService {
             const userId = Number(studentCode.replace('user_', ''));
             const user = await db.user.findUnique({
                 where: { id: userId },
-                select: { id: true, username: true, email: true },
+                select: {
+                    id: true,
+                    username: true,
+                    email: true,
+                    tenant: { select: { fullName: true } },
+                },
             });
             if (!user) {
                 throw new error_handler_1.AppError('User not found', 404);
@@ -478,12 +483,16 @@ class FaceVerificationService {
                     createdAt: timestamp,
                 },
             });
+            const studentName = user.tenant?.fullName ||
+                user.username ||
+                user.email ||
+                'Resident';
             return {
                 status: 'ok',
                 action: direction === 'IN' ? 'checkin' : 'checkout',
                 student: {
                     code: studentCode,
-                    name: user.username || user.email || 'Resident',
+                    name: studentName,
                     room: 'Resident',
                 },
             };
