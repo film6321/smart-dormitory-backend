@@ -1,3 +1,4 @@
+import { publishAdminAlert } from '../../realtime/notification-gateway';
 import bcrypt from 'bcrypt';
 import { AppError } from '../../middlewares/error-handler';
 import { resolveUsersPresence } from '../../shared/presence';
@@ -70,6 +71,7 @@ export class UsersService {
       username: username || null,
       role: (data.role ?? 'STUDENT').toUpperCase(),
     }, db);
+    publishAdminAlert(user.id, 'USER_STATUS', `เพิ่มผู้ใช้งานใหม่: ${user.email}`, 'ACTIVE');
     return UsersService.withDisplayName(user);
   }
 
@@ -83,10 +85,15 @@ export class UsersService {
     }
 
     const user = await UsersRepository.updateUser(id, payload, db);
+    if (user) {
+      publishAdminAlert(user.id, 'USER_STATUS', `อัปเดตผู้ใช้งาน: ${user.email}`, 'ACTIVE');
+    }
     return UsersService.withDisplayName(user);
   }
 
   static async deleteUser(id: number, db?: DbClient) {
-    return UsersRepository.deleteUser(id, db);
+    const res = await UsersRepository.deleteUser(id, db);
+    publishAdminAlert(id, 'USER_STATUS', `ลบผู้ใช้งาน #${id}`, 'DELETED');
+    return res;
   }
 }

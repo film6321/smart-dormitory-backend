@@ -81,12 +81,42 @@ export const initializeNotificationGateway = (httpServer: HttpServer, resolveUse
       }
     });
 
+    socket.on('requestTelemetry', async () => {
+      if (user.role === 'ADMIN') {
+        const mem = process.memoryUsage();
+        socket.emit('system:telemetry', {
+          uptimeSeconds: Math.floor(process.uptime()),
+          memoryUsageMb: {
+            rss: Math.round((mem.rss / 1024 / 1024) * 100) / 100,
+            heapTotal: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100,
+            heapUsed: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
+            external: Math.round((mem.external / 1024 / 1024) * 100) / 100,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
     socket.on('disconnect', (reason) => {
       logger.debug({ userId: user.id, reason }, 'Realtime client disconnected');
     });
   });
 
   return realtimeServer;
+};
+
+export const publishAnalyticsTelemetry = (telemetry: unknown) => {
+  if (!realtimeServer) {
+    return;
+  }
+  realtimeServer.to('admins').emit('system:telemetry', telemetry);
+};
+
+export const publishRealtimeEvent = (eventName: string, payload: unknown) => {
+  if (!realtimeServer) {
+    return;
+  }
+  realtimeServer.to('admins').emit(eventName, payload);
 };
 
 export const publishNotificationAlert = (notification: RealtimeNotification) => {
@@ -103,6 +133,20 @@ export const publishNotificationAlert = (notification: RealtimeNotification) => 
     payload: notification.payload,
     createdAt: notification.createdAt,
   });
+
+  const upperType = notification.type.toUpperCase();
+  if (upperType.includes('BILL')) {
+    realtimeServer.to('admins').emit('billStatusUpdated', notification);
+  } else if (upperType.includes('MAINTENANCE')) {
+    realtimeServer.to('admins').emit('maintenanceStatusUpdated', notification);
+  } else if (upperType.includes('VISITOR')) {
+    realtimeServer.to('admins').emit('visitorStatusUpdated', notification);
+    realtimeServer.to('admins').emit('visitorScanEvent', notification);
+  } else if (upperType.includes('TENANT') || upperType.includes('STUDENT')) {
+    realtimeServer.to('admins').emit('tenantStatusUpdated', notification);
+  } else if (upperType.includes('USER')) {
+    realtimeServer.to('admins').emit('userStatusUpdated', notification);
+  }
 };
 
 export const publishAdminAlert = (id: number, type: string, message: string, status = 'PENDING') => {

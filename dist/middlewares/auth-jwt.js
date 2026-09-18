@@ -15,7 +15,8 @@ const verifyToken = (req, res, next) => {
         .map((part) => part.trim())
         .find((part) => part.startsWith('access_token='))
         ?.slice('access_token='.length);
-    const resolvedToken = token || cookieToken;
+    const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
+    const resolvedToken = token || cookieToken || queryToken;
     if (!resolvedToken) {
         return next(new error_handler_1.AppError('ไม่อนุญาตให้เข้าถึง: ไม่พบ Token', 401));
     }

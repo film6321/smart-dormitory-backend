@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FaceVerificationController = void 0;
 const path_1 = __importDefault(require("path"));
 const promises_1 = __importDefault(require("fs/promises"));
+const db_1 = require("../../database/db");
 const api_response_1 = require("../../shared/api-response");
 const face_verification_service_1 = require("./face-verification.service");
 const logger_1 = require("../../logger");
@@ -42,8 +43,64 @@ class FaceVerificationController {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'Threshold must be a number between 0.0 and 1.0'));
             }
             const data = await face_verification_service_1.FaceVerificationService.verifyFace(uploadedFile.buffer, uploadedFile.mimetype, uploadedFile.originalname, threshold);
+            const deviceCode = (typeof req.body?.device_code === 'string' && req.body.device_code.trim()) || 'MAIN_GATE_01';
+            const direction = (typeof req.body?.direction === 'string' && req.body.direction.toUpperCase() === 'OUT') ? 'OUT' : 'IN';
+            let studentName = data.message || 'ผู้พักอาศัย';
+            let roomName = 'หอพัก';
+            if (data.matched && data.user_id) {
+                try {
+                    const user = await db_1.prisma.user.findUnique({
+                        where: { id: data.user_id },
+                        select: {
+                            id: true,
+                            username: true,
+                            email: true,
+                            tenant: { select: { fullName: true, room: { select: { roomNumber: true } } } },
+                        },
+                    });
+                    if (user) {
+                        studentName = user.tenant?.fullName || user.username || user.email || `Resident #${user.id}`;
+                        roomName = user.tenant?.room?.roomNumber ? `ห้อง ${user.tenant.room.roomNumber}` : 'หอพัก';
+                    }
+                    const scannedAt = new Date().toISOString();
+                    // Save to AccessLog in Database
+                    await db_1.prisma.accessLog.create({
+                        data: {
+                            userId: data.user_id,
+                            method: 'FACE_GATE',
+                            path: direction,
+                            ip: deviceCode,
+                            duration: Math.round((data.similarity ?? 1.0) * 100),
+                        },
+                    });
+                    // Broadcast to monitoring bus (SSE)
+                    face_verification_monitoring_1.faceVerificationMonitoringBus.recordScan({
+                        id: `scan-${data.user_id}-${Date.now()}`,
+                        student_code: `user_${data.user_id}`,
+                        direction,
+                        confidence: data.similarity ?? 1.0,
+                        scanned_at: scannedAt,
+                        device_code: deviceCode,
+                        action: direction === 'IN' ? 'checkin' : 'checkout',
+                        student: {
+                            code: `user_${data.user_id}`,
+                            name: studentName,
+                            room: roomName,
+                        },
+                    });
+                }
+                catch (busErr) {
+                    logger_1.logger.warn({ busErr, userId: data.user_id }, 'Failed to broadcast scan to monitoring bus');
+                }
+            }
+            const responsePayload = {
+                ...data,
+                student_name: studentName,
+                action: direction === 'IN' ? 'checkin' : 'checkout',
+                device_code: deviceCode,
+            };
             const message = data.matched ? 'Face matched successfully' : (data.message || 'Face did not match registered templates');
-            return res.status(200).json((0, api_response_1.createResponse)(200, message, data));
+            return res.status(200).json((0, api_response_1.createResponse)(200, message, responsePayload));
         }
         catch (error) {
             next(error);
@@ -253,8 +310,56 @@ class FaceVerificationController {
     }
     static async scanHistory(_req, res, next) {
         try {
+            const liveItems = face_verification_monitoring_1.faceVerificationMonitoringBus.getScanHistory();
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const dbLogs = await db_1.prisma.accessLog.findMany({
+                where: {
+                    method: { in: ['FACE_GATE', 'FACE_VERIFY'] },
+                    createdAt: { gte: startOfToday },
+                },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            username: true,
+                            email: true,
+                            tenant: { select: { fullName: true, room: { select: { roomNumber: true } } } },
+                        },
+                    },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 30,
+            });
+            const mergedMap = new Map();
+            liveItems.forEach((item) => mergedMap.set(item.id, item));
+            for (const log of dbLogs) {
+                const id = `db-${log.id}`;
+                if (!mergedMap.has(id)) {
+                    const isOut = log.path === 'OUT' || log.path === 'CHECKOUT';
+                    const direction = isOut ? 'OUT' : 'IN';
+                    const studentName = log.user?.tenant?.fullName || log.user?.username || log.user?.email || (log.userId ? `Resident #${log.userId}` : 'ผู้พักอาศัย');
+                    const room = log.user?.tenant?.room?.roomNumber ? `ห้อง ${log.user.tenant.room.roomNumber}` : 'หอพัก';
+                    mergedMap.set(id, {
+                        id,
+                        student_code: log.userId ? `user_${log.userId}` : 'unknown',
+                        direction,
+                        confidence: log.duration ? Math.min(1, log.duration / 100) : 0.95,
+                        scanned_at: log.createdAt.toISOString(),
+                        device_code: log.ip || 'MAIN_GATE_01',
+                        action: direction === 'IN' ? 'checkin' : 'checkout',
+                        student: {
+                            code: log.userId ? `user_${log.userId}` : 'unknown',
+                            name: studentName,
+                            room,
+                        },
+                    });
+                }
+            }
+            const items = Array.from(mergedMap.values()).slice(0, 30);
             return res.status(200).json((0, api_response_1.createResponse)(200, 'Scan history retrieved successfully', {
-                items: face_verification_monitoring_1.faceVerificationMonitoringBus.getScanHistory(),
+                scans: items,
+                items,
             }));
         }
         catch (error) {

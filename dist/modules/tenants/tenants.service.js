@@ -10,6 +10,7 @@ const tenants_repository_1 = require("./tenants.repository");
 const path_1 = __importDefault(require("path"));
 const settings_service_1 = require("../settings/settings.service");
 const date_utils_1 = require("../../shared/date-utils");
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 class TenantsService {
     static async getMaxOccupants() {
         return Number(await (0, settings_service_1.getSettingValue)('maxOccupants')) || 4;
@@ -300,14 +301,20 @@ class TenantsService {
                 data: { status: isNowOccupied ? 'OCCUPIED' : 'AVAILABLE' },
             });
         }
-        return tenants_repository_1.TenantsRepository.updateTenant(id, updateData, client);
+        const updated = await tenants_repository_1.TenantsRepository.updateTenant(id, updateData, client);
+        if (updated) {
+            (0, notification_gateway_1.publishAdminAlert)(updated.id, 'TENANT_STATUS', `อัปเดตสถานะผู้พักอาศัย ${updated.fullName || ''}: ${updated.status || 'ACTIVE'}`, updated.status || 'ACTIVE');
+        }
+        return updated;
     }
     static async deleteTenant(id, db) {
         const tenant = await tenants_repository_1.TenantsRepository.getTenantById(id, db);
         if (!tenant) {
             throw new error_handler_1.AppError('Tenant not found', 404);
         }
-        return tenants_repository_1.TenantsRepository.deleteTenant(id, db);
+        const result = await tenants_repository_1.TenantsRepository.deleteTenant(id, db);
+        (0, notification_gateway_1.publishAdminAlert)(id, 'TENANT_STATUS', `ลบข้อมูลผู้พักอาศัย #${id}`, 'DELETED');
+        return result;
     }
 }
 exports.TenantsService = TenantsService;

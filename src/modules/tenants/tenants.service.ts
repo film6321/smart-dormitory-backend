@@ -5,6 +5,7 @@ import { TenantsRepository } from './tenants.repository';
 import path from 'path';
 import { getSettingValue } from '../settings/settings.service';
 import { calculateAge } from '../../shared/date-utils';
+import { publishAdminAlert } from '../../realtime/notification-gateway';
 
 export interface CreateTenantInput {
   userId?: number | null;
@@ -377,7 +378,11 @@ export class TenantsService {
       });
     }
 
-    return TenantsRepository.updateTenant(id, updateData, client);
+    const updated = await TenantsRepository.updateTenant(id, updateData, client);
+    if (updated) {
+      publishAdminAlert(updated.id, 'TENANT_STATUS', `อัปเดตสถานะผู้พักอาศัย ${updated.fullName || ''}: ${updated.status || 'ACTIVE'}`, updated.status || 'ACTIVE');
+    }
+    return updated;
   }
 
   static async deleteTenant(id: number, db?: DbClient) {
@@ -386,6 +391,8 @@ export class TenantsService {
       throw new AppError('Tenant not found', 404);
     }
 
-    return TenantsRepository.deleteTenant(id, db);
+    const result = await TenantsRepository.deleteTenant(id, db);
+    publishAdminAlert(id, 'TENANT_STATUS', `ลบข้อมูลผู้พักอาศัย #${id}`, 'DELETED');
+    return result;
   }
 }

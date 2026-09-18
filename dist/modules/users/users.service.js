@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
+const notification_gateway_1 = require("../../realtime/notification-gateway");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const error_handler_1 = require("../../middlewares/error-handler");
 const presence_1 = require("../../shared/presence");
@@ -55,6 +56,7 @@ class UsersService {
             username: username || null,
             role: (data.role ?? 'STUDENT').toUpperCase(),
         }, db);
+        (0, notification_gateway_1.publishAdminAlert)(user.id, 'USER_STATUS', `เพิ่มผู้ใช้งานใหม่: ${user.email}`, 'ACTIVE');
         return UsersService.withDisplayName(user);
     }
     static async updateUser(id, data, db) {
@@ -69,10 +71,15 @@ class UsersService {
             payload.password = await bcrypt_1.default.hash(data.password, 10);
         }
         const user = await users_repository_1.UsersRepository.updateUser(id, payload, db);
+        if (user) {
+            (0, notification_gateway_1.publishAdminAlert)(user.id, 'USER_STATUS', `อัปเดตผู้ใช้งาน: ${user.email}`, 'ACTIVE');
+        }
         return UsersService.withDisplayName(user);
     }
     static async deleteUser(id, db) {
-        return users_repository_1.UsersRepository.deleteUser(id, db);
+        const res = await users_repository_1.UsersRepository.deleteUser(id, db);
+        (0, notification_gateway_1.publishAdminAlert)(id, 'USER_STATUS', `ลบผู้ใช้งาน #${id}`, 'DELETED');
+        return res;
     }
 }
 exports.UsersService = UsersService;

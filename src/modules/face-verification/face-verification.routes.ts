@@ -91,6 +91,7 @@ router.post('/detections', verifyFaceGateToken, FaceVerificationController.detec
 router.get('/live-stream', FaceVerificationController.liveStream);
 router.get('/devices', verifyToken, requireRole(['ADMIN']), FaceVerificationController.devices);
 router.get('/scan-history', verifyToken, requireRole(['ADMIN']), FaceVerificationController.scanHistory);
+router.get('/history', verifyToken, requireRole(['ADMIN']), FaceVerificationController.scanHistory);
 router.get('/events', verifyToken, requireRole(['ADMIN']), FaceVerificationController.events);
 
 // ── Template Management Endpoints ──

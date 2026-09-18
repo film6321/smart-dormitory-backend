@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.closeNotificationGateway = exports.publishAdminAlert = exports.publishNotificationAlert = exports.initializeNotificationGateway = void 0;
+exports.closeNotificationGateway = exports.publishAdminAlert = exports.publishNotificationAlert = exports.publishRealtimeEvent = exports.publishAnalyticsTelemetry = exports.initializeNotificationGateway = void 0;
 const socket_io_1 = require("socket.io");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_1 = require("../shared/env");
@@ -63,6 +63,21 @@ const initializeNotificationGateway = (httpServer, resolveUserRoom) => {
                 void socket.leave(room);
             }
         });
+        socket.on('requestTelemetry', async () => {
+            if (user.role === 'ADMIN') {
+                const mem = process.memoryUsage();
+                socket.emit('system:telemetry', {
+                    uptimeSeconds: Math.floor(process.uptime()),
+                    memoryUsageMb: {
+                        rss: Math.round((mem.rss / 1024 / 1024) * 100) / 100,
+                        heapTotal: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100,
+                        heapUsed: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
+                        external: Math.round((mem.external / 1024 / 1024) * 100) / 100,
+                    },
+                    timestamp: new Date().toISOString(),
+                });
+            }
+        });
         socket.on('disconnect', (reason) => {
             logger_1.logger.debug({ userId: user.id, reason }, 'Realtime client disconnected');
         });
@@ -70,6 +85,20 @@ const initializeNotificationGateway = (httpServer, resolveUserRoom) => {
     return realtimeServer;
 };
 exports.initializeNotificationGateway = initializeNotificationGateway;
+const publishAnalyticsTelemetry = (telemetry) => {
+    if (!realtimeServer) {
+        return;
+    }
+    realtimeServer.to('admins').emit('system:telemetry', telemetry);
+};
+exports.publishAnalyticsTelemetry = publishAnalyticsTelemetry;
+const publishRealtimeEvent = (eventName, payload) => {
+    if (!realtimeServer) {
+        return;
+    }
+    realtimeServer.to('admins').emit(eventName, payload);
+};
+exports.publishRealtimeEvent = publishRealtimeEvent;
 const publishNotificationAlert = (notification) => {
     if (!realtimeServer) {
         return;
@@ -83,6 +112,23 @@ const publishNotificationAlert = (notification) => {
         payload: notification.payload,
         createdAt: notification.createdAt,
     });
+    const upperType = notification.type.toUpperCase();
+    if (upperType.includes('BILL')) {
+        realtimeServer.to('admins').emit('billStatusUpdated', notification);
+    }
+    else if (upperType.includes('MAINTENANCE')) {
+        realtimeServer.to('admins').emit('maintenanceStatusUpdated', notification);
+    }
+    else if (upperType.includes('VISITOR')) {
+        realtimeServer.to('admins').emit('visitorStatusUpdated', notification);
+        realtimeServer.to('admins').emit('visitorScanEvent', notification);
+    }
+    else if (upperType.includes('TENANT') || upperType.includes('STUDENT')) {
+        realtimeServer.to('admins').emit('tenantStatusUpdated', notification);
+    }
+    else if (upperType.includes('USER')) {
+        realtimeServer.to('admins').emit('userStatusUpdated', notification);
+    }
 };
 exports.publishNotificationAlert = publishNotificationAlert;
 const publishAdminAlert = (id, type, message, status = 'PENDING') => {
