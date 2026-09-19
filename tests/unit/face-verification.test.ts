@@ -244,6 +244,7 @@ describe('FaceVerificationService (unit)', () => {
     }) as any;
 
     try {
+      FaceVerificationService.clearCooldowns();
       const userScan = await FaceVerificationService.recordScan(
         'user_99',
         'IN',
@@ -253,10 +254,23 @@ describe('FaceVerificationService (unit)', () => {
       );
       assert.equal(userScan.status, 'ok');
       assert.equal(userScan.action, 'checkin');
+      assert.equal(userScan.cooldown_active, false);
       assert.equal(userScan.student.name, 'John Doe');
       assert.equal(accessLogs.length, 1);
       assert.equal(accessLogs[0].userId, 99);
       assert.equal(accessLogs[0].path, 'IN');
+
+      // Second rapid scan for the same user should activate cooldown and NOT create duplicate AccessLog
+      const duplicateUserScan = await FaceVerificationService.recordScan(
+        'user_99',
+        'IN',
+        0.96,
+        new Date().toISOString(),
+        'CAMERA_01'
+      );
+      assert.equal(duplicateUserScan.status, 'ok');
+      assert.equal(duplicateUserScan.cooldown_active, true);
+      assert.equal(accessLogs.length, 1); // AccessLog length still 1 (no duplicate!)
 
       const visitorScan = await FaceVerificationService.recordScan(
         'visitor_5',
@@ -267,14 +281,82 @@ describe('FaceVerificationService (unit)', () => {
       );
       assert.equal(visitorScan.status, 'ok');
       assert.equal(visitorScan.action, 'checkout');
+      assert.equal(visitorScan.cooldown_active, false);
       assert.equal(visitorScan.student.name, 'Jane Smith');
       assert.equal(visitorUpdates.length, 1);
       assert.equal(visitorUpdates[0].data.status, 'CHECKED_OUT');
       assert.equal(visitorLogs.length, 1);
       assert.equal(visitorLogs[0].visitorId, 5);
       assert.equal(visitorLogs[0].eventType, 'CHECK_OUT');
+
+      // Duplicate visitor scan in cooldown
+      const duplicateVisitorScan = await FaceVerificationService.recordScan(
+        'visitor_5',
+        'OUT',
+        0.84,
+        new Date().toISOString(),
+        'CAMERA_02'
+      );
+      assert.equal(duplicateVisitorScan.cooldown_active, true);
+      assert.equal(visitorLogs.length, 1); // No duplicate visitor log
     } finally {
+      FaceVerificationService.clearCooldowns();
       restorePrisma();
     }
+  });
+
+  it('rejects low confidence match when similarity is below threshold to prevent false identity mismatch', async () => {
+    const originalFetch = globalThis.fetch;
+    db.user.findUnique = (async ({ where }: any) => {
+      if (where.id === 1) return { id: 1, firstName: 'System', lastName: 'Admin' };
+      return null;
+    }) as any;
+
+    // External API mistakenly matches Admin with low confidence (0.61) below threshold (0.68)
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      matched: true,
+      user_id: 1,
+      similarity: 0.61,
+      processing_time_ms: 35,
+      message: 'Admin',
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+
+    try {
+      const buffer = Buffer.from('fake-low-similarity-face');
+      const result = await FaceVerificationService.verifyFace(
+        buffer,
+        'image/jpeg',
+        'somchai-face.jpg',
+        0.68 // strict threshold
+      );
+
+      // Should be rejected by threshold guardrail instead of falsely matching Admin
+      assert.equal(result.matched, false);
+      assert.equal(result.user_id, null);
+      assert.equal(result.similarity, 0.61);
+      assert.equal(result.message, 'Face did not match registered templates');
+    } finally {
+      globalThis.fetch = originalFetch;
+      restorePrisma();
+    }
+  });
+
+  it('clears scan history from monitoring bus', () => {
+    const { faceVerificationMonitoringBus } = require('../../src/modules/face-verification/face-verification-monitoring');
+    faceVerificationMonitoringBus.recordScan({
+      id: 'test-scan-1',
+      student_code: 'user_99',
+      direction: 'IN',
+      confidence: 0.95,
+      scanned_at: new Date().toISOString(),
+    });
+
+    assert.ok(faceVerificationMonitoringBus.getScanHistory().length > 0);
+
+    faceVerificationMonitoringBus.clearScanHistory();
+    assert.equal(faceVerificationMonitoringBus.getScanHistory().length, 0);
   });
 });

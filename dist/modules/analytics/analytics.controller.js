@@ -23,5 +23,14 @@ class AnalyticsController {
             next(error);
         }
     }
+    static async getObservabilityAnalytics(req, res, next) {
+        try {
+            const analytics = await analytics_service_1.AnalyticsService.getObservabilityAnalytics();
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Observability analytics retrieved successfully', analytics));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
 }
 exports.AnalyticsController = AnalyticsController;

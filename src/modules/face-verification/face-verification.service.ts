@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
+import { getRedisClient } from '../../shared/redis';
 import { AppError } from '../../middlewares/error-handler';
 import { logger } from '../../logger';
 import {
@@ -38,7 +39,54 @@ const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'face-photo');
 const db = prisma;
 
 export class FaceVerificationService {
+  public static readonly DEFAULT_SIMILARITY_THRESHOLD = 0.68;
   private static readonly DEFAULT_DETECTION_INTERVAL = 4;
+  private static readonly inMemoryCooldowns = new Map<string, number>();
+
+  private static shouldUseRedis(): boolean {
+    return (
+      process.env.NODE_ENV !== 'test' &&
+      (process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT_STORE === 'redis' || Boolean(process.env.REDIS_URL))
+    );
+  }
+
+  /**
+   * Acquire a distributed cooldown lock via Redis, with in-memory TTL fallback.
+   * Returns true if lock was acquired (first scan in cooldown window), false if duplicate/within cooldown.
+   */
+  static async acquireCooldownLock(key: string, ttlMs: number = 5000): Promise<boolean> {
+    const now = Date.now();
+    const memExpiry = this.inMemoryCooldowns.get(key);
+    if (memExpiry && memExpiry > now) {
+      return false;
+    }
+
+    if (this.shouldUseRedis()) {
+      try {
+        const redis = getRedisClient();
+        const result = await redis.set(key, '1', 'PX', ttlMs, 'NX');
+        if (result !== 'OK') {
+          return false;
+        }
+        this.inMemoryCooldowns.set(key, now + ttlMs);
+        return true;
+      } catch {
+        // Fallback to in-memory on redis connection error
+      }
+    }
+
+    this.inMemoryCooldowns.set(key, now + ttlMs);
+    if (this.inMemoryCooldowns.size > 1000) {
+      for (const [k, exp] of this.inMemoryCooldowns.entries()) {
+        if (exp <= now) this.inMemoryCooldowns.delete(k);
+      }
+    }
+    return true;
+  }
+
+  static clearCooldowns(): void {
+    this.inMemoryCooldowns.clear();
+  }
 
   static resolveDetectionInterval(interval?: string | number | null): number {
     if (interval === undefined || interval === null || interval === '') {
@@ -222,6 +270,11 @@ export class FaceVerificationService {
       throw new AppError('Runtime fetch API is not available', 500);
     }
 
+    const effectiveThreshold =
+      threshold !== undefined && threshold > 0
+        ? threshold
+        : Number(process.env.FACE_SIMILARITY_THRESHOLD || this.DEFAULT_SIMILARITY_THRESHOLD);
+
     try {
       const fileArrayBuffer = fileBuffer.buffer.slice(
         fileBuffer.byteOffset,
@@ -230,9 +283,7 @@ export class FaceVerificationService {
 
       const formData = new FormData();
       formData.append('file', new Blob([fileArrayBuffer], { type: mimeType }), fileName);
-      if (threshold !== undefined) {
-        formData.append('threshold', String(threshold));
-      }
+      formData.append('threshold', String(effectiveThreshold));
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -246,7 +297,7 @@ export class FaceVerificationService {
       if (!response.ok) {
         await response.arrayBuffer();
         logger.warn({ endpoint, status: response.status, fileName }, 'Face API returned non-ok status');
-        return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
+        return this.createMockFaceVerificationResult(fileBuffer, fileName, effectiveThreshold);
       }
 
       const result = await response.json();
@@ -254,9 +305,14 @@ export class FaceVerificationService {
         throw new AppError('Face recognition service returned invalid JSON', 502);
       }
 
-      const matched = Boolean(result.matched);
-      const matchedUserId = result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
-      let userName = result.message;
+      const rawMatched = Boolean(result.matched);
+      const similarity = Number(result.similarity ?? 0);
+
+      // Strict Threshold Guardrail:
+      // Even if external API returns matched, ensure similarity meets the effective threshold to prevent false positives
+      const matched = rawMatched && similarity >= effectiveThreshold;
+      const matchedUserId = matched && result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
+      let userName = matched ? result.message : undefined;
 
       // If matched, lookup real user name from DB
       if (matched && matchedUserId) {
@@ -281,13 +337,13 @@ export class FaceVerificationService {
       return {
         matched,
         user_id: matchedUserId,
-        similarity: Number(result.similarity ?? 0),
+        similarity,
         processing_time_ms: Number(result.processing_time_ms ?? 0),
         message: matched ? (userName || 'Face matched successfully') : 'Face did not match registered templates',
       };
     } catch (error) {
       logger.warn({ fileName, error }, 'External Face API call failed or timed out; safe deny fallback applied');
-      return this.createMockFaceVerificationResult(fileBuffer, fileName, threshold);
+      return this.createMockFaceVerificationResult(fileBuffer, fileName, effectiveThreshold);
     }
   }
 
@@ -297,16 +353,8 @@ export class FaceVerificationService {
     fileName: string,
     threshold?: number
   ): Promise<FaceVerifyResponse> {
-    const start = Date.now();
     try {
       const data = await this.callExternalFaceApi(fileBuffer, mimeType, fileName, threshold);
-      const elapsed = Date.now() - start;
-      await this.saveLog(
-        data.user_id ?? undefined,
-        data.similarity,
-        data.matched ? 'MATCHED' : 'NOT_MATCHED',
-        elapsed,
-      );
       return data;
     } catch (error) {
       if (error instanceof AppError) {
@@ -315,27 +363,6 @@ export class FaceVerificationService {
 
       logger.error({ error, fileName }, 'Face verification error via external service');
       throw new AppError('Face recognition service unavailable', 502);
-    }
-  }
-
-  private static async saveLog(
-    userId: number | undefined,
-    similarity: number,
-    status: 'MATCHED' | 'NOT_MATCHED',
-    durationMs: number
-  ) {
-    try {
-      await db.accessLog.create({
-        data: {
-          userId: userId ?? undefined,
-          method: 'FACE_VERIFY',
-          path: status,
-          ip: 'BACKEND_FACE_VERIFY',
-          duration: Math.round(durationMs),
-        },
-      });
-    } catch (err) {
-      logger.warn({ err, userId, similarity, status, durationMs }, 'Failed to persist face verification log');
     }
   }
 
@@ -590,6 +617,9 @@ export class FaceVerificationService {
     logger.info({ studentCode, direction, deviceCode }, 'Face scan event received from FaceGate.Edge');
 
     const timestamp = new Date(scannedAt);
+    const normalizedDevice = deviceCode || 'EDGE_DEVICE';
+    const lockKey = `lock:face-cooldown:edge:${studentCode}:${normalizedDevice}`;
+    const isFirstScan = await this.acquireCooldownLock(lockKey, 5000);
 
     if (studentCode.startsWith('user_')) {
       const userId = Number(studentCode.replace('user_', ''));
@@ -606,17 +636,19 @@ export class FaceVerificationService {
         throw new AppError('User not found', 404);
       }
 
-      // Record in AccessLog
-      await db.accessLog.create({
-        data: {
-          userId: user.id,
-          method: 'FACE_GATE',
-          path: direction,
-          ip: deviceCode || 'EDGE_DEVICE',
-          duration: Math.round(confidence * 100),
-          createdAt: timestamp,
-        },
-      });
+      // Record in AccessLog only once per cooldown window
+      if (isFirstScan) {
+        await db.accessLog.create({
+          data: {
+            userId: user.id,
+            method: 'FACE_GATE',
+            path: direction,
+            ip: normalizedDevice,
+            duration: Math.round(confidence * 100),
+            createdAt: timestamp,
+          },
+        });
+      }
 
       const studentName =
         user.tenant?.fullName ||
@@ -627,6 +659,7 @@ export class FaceVerificationService {
       return {
         status: 'ok',
         action: direction === 'IN' ? 'checkin' : 'checkout',
+        cooldown_active: !isFirstScan,
         student: {
           code: studentCode,
           name: studentName,
@@ -640,30 +673,33 @@ export class FaceVerificationService {
         throw new AppError('Visitor not found', 404);
       }
 
-      // Update visitor status
-      const nextStatus = direction === 'IN' ? 'CHECKED_IN' : 'CHECKED_OUT';
-      await db.visitor.update({
-        where: { id: visitor.id },
-        data: {
-          status: nextStatus,
-          checkedInAt: direction === 'IN' ? timestamp : visitor.checkedInAt,
-          checkedOutAt: direction === 'OUT' ? timestamp : visitor.checkedOutAt,
-        },
-      });
+      // Update visitor status and log only once per cooldown window
+      if (isFirstScan) {
+        const nextStatus = direction === 'IN' ? 'CHECKED_IN' : 'CHECKED_OUT';
+        await db.visitor.update({
+          where: { id: visitor.id },
+          data: {
+            status: nextStatus,
+            checkedInAt: direction === 'IN' ? timestamp : visitor.checkedInAt,
+            checkedOutAt: direction === 'OUT' ? timestamp : visitor.checkedOutAt,
+          },
+        });
 
-      // Write VisitorLog
-      await db.visitorLog.create({
-        data: {
-          visitorId: visitor.id,
-          eventType: direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
-          note: `Scanned on device: ${deviceCode || 'N/A'} (confidence: ${confidence})`,
-          createdAt: timestamp,
-        },
-      });
+        // Write VisitorLog
+        await db.visitorLog.create({
+          data: {
+            visitorId: visitor.id,
+            eventType: direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
+            note: `Scanned on device: ${normalizedDevice} (confidence: ${confidence})`,
+            createdAt: timestamp,
+          },
+        });
+      }
 
       return {
         status: 'ok',
         action: direction === 'IN' ? 'checkin' : 'checkout',
+        cooldown_active: !isFirstScan,
         student: {
           code: studentCode,
           name: visitor.guestName,

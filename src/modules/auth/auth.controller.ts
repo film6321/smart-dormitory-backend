@@ -3,6 +3,8 @@ import { AuthService } from './auth.service';
 import { createResponse } from '../../shared/api-response';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { clearUserOnline, markUserOnline } from '../../shared/presence';
+import { AppError } from '../../middlewares/error-handler';
+import { recordLoginAttempt } from '../../setup/observability-metrics';
 
 export class AuthController {
   
@@ -15,6 +17,7 @@ export class AuthController {
       }
 
       const data = await AuthService.login(email, password);
+      recordLoginAttempt('success');
       res.cookie('access_token', data.token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -24,6 +27,7 @@ export class AuthController {
       });
       return res.status(200).json(createResponse(200, 'เข้าสู่ระบบสำเร็จ', { user: data.user }));
     } catch (error) {
+      recordLoginAttempt(error instanceof AppError && error.statusCode === 401 ? 'invalid_credentials' : 'error');
       next(error); // โยนเหวี่ยงให้ Middleware Error Catch เป็นคนจัดการ Response
     }
   }

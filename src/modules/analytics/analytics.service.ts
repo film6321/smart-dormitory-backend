@@ -2,6 +2,25 @@ import os from 'os';
 import promClient from 'prom-client';
 import { prisma, type DbClient } from '../../database/db';
 
+type MetricBreakdown = Record<string, number>;
+
+export interface ObservabilityAnalyticsResponse {
+  system: SystemAnalytics;
+  http: MetricBreakdown | null;
+  security: {
+    login: MetricBreakdown;
+    faceVerification: MetricBreakdown;
+  } | null;
+  metricsAvailable: boolean;
+  metricsSource: 'prometheus' | 'unavailable';
+  timestamp: string;
+}
+
+interface PrometheusQueryResponse {
+  status: 'success' | 'error';
+  data?: { result?: Array<{ metric?: Record<string, string>; value?: [number, string] }> };
+}
+
 export interface SystemAnalytics {
   uptimeSeconds: number;
   memoryUsageMb: {
@@ -55,7 +74,7 @@ export interface DashboardAnalyticsResponse {
 }
 
 export class AnalyticsService {
-  static async getDashboardAnalytics(db: DbClient = prisma): Promise<DashboardAnalyticsResponse> {
+  private static getSystemAnalytics(): SystemAnalytics {
     const mem = process.memoryUsage();
     const system: SystemAnalytics = {
       uptimeSeconds: Math.floor(process.uptime()),
@@ -74,6 +93,11 @@ export class AnalyticsService {
       platform: process.platform,
     };
 
+    return system;
+  }
+
+  static async getDashboardAnalytics(db: DbClient = prisma): Promise<DashboardAnalyticsResponse> {
+    const system = this.getSystemAnalytics();
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -162,5 +186,65 @@ export class AnalyticsService {
 
   static async getPrometheusMetricsRaw(): Promise<string> {
     return promClient.register.metrics();
+  }
+
+  static async getObservabilityAnalytics(): Promise<ObservabilityAnalyticsResponse> {
+    const system = this.getSystemAnalytics();
+
+    try {
+      const [http, login, faceVerification] = await Promise.all([
+        this.queryPrometheusBreakdown('sum by (status_code) (dormitory_http_requests_total)', 'status_code'),
+        this.queryPrometheusBreakdown('sum by (outcome) (dormitory_auth_login_attempts_total)', 'outcome'),
+        this.queryPrometheusBreakdown('sum by (outcome) (dormitory_face_verification_attempts_total)', 'outcome'),
+      ]);
+
+      return {
+        system,
+        http: Object.keys(http).length === 0 ? null : {
+          '2xx': this.sumStatusClass(http, 2),
+          '3xx': this.sumStatusClass(http, 3),
+          '4xx': this.sumStatusClass(http, 4),
+          '5xx': this.sumStatusClass(http, 5),
+        },
+        security: Object.keys(login).length && Object.keys(faceVerification).length ? { login, faceVerification } : null,
+        metricsAvailable: Boolean(Object.keys(http).length && Object.keys(login).length && Object.keys(faceVerification).length),
+        metricsSource: 'prometheus',
+        timestamp: new Date().toISOString(),
+      };
+    } catch {
+      return {
+        system,
+        http: null,
+        security: null,
+        metricsAvailable: false,
+        metricsSource: 'unavailable',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  private static async queryPrometheusBreakdown(query: string, label: string): Promise<MetricBreakdown> {
+    const defaultUrl = `http://127.0.0.1:${process.env.PROMETHEUS_HOST_PORT || '9091'}`;
+    const baseUrl = (process.env.PROMETHEUS_INTERNAL_URL || defaultUrl).replace(/\/$/, '');
+    const response = await fetch(`${baseUrl}/api/v1/query?query=${encodeURIComponent(query)}`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) throw new Error(`Prometheus query failed with HTTP ${response.status}`);
+
+    const payload = await response.json() as PrometheusQueryResponse;
+    if (payload.status !== 'success' || !Array.isArray(payload.data?.result)) throw new Error('Prometheus query was unsuccessful');
+
+    return (payload.data?.result ?? []).reduce<MetricBreakdown>((result, item) => {
+      const key = item.metric?.[label];
+      const value = Number(item.value?.[1]);
+      if (key && Number.isFinite(value)) result[key] = value;
+      return result;
+    }, {});
+  }
+
+  private static sumStatusClass(breakdown: MetricBreakdown, statusClass: number): number {
+    return Object.entries(breakdown).reduce((total, [statusCode, value]) => (
+      statusCode.startsWith(String(statusClass)) ? total + value : total
+    ), 0);
   }
 }

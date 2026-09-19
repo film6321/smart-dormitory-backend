@@ -82,7 +82,11 @@ router.post('/detections', verifyFaceGateToken, face_verification_controller_1.F
 router.get('/live-stream', face_verification_controller_1.FaceVerificationController.liveStream);
 router.get('/devices', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.devices);
 router.get('/scan-history', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.scanHistory);
+router.delete('/scan-history', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.clearScanHistory);
+router.post('/scan-history/clear', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.clearScanHistory);
 router.get('/history', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.scanHistory);
+router.delete('/history', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.clearScanHistory);
+router.post('/history/clear', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.clearScanHistory);
 router.get('/events', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.events);
 // ── Template Management Endpoints ──
 router.get('/:templateId', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), face_verification_controller_1.FaceVerificationController.getTemplate);

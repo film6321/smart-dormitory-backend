@@ -79,6 +79,7 @@ services:
       OCR_API_BASE_URL: http://host.docker.internal:8000
       FACE_API_URL: http://face-recognition:8000
       FACE_API_KEY: ${FACE_API_KEY:-face-recognition-secret-key-change-me-in-production}
+      PROMETHEUS_INTERNAL_URL: http://prometheus:9090
     deploy:
       replicas: 2
     depends_on:

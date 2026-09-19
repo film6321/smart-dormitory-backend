@@ -8,6 +8,7 @@ import { logger } from '../../logger';
 import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { faceVerificationMonitoringBus, type CameraScanSnapshot } from './face-verification-monitoring';
 import { faceVerificationStream } from './face-verification-stream';
+import { recordFaceVerificationAttempt } from '../../setup/observability-metrics';
 
 export class FaceVerificationController {
   // ── Existing Endpoints (for backward-compatibility with current frontend) ──
@@ -49,17 +50,21 @@ export class FaceVerificationController {
         return res.status(400).json(createResponse(400, 'Threshold must be a number between 0.0 and 1.0'));
       }
 
+      const effectiveThreshold = threshold !== undefined ? threshold : FaceVerificationService.DEFAULT_SIMILARITY_THRESHOLD;
+
       const data = await FaceVerificationService.verifyFace(
         uploadedFile.buffer,
         uploadedFile.mimetype,
         uploadedFile.originalname,
-        threshold
+        effectiveThreshold
       );
+      recordFaceVerificationAttempt(data.matched ? 'matched' : 'not_matched');
 
       const deviceCode = (typeof req.body?.device_code === 'string' && req.body.device_code.trim()) || 'MAIN_GATE_01';
       const direction = (typeof req.body?.direction === 'string' && req.body.direction.toUpperCase() === 'OUT') ? 'OUT' : 'IN';
       let studentName = data.message || 'ผู้พักอาศัย';
       let roomName = 'หอพัก';
+      let cooldownActive = false;
 
       if (data.matched && data.user_id) {
         try {
@@ -78,36 +83,45 @@ export class FaceVerificationController {
             roomName = user.tenant?.room?.roomNumber ? `ห้อง ${user.tenant.room.roomNumber}` : 'หอพัก';
           }
 
-          const scannedAt = new Date().toISOString();
+          // Check Cooldown Lock to prevent duplicate scans within 5 seconds
+          const lockKey = `lock:face-cooldown:user:${data.user_id}:${deviceCode}`;
+          const isFirstScan = await FaceVerificationService.acquireCooldownLock(lockKey, 5000);
 
-          // Save to AccessLog in Database
-          await prisma.accessLog.create({
-            data: {
-              userId: data.user_id,
-              method: 'FACE_GATE',
-              path: direction,
-              ip: deviceCode,
-              duration: Math.round((data.similarity ?? 1.0) * 100),
-            },
-          });
+          if (isFirstScan) {
+            const scannedAt = new Date().toISOString();
 
-          // Broadcast to monitoring bus (SSE)
-          faceVerificationMonitoringBus.recordScan({
-            id: `scan-${data.user_id}-${Date.now()}`,
-            student_code: `user_${data.user_id}`,
-            direction,
-            confidence: data.similarity ?? 1.0,
-            scanned_at: scannedAt,
-            device_code: deviceCode,
-            action: direction === 'IN' ? 'checkin' : 'checkout',
-            student: {
-              code: `user_${data.user_id}`,
-              name: studentName,
-              room: roomName,
-            },
-          });
+            // Save to AccessLog in Database (Only once per cooldown window)
+            await prisma.accessLog.create({
+              data: {
+                userId: data.user_id,
+                method: 'FACE_GATE',
+                path: direction,
+                ip: deviceCode,
+                duration: Math.round((data.similarity ?? 1.0) * 100),
+              },
+            });
+
+            // Broadcast to monitoring bus (SSE)
+            faceVerificationMonitoringBus.recordScan({
+              id: `scan-${data.user_id}-${Date.now()}`,
+              student_code: `user_${data.user_id}`,
+              direction,
+              confidence: data.similarity ?? 1.0,
+              scanned_at: scannedAt,
+              device_code: deviceCode,
+              action: direction === 'IN' ? 'checkin' : 'checkout',
+              student: {
+                code: `user_${data.user_id}`,
+                name: studentName,
+                room: roomName,
+              },
+            });
+          } else {
+            cooldownActive = true;
+            logger.info({ userId: data.user_id, deviceCode }, 'Face scan in cooldown window, suppressed duplicate access log');
+          }
         } catch (busErr) {
-          logger.warn({ busErr, userId: data.user_id }, 'Failed to broadcast scan to monitoring bus');
+          logger.warn({ busErr, userId: data.user_id }, 'Failed to process face verification access log or monitoring');
         }
       }
 
@@ -116,11 +130,13 @@ export class FaceVerificationController {
         student_name: studentName,
         action: direction === 'IN' ? 'checkin' : 'checkout',
         device_code: deviceCode,
+        cooldown_active: cooldownActive,
       };
 
       const message = data.matched ? 'Face matched successfully' : (data.message || 'Face did not match registered templates');
       return res.status(200).json(createResponse(200, message, responsePayload));
     } catch (error) {
+      recordFaceVerificationAttempt('error');
       next(error);
     }
   }
@@ -256,16 +272,18 @@ export class FaceVerificationController {
         snapshot_base64
       );
 
-      faceVerificationMonitoringBus.recordScan({
-        id: `${student_code}-${scanned_at}`,
-        student_code,
-        direction,
-        confidence: confidence !== undefined ? Number(confidence) : 1.0,
-        scanned_at,
-        device_code,
-        action: result.action,
-        student: result.student,
-      });
+      if (!result.cooldown_active) {
+        faceVerificationMonitoringBus.recordScan({
+          id: `${student_code}-${scanned_at}`,
+          student_code,
+          direction,
+          confidence: confidence !== undefined ? Number(confidence) : 1.0,
+          scanned_at,
+          device_code,
+          action: result.action,
+          student: result.student,
+        });
+      }
 
       return res.status(200).json(result);
     } catch (error) {
@@ -385,7 +403,7 @@ export class FaceVerificationController {
 
       const dbLogs = await prisma.accessLog.findMany({
         where: {
-          method: { in: ['FACE_GATE', 'FACE_VERIFY'] },
+          method: 'FACE_GATE',
           createdAt: { gte: startOfToday },
         },
         include: {
@@ -436,6 +454,35 @@ export class FaceVerificationController {
         createResponse(200, 'Scan history retrieved successfully', {
           scans: items,
           items,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async clearScanHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      // 1. Clear in-memory live stream monitoring history and broadcast snapshot via SSE
+      faceVerificationMonitoringBus.clearScanHistory();
+
+      // 2. Clear recent database access logs for face gate if requested
+      const clearDb = req.query.clear_db === 'true' || req.body?.clear_db === true || req.query.clear_db === undefined;
+      let deletedCount = 0;
+      if (clearDb) {
+        const deleteResult = await prisma.accessLog.deleteMany({
+          where: {
+            method: { in: ['FACE_GATE', 'FACE_VERIFY'] },
+          },
+        });
+        deletedCount = deleteResult.count;
+      }
+
+      logger.info({ deletedCount }, 'Face scan history cleared by admin');
+      return res.status(200).json(
+        createResponse(200, 'Scan history cleared successfully', {
+          cleared: true,
+          deleted_logs_count: deletedCount,
         }),
       );
     } catch (error) {

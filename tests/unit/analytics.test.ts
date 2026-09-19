@@ -61,3 +61,52 @@ describe('AnalyticsService (unit)', () => {
     assert.equal(result.dormitory.visitors.currentlyCheckedIn, 1);
   });
 });
+
+
+describe('observability analytics', () => {
+  it('groups HTTP statuses and returns security counters without querying dormitory data', async (t) => {
+    t.mock.method(AnalyticsService, 'getDashboardAnalytics', () => { throw new Error('Database must not be queried'); });
+    t.mock.method(globalThis, 'fetch', async (input: string) => {
+      const query = new URL(input).searchParams.get('query') ?? '';
+      const result = query.includes('http_requests')
+        ? [{ metric: { status_code: '200' }, value: [1, '4'] }, { metric: { status_code: '201' }, value: [1, '2'] }, { metric: { status_code: '404' }, value: [1, '3'] }]
+        : [{ metric: { outcome: query.includes('auth_login') ? 'success' : 'matched' }, value: [1, '5'] }];
+      return new Response(JSON.stringify({ status: 'success', data: { result } }));
+    });
+    const result = await AnalyticsService.getObservabilityAnalytics();
+    assert.deepEqual(result.http, { '2xx': 6, '3xx': 0, '4xx': 3, '5xx': 0 });
+    assert.equal(result.security?.login.success, 5);
+    assert.equal(result.security?.faceVerification.matched, 5);
+    assert.equal(result.metricsAvailable, true);
+    assert.ok(result.system.memoryUsageMb.rss > 0);
+  });
+
+  it('preserves valid zero counters as available data', async (t) => {
+    t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+      status: 'success', data: { result: [{ metric: { status_code: '200', outcome: 'success' }, value: [1, '0'] }] },
+    })));
+    const result = await AnalyticsService.getObservabilityAnalytics();
+    assert.equal(result.metricsAvailable, true);
+    assert.equal(result.http?.['2xx'], 0);
+    assert.equal(result.security?.login.success, 0);
+  });
+
+  it('reports absent time series as unavailable instead of zero', async (t) => {
+    t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ status: 'success', data: { result: [] } })));
+    const result = await AnalyticsService.getObservabilityAnalytics();
+    assert.equal(result.metricsAvailable, false);
+    assert.equal(result.http, null);
+    assert.equal(result.security, null);
+    assert.ok(result.system.memoryUsageMb.rss > 0);
+  });
+
+  it('still returns memory when the metrics server fails', async (t) => {
+    t.mock.method(globalThis, 'fetch', async () => { throw new Error('Metrics unavailable'); });
+    const result = await AnalyticsService.getObservabilityAnalytics();
+    assert.equal(result.metricsAvailable, false);
+    assert.equal(result.metricsSource, 'unavailable');
+    assert.equal(result.http, null);
+    assert.equal(result.security, null);
+    assert.ok(result.system.memoryUsageMb.rss > 0);
+  });
+});

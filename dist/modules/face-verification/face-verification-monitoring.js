@@ -121,5 +121,9 @@ class FaceVerificationMonitoringBus {
     getScanHistory() {
         return [...this.scanHistory];
     }
+    clearScanHistory() {
+        this.scanHistory.length = 0;
+        this.emitEvent('snapshot', this.getSnapshot());
+    }
 }
 exports.faceVerificationMonitoringBus = new FaceVerificationMonitoringBus();

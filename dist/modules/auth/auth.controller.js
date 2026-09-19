@@ -4,6 +4,8 @@ exports.AuthController = void 0;
 const auth_service_1 = require("./auth.service");
 const api_response_1 = require("../../shared/api-response");
 const presence_1 = require("../../shared/presence");
+const error_handler_1 = require("../../middlewares/error-handler");
+const observability_metrics_1 = require("../../setup/observability-metrics");
 class AuthController {
     static async login(req, res, next) {
         try {
@@ -12,6 +14,7 @@ class AuthController {
                 return res.status(400).json((0, api_response_1.createResponse)(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
             }
             const data = await auth_service_1.AuthService.login(email, password);
+            (0, observability_metrics_1.recordLoginAttempt)('success');
             res.cookie('access_token', data.token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
@@ -22,6 +25,7 @@ class AuthController {
             return res.status(200).json((0, api_response_1.createResponse)(200, 'เข้าสู่ระบบสำเร็จ', { user: data.user }));
         }
         catch (error) {
+            (0, observability_metrics_1.recordLoginAttempt)(error instanceof error_handler_1.AppError && error.statusCode === 401 ? 'invalid_credentials' : 'error');
             next(error); // โยนเหวี่ยงให้ Middleware Error Catch เป็นคนจัดการ Response
         }
     }
