@@ -29,5 +29,14 @@ class VisitorRepository {
     static async updateVisitorStatus(id, data, db = db_1.prisma) {
         return db.visitor.update({ where: { id }, data });
     }
+    static async cancelVisitor(id, cancelledAt = new Date(), db = db_1.prisma) {
+        return db.visitor.update({
+            where: { id },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt,
+            },
+        });
+    }
 }
 exports.VisitorRepository = VisitorRepository;

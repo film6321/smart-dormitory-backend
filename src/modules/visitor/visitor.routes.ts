@@ -1,13 +1,59 @@
-import { Router } from 'express';
-import { verifyToken, requireRole } from '../../middlewares/auth-jwt';
+import { NextFunction, Request, Response, Router } from 'express';
+import multer from 'multer';
+import { AppError } from '../../middlewares/error-handler';
+import { verifyToken, requireRole, optionalVerifyToken } from '../../middlewares/auth-jwt';
 import { validateDto } from '../shared/dto-validation';
 import { VisitorController } from './visitor.controller';
-import { registerVisitorSchema, updateVisitorStatusSchema } from './visitor.dto';
+import {
+  registerVisitorSchema,
+  cancelVisitorSchema,
+  updateVisitorStatusSchema,
+} from './visitor.dto';
 
 const router = Router();
 
-router.post('/register', verifyToken, validateDto(registerVisitorSchema), VisitorController.registerVisitor);
+const allowedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!allowedImageMimeTypes.has(file.mimetype)) {
+      callback(new AppError('Only JPG, PNG, and WebP image files are allowed', 400));
+      return;
+    }
+
+    callback(null, true);
+  },
+});
+
+const uploadIdCardImage = (req: Request, res: Response, next: NextFunction) => {
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'image', maxCount: 1 },
+    { name: 'idCard', maxCount: 1 },
+    { name: 'document', maxCount: 1 },
+  ])(req, res, (error: unknown) => {
+    if (error instanceof multer.MulterError) {
+      next(new AppError(error.code === 'LIMIT_FILE_SIZE' ? 'Image file must be 5MB or smaller' : error.message, 400));
+      return;
+    }
+
+    next(error);
+  });
+};
+
+router.post('/scan-id-card', optionalVerifyToken, uploadIdCardImage, VisitorController.scanVisitorIdCard);
+router.post('/verify-id-card', optionalVerifyToken, uploadIdCardImage, VisitorController.scanVisitorIdCard);
+router.post('/verify', optionalVerifyToken, uploadIdCardImage, VisitorController.scanVisitorIdCard);
+router.post('/register', optionalVerifyToken, validateDto(registerVisitorSchema), VisitorController.registerVisitor);
+router.get('/:id/pass', optionalVerifyToken, VisitorController.getVisitorPass);
+router.get('/:id', optionalVerifyToken, VisitorController.getVisitorPass);
+router.post('/:id/cancel', optionalVerifyToken, validateDto(cancelVisitorSchema), VisitorController.cancelVisitor);
+
 router.get('/', verifyToken, requireRole(['ADMIN']), VisitorController.listVisitors);
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateVisitorStatusSchema), VisitorController.updateVisitorStatus);
 
 export default router;
+

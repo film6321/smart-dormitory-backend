@@ -1,3 +1,4 @@
+import { assertSlipAvailable } from './payment-slip-guard';
 import type { Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import fs from 'fs/promises';
@@ -52,11 +53,6 @@ const parseTransferAt = (rawData: unknown): Date | null => {
   if (typeof value !== 'string' && typeof value !== 'number') return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const parseProviderReference = (rawData: unknown): string | undefined => {
-  const value = findNestedValue(rawData, ['providerTransactionId', 'transactionId', 'referenceNumber', 'reference', 'transRef']);
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 
 const includeBatchDetails = {
@@ -241,6 +237,7 @@ export class PaymentBatchService {
     }
 
     await prisma.$transaction(async (transaction) => {
+      await assertSlipAvailable(transaction, slipHash, undefined, { batchId });
       const claimedBatch = await transaction.paymentBatch.updateMany({
         where: { id: batchId, payerUserId: userId, status: batch.status },
         data: { status: 'VERIFYING', slipHash, slipPath, failureReason: null },
@@ -287,16 +284,18 @@ export class PaymentBatchService {
     const verified = verification.success
       && verification.recipientMatched
       && !verification.duplicate
-      && amountMatches;
+      && amountMatches
+      && Boolean(verification.transactionId);
     const failureReason = verification.duplicate
       ? 'Duplicate slip'
       : !verification.recipientMatched
         ? 'Recipient account does not match'
         : !amountMatches
           ? 'Payment amount does not match payment batch'
-          : verification.message;
+          : !verification.transactionId ? 'Missing transaction reference' : verification.message;
 
     await prisma.$transaction(async (transaction) => {
+      await assertSlipAvailable(transaction, slipHash, verification.transactionId, { batchId });
       const current = await transaction.paymentBatch.findUnique({
         where: { id: batchId },
         include: { items: true },
@@ -311,7 +310,7 @@ export class PaymentBatchService {
           status: verified ? 'PAID' : 'FAILED',
           slipAmount: verification.amount,
           transferAt: parseTransferAt(verification.rawData),
-          providerTransactionId: parseProviderReference(verification.rawData),
+          providerTransactionId: verification.transactionId,
           providerResponse: JSON.stringify(verification.rawData),
           failureReason: verified ? null : failureReason,
           verifiedAt: verified ? new Date() : null,
@@ -332,6 +331,18 @@ export class PaymentBatchService {
           },
         });
       }
+    }).catch(async (error: unknown) => {
+      const duplicate = error instanceof AppError && error.statusCode === 409;
+      await prisma.$transaction(async (tx) => {
+        await tx.paymentBatch.updateMany({ where: { id: batchId, status: 'VERIFYING' }, data: {
+          status: duplicate ? 'FAILED' : 'MANUAL_REVIEW', failureReason: 'PAYMENT_FINALIZATION_FAILED',
+        } });
+        if (duplicate) await tx.bill.updateMany({
+          where: { id: { in: batch.items.map((item) => item.billId) }, status: 'VERIFYING', slipHash },
+          data: { status: 'FAILED', reason: 'Duplicate transaction', version: { increment: 1 } },
+        });
+      });
+      throw error;
     });
 
     return this.getById(batchId, userId);

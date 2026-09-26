@@ -1,3 +1,4 @@
+import { assertSlipAvailable } from './payment-slip-guard';
 import type { Prisma, BillStatus } from '@prisma/client';
 import crypto from 'crypto';
 import { AppError } from '../../middlewares/error-handler';
@@ -244,6 +245,7 @@ export class BillingService {
       }
 
       const payment = await prisma.$transaction(async (transaction) => {
+        await assertSlipAvailable(transaction, slipHash);
         const updatedBill = await transaction.bill.updateMany({
           where: {
             id: billId,
@@ -293,16 +295,18 @@ export class BillingService {
       const verified = verification.success
         && verification.recipientMatched
         && !verification.duplicate
-        && amountMatches;
+        && amountMatches
+        && Boolean(verification.transactionId);
       const failureReason = verification.duplicate
         ? 'Duplicate slip'
         : !verification.recipientMatched
           ? 'Recipient account does not match'
           : !amountMatches
             ? 'Payment amount does not match bill amount'
-            : verification.message;
+            : !verification.transactionId ? 'Missing transaction reference' : verification.message;
 
       const result = await prisma.$transaction(async (transaction) => {
+        await assertSlipAvailable(transaction, slipHash, verification.transactionId, { paymentId: payment.id });
         const currentBill = await transaction.bill.findUnique({ where: { id: billId } });
         if (!currentBill || currentBill.status !== 'VERIFYING') {
           throw new AppError('Bill verification state changed unexpectedly', 409);
@@ -327,12 +331,25 @@ export class BillingService {
           data: {
             status: verified ? 'PAID' : 'FAILED',
             providerResponse: JSON.stringify(verification.rawData),
+            providerTransactionId: verification.transactionId,
+            slipAmount: verification.amount,
             failureReason: verified ? null : failureReason,
             verifiedAt: verified ? new Date() : null,
           },
         });
 
         return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
+      }).catch(async (error: unknown) => {
+        const duplicate = error instanceof AppError && error.statusCode === 409;
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.updateMany({ where: { id: payment.id, status: 'VERIFYING' }, data: {
+            status: duplicate ? 'FAILED' : 'MANUAL_REVIEW', failureReason: 'PAYMENT_FINALIZATION_FAILED',
+          } });
+          if (duplicate) await tx.bill.updateMany({ where: { id: billId, status: 'VERIFYING', slipHash }, data: {
+            status: 'FAILED', reason: 'Duplicate transaction', version: { increment: 1 },
+          } });
+        });
+        throw error;
       });
 
       publishAdminAlert(

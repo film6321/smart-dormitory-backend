@@ -25,8 +25,12 @@ const hasRoute = (router: ExpressRouter, method: string, path: string): boolean 
 describe('route alias coverage (additional)', () => {
   it('supports OCR alias POST /verify and GET /jobs/:jobId paths', () => {
     assert.deepStrictEqual(listRoutePaths(ocrRoutes as ExpressRouter, 'post').sort(), [
+      '/identity-card',
+      '/id-card',
+      '/idcard',
       '/verify-id-card',
       '/verify-id-card/jobs',
+      '/jobs',
       '/verify',
     ].sort());
     assert.ok(hasRoute(ocrRoutes as ExpressRouter, 'get', '/jobs/:jobId'));

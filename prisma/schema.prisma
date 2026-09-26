@@ -144,6 +144,7 @@ model IdCardVerification {
   verifiedAt       DateTime @default(now())
   createdAt        DateTime @default(now())
   ocrJobs          OcrJob[] @relation("OcrJobResultVerification")
+  housingPayments  Payment[]
 
   @@index([userId])
   @@index([citizenIdHash])
@@ -213,6 +214,7 @@ enum VisitorStatus {
   CHECKED_IN
   CHECKED_OUT
   EXPIRED
+  CANCELLED
 }
 
 /**
@@ -233,6 +235,7 @@ model Room {
   bills              Bill[]
   maintenanceTickets MaintenanceTicket[]
   visitors           Visitor[]
+  housingPayments    Payment[]
 
   @@index([roomNumber])
   @@index([status])
@@ -271,6 +274,7 @@ model Tenant {
   bills              Bill[]
   maintenanceTickets MaintenanceTicket[]
   visitors           Visitor[]
+  housingPayments    Payment[]
 
   @@index([userId])
   @@index([roomId])
@@ -309,8 +313,14 @@ model Bill {
 
 model Payment {
   id                    Int             @id @default(autoincrement())
-  billId                Int
-  bill                  Bill            @relation(fields: [billId], references: [id])
+  billId                Int?
+  bill                  Bill?           @relation(fields: [billId], references: [id], onDelete: Restrict)
+  housingRoomId         Int?
+  housingRoom           Room?           @relation(fields: [housingRoomId], references: [id], onDelete: Restrict)
+  housingVerificationId Int?
+  housingVerification   IdCardVerification? @relation(fields: [housingVerificationId], references: [id], onDelete: Restrict)
+  housingTenantId       Int?
+  housingTenant         Tenant?         @relation(fields: [housingTenantId], references: [id], onDelete: Restrict)
   payerUserId           Int?
   payerUser             User?           @relation(fields: [payerUserId], references: [id])
   amount                Decimal         @db.Decimal(10, 2)
@@ -329,6 +339,9 @@ model Payment {
   updatedAt             DateTime        @updatedAt
 
   @@index([billId])
+  @@index([housingRoomId])
+  @@index([housingVerificationId])
+  @@index([housingTenantId])
   @@index([payerUserId])
   @@index([status])
   @@index([createdAt])
@@ -401,9 +414,22 @@ model Visitor {
   roomId            Int?
   room              Room?         @relation(fields: [roomId], references: [id])
   guestName         String
+  phone             String?
+  citizenId         String?
+  citizenIdMasked   String?
+  relationship      String?
+  age               Int?
+  birthDate         String?
+  address           String?
+  idCardImagePath   String?
   purpose           String?
   expectedEntryTime DateTime?
   status            VisitorStatus @default(REGISTERED)
+  pdpaConsent       Boolean       @default(false)
+  pdpaConsentAt     DateTime?
+  expiresAt         DateTime?
+  cancelledAt       DateTime?
+  qrCodeData        String?
   checkedInAt       DateTime?
   checkedOutAt      DateTime?
   createdAt         DateTime      @default(now())
@@ -417,6 +443,7 @@ model Visitor {
   @@index([roomId])
   @@index([status])
   @@index([expectedEntryTime])
+  @@index([expiresAt])
 }
 
 model VisitorLog {

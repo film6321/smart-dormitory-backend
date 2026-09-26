@@ -1,29 +1,31 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AnalyticsService } from '../../src/modules/analytics/analytics.service';
+import { DbClient } from '../../src/database/db';
+import { Prisma } from '@prisma/client';
 
 describe('AnalyticsService (unit)', () => {
   it('returns dashboard analytics with system and dormitory metrics', async () => {
     // Mock db client
-    const mockDb: any = {
+    const mockDb = {
       room: {
-        count: async ({ where }: any = {}) => {
-          if (where?.status === 'OCCUPIED') return 5;
+        count: async (args?: Prisma.RoomCountArgs) => {
+          if (typeof args?.where?.status === 'string' && args.where.status === 'OCCUPIED') return 5;
           return 10;
         },
       },
       tenant: {
-        count: async ({ where }: any = {}) => {
-          if (where?.status === 'PENDING') return 2;
+        count: async (args?: Prisma.TenantCountArgs) => {
+          if (typeof args?.where?.status === 'string' && args.where.status === 'PENDING') return 2;
           return 8;
         },
       },
       bill: {
-        aggregate: async ({ where }: any = {}) => {
-          if (where?.status === 'PAID') {
-            return { _count: { id: 12 }, _sum: { amount: 36000 } };
+        aggregate: async (args?: Prisma.BillAggregateArgs) => {
+          if (args?.where?.status === 'PAID') {
+            return { _count: { id: 12 }, _sum: { amount: new Prisma.Decimal(36000) } };
           }
-          return { _count: { id: 3 }, _sum: { amount: 9000 } };
+          return { _count: { id: 3 }, _sum: { amount: new Prisma.Decimal(9000) } };
         },
       },
       maintenanceTicket: {
@@ -34,13 +36,13 @@ describe('AnalyticsService (unit)', () => {
         ],
       },
       visitor: {
-        count: async ({ where }: any = {}) => {
-          if (where?.status === 'CHECKED_IN') return 1;
-          if (where?.status === 'CHECKED_OUT') return 3;
+        count: async (args?: Prisma.VisitorCountArgs) => {
+          if (args?.where?.status === 'CHECKED_IN') return 1;
+          if (args?.where?.status === 'CHECKED_OUT') return 3;
           return 4;
         },
       },
-    };
+    } as unknown as DbClient;
 
     const result = await AnalyticsService.getDashboardAnalytics(mockDb);
 

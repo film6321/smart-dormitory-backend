@@ -28,6 +28,7 @@ const uploadFields = upload.fields([
     { name: 'paymentSlip', maxCount: 1 },
 ]);
 router.get('/', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.listTenants);
+router.get('/payment-qr/:roomNumber', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.generatePaymentQr);
 router.get('/me', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.getMyTenant);
 router.get('/me/documents/:documentType', auth_jwt_1.verifyToken, tenants_controller_1.TenantsController.getMyDocument);
 router.get('/:id/documents/:documentType', auth_jwt_1.verifyToken, (0, auth_jwt_1.requireRole)(['ADMIN']), tenants_controller_1.TenantsController.getTenantDocumentById);

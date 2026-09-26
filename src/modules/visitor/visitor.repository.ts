@@ -31,4 +31,14 @@ export class VisitorRepository {
   static async updateVisitorStatus(id: number, data: Prisma.VisitorUpdateInput, db: Prisma.TransactionClient | typeof prisma = prisma) {
     return db.visitor.update({ where: { id }, data });
   }
+
+  static async cancelVisitor(id: number, cancelledAt = new Date(), db: Prisma.TransactionClient | typeof prisma = prisma) {
+    return db.visitor.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt,
+      },
+    });
+  }
 }

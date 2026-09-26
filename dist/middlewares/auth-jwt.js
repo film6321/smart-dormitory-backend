@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireRole = exports.verifyToken = void 0;
+exports.requireRole = exports.optionalVerifyToken = exports.verifyToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const error_handler_1 = require("./error-handler");
 const env_1 = require("../shared/env");
@@ -31,6 +31,28 @@ const verifyToken = (req, res, next) => {
     }
 };
 exports.verifyToken = verifyToken;
+const optionalVerifyToken = (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    const cookieToken = (req.headers.cookie ?? '')
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith('access_token='))
+        ?.slice('access_token='.length);
+    const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
+    const resolvedToken = token || cookieToken || queryToken;
+    if (!resolvedToken) {
+        return next();
+    }
+    try {
+        const decoded = jsonwebtoken_1.default.verify(resolvedToken, (0, env_1.getJwtSecret)());
+        req.user = decoded;
+        next();
+    }
+    catch {
+        next();
+    }
+};
+exports.optionalVerifyToken = optionalVerifyToken;
 // 2. Middleware แยกส่วนที่เอาไว้ตรวจจำกัดสิทธิ์เฉพาะบาง Role เช่น ADMIN เท่านั้น
 const requireRole = (roles) => {
     return (req, res, next) => {

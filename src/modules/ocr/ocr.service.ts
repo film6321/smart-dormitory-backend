@@ -160,7 +160,7 @@ const getStringValue = (value: unknown): string | undefined => {
   }
 
   const trimmed = value.trim();
-  return trimmed && trimmed !== '-' ? trimmed : undefined;
+  return trimmed && !/^[\s\-–—_*]+$/u.test(trimmed) ? trimmed : undefined;
 };
 
 
@@ -416,7 +416,7 @@ export class OcrService {
     }
 
     const result = this.mapIdCardVerification(payload);
-    const imagePath = result.isThaiIdCard ? await savePrivateIdCardImage(imageBase64, sanitizedImage) : undefined;
+    const imagePath = result.confidence.idDetected ? await savePrivateIdCardImage(imageBase64, sanitizedImage) : undefined;
     const savedVerification = await this.saveVerificationResult(result, imagePath, options.userId);
     const publicResult: VerifyIdCardResult = {
       verificationId: result.verificationId,

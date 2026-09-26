@@ -30,6 +30,8 @@ const fetchWithTimeout = async (url, init) => {
     }
 };
 const parseAmount = (value) => {
+    if ((typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '')
+        return null;
     const amount = Number(value);
     return Number.isFinite(amount) ? amount : null;
 };
@@ -37,11 +39,12 @@ const normalizeResponse = (payload) => {
     const matchedAccount = payload.matchedAccount ?? payload.data?.matchedAccount;
     const rawAmount = payload.data?.rawSlip?.amount?.amount;
     return {
-        success: payload.success === true,
-        recipientMatched: matchedAccount !== null && matchedAccount !== undefined,
+        success: payload.success === true && payload.data?.isDuplicate === false,
+        recipientMatched: typeof matchedAccount === 'object' && matchedAccount !== null && !Array.isArray(matchedAccount) && Object.keys(matchedAccount).length > 0,
         duplicate: payload.data?.isDuplicate === true,
         amount: parseAmount(rawAmount),
         rawData: payload.data ?? payload,
+        transactionId: typeof payload.data?.rawSlip?.transRef === 'string' ? payload.data.rawSlip.transRef.trim() || undefined : undefined,
         message: payload.message || payload.error,
     };
 };
@@ -72,7 +75,8 @@ class PaymentProviderClient {
         if (response.status >= 500) {
             throw new error_handler_1.AppError('Payment Gateway is unavailable. Please try again later.', 503);
         }
-        return normalizeResponse(payload);
+        const result = normalizeResponse(payload);
+        return { ...result, success: response.ok && result.success };
     }
 }
 exports.PaymentProviderClient = PaymentProviderClient;

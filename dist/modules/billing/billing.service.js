@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillingService = void 0;
+const payment_slip_guard_1 = require("./payment-slip-guard");
 const crypto_1 = __importDefault(require("crypto"));
 const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
@@ -198,6 +199,7 @@ class BillingService {
                 throw new error_handler_1.AppError('This payment has already been submitted', 409);
             }
             const payment = await db_1.prisma.$transaction(async (transaction) => {
+                await (0, payment_slip_guard_1.assertSlipAvailable)(transaction, slipHash);
                 const updatedBill = await transaction.bill.updateMany({
                     where: {
                         id: billId,
@@ -244,15 +246,17 @@ class BillingService {
             const verified = verification.success
                 && verification.recipientMatched
                 && !verification.duplicate
-                && amountMatches;
+                && amountMatches
+                && Boolean(verification.transactionId);
             const failureReason = verification.duplicate
                 ? 'Duplicate slip'
                 : !verification.recipientMatched
                     ? 'Recipient account does not match'
                     : !amountMatches
                         ? 'Payment amount does not match bill amount'
-                        : verification.message;
+                        : !verification.transactionId ? 'Missing transaction reference' : verification.message;
             const result = await db_1.prisma.$transaction(async (transaction) => {
+                await (0, payment_slip_guard_1.assertSlipAvailable)(transaction, slipHash, verification.transactionId, { paymentId: payment.id });
                 const currentBill = await transaction.bill.findUnique({ where: { id: billId } });
                 if (!currentBill || currentBill.status !== 'VERIFYING') {
                     throw new error_handler_1.AppError('Bill verification state changed unexpectedly', 409);
@@ -274,11 +278,25 @@ class BillingService {
                     data: {
                         status: verified ? 'PAID' : 'FAILED',
                         providerResponse: JSON.stringify(verification.rawData),
+                        providerTransactionId: verification.transactionId,
+                        slipAmount: verification.amount,
                         failureReason: verified ? null : failureReason,
                         verifiedAt: verified ? new Date() : null,
                     },
                 });
                 return { billStatus: verified ? 'PAID' : 'FAILED', payment: updatedPayment };
+            }).catch(async (error) => {
+                const duplicate = error instanceof error_handler_1.AppError && error.statusCode === 409;
+                await db_1.prisma.$transaction(async (tx) => {
+                    await tx.payment.updateMany({ where: { id: payment.id, status: 'VERIFYING' }, data: {
+                            status: duplicate ? 'FAILED' : 'MANUAL_REVIEW', failureReason: 'PAYMENT_FINALIZATION_FAILED',
+                        } });
+                    if (duplicate)
+                        await tx.bill.updateMany({ where: { id: billId, status: 'VERIFYING', slipHash }, data: {
+                                status: 'FAILED', reason: 'Duplicate transaction', version: { increment: 1 },
+                            } });
+                });
+                throw error;
             });
             (0, notification_gateway_1.publishAdminAlert)(billId, 'PAYMENT_SLIP', result.billStatus === 'PAID' ? `ตรวจสลิปบิล #${billId}: ชำระเงินแล้ว` : `ตรวจสลิปบิล #${billId}: ไม่ผ่าน (${failureReason})`, result.billStatus);
             return result;

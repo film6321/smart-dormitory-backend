@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentBatchService = void 0;
+const payment_slip_guard_1 = require("./payment-slip-guard");
 const crypto_1 = __importDefault(require("crypto"));
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
@@ -51,10 +52,6 @@ const parseTransferAt = (rawData) => {
         return null;
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
-};
-const parseProviderReference = (rawData) => {
-    const value = findNestedValue(rawData, ['providerTransactionId', 'transactionId', 'referenceNumber', 'reference', 'transRef']);
-    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 const includeBatchDetails = {
     items: {
@@ -209,6 +206,7 @@ class PaymentBatchService {
             throw new error_handler_1.AppError('This slip has already been submitted', 409);
         }
         await db_1.prisma.$transaction(async (transaction) => {
+            await (0, payment_slip_guard_1.assertSlipAvailable)(transaction, slipHash, undefined, { batchId });
             const claimedBatch = await transaction.paymentBatch.updateMany({
                 where: { id: batchId, payerUserId: userId, status: batch.status },
                 data: { status: 'VERIFYING', slipHash, slipPath, failureReason: null },
@@ -253,15 +251,17 @@ class PaymentBatchService {
         const verified = verification.success
             && verification.recipientMatched
             && !verification.duplicate
-            && amountMatches;
+            && amountMatches
+            && Boolean(verification.transactionId);
         const failureReason = verification.duplicate
             ? 'Duplicate slip'
             : !verification.recipientMatched
                 ? 'Recipient account does not match'
                 : !amountMatches
                     ? 'Payment amount does not match payment batch'
-                    : verification.message;
+                    : !verification.transactionId ? 'Missing transaction reference' : verification.message;
         await db_1.prisma.$transaction(async (transaction) => {
+            await (0, payment_slip_guard_1.assertSlipAvailable)(transaction, slipHash, verification.transactionId, { batchId });
             const current = await transaction.paymentBatch.findUnique({
                 where: { id: batchId },
                 include: { items: true },
@@ -275,7 +275,7 @@ class PaymentBatchService {
                     status: verified ? 'PAID' : 'FAILED',
                     slipAmount: verification.amount,
                     transferAt: parseTransferAt(verification.rawData),
-                    providerTransactionId: parseProviderReference(verification.rawData),
+                    providerTransactionId: verification.transactionId,
                     providerResponse: JSON.stringify(verification.rawData),
                     failureReason: verified ? null : failureReason,
                     verifiedAt: verified ? new Date() : null,
@@ -295,6 +295,19 @@ class PaymentBatchService {
                     },
                 });
             }
+        }).catch(async (error) => {
+            const duplicate = error instanceof error_handler_1.AppError && error.statusCode === 409;
+            await db_1.prisma.$transaction(async (tx) => {
+                await tx.paymentBatch.updateMany({ where: { id: batchId, status: 'VERIFYING' }, data: {
+                        status: duplicate ? 'FAILED' : 'MANUAL_REVIEW', failureReason: 'PAYMENT_FINALIZATION_FAILED',
+                    } });
+                if (duplicate)
+                    await tx.bill.updateMany({
+                        where: { id: { in: batch.items.map((item) => item.billId) }, status: 'VERIFYING', slipHash },
+                        data: { status: 'FAILED', reason: 'Duplicate transaction', version: { increment: 1 } },
+                    });
+            });
+            throw error;
         });
         return this.getById(batchId, userId);
     }

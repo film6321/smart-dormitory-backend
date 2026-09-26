@@ -104,7 +104,7 @@ const seedTestMaintenanceTicket = async (tenantId: number, roomId: number) => {
   return ticket;
 };
 
-// ─── Rooms Config (120 rooms: 4 floors x 30 rooms per floor) ────────────────
+// ─── Rooms Config (40 rooms: 4 floors x 10 rooms per floor) ────────────────
 const generateAllRooms = () => {
   const rooms: Array<{
     roomNumber: string;
@@ -117,17 +117,19 @@ const generateAllRooms = () => {
     linkUserId?: boolean;
   }> = [];
 
+  // Test prices for real-money testing. Existing rooms use Room.monthlyRent;
+  // update those records for production pricing (do not rerun this destructive seed).
   const floorRents: Record<number, number> = {
-    1: 3500,
-    2: 4200,
-    3: 4900,
-    4: 5600,
+    1: 100,
+    2: 50,
+    3: 50,
+    4: 50,
   };
 
   for (let floor = 1; floor <= 4; floor++) {
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 1; i <= 10; i++) {
       const roomNum = `${floor}${i.toString().padStart(2, '0')}`;
-      const rent = floorRents[floor] || 3500;
+      const rent = floorRents[floor];
 
       if (roomNum === '304') {
         // Real tenant: Somchai — linked to actual student user account
@@ -136,8 +138,8 @@ const generateAllRooms = () => {
           floor: 3,
           status: 'AVAILABLE',
           capacity: 4,
-          monthlyRent: 5500,
-          description: 'Floor 3 Room 304',
+          monthlyRent: rent,
+          description: 'ชั้น 3 ห้อง 304 · ห้องพัดลม',
           tenantName: 'สมชาย ทดสอบระบบ',
           linkUserId: true,
         });
@@ -148,7 +150,7 @@ const generateAllRooms = () => {
           status: 'AVAILABLE',
           capacity: 4,
           monthlyRent: rent,
-          description: `Floor ${floor} Room ${roomNum}`,
+          description: `ชั้น ${floor} ห้อง ${roomNum} · ${floor === 1 ? 'ห้องแอร์' : 'ห้องพัดลม'}`,
         });
       }
     }

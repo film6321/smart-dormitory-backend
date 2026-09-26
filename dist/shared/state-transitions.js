@@ -27,10 +27,15 @@ const maintenanceTransitions = new Set([
 ]);
 const visitorTransitions = new Set([
     ['REGISTERED', 'VERIFYING'],
+    ['REGISTERED', 'CANCELLED'],
     ['REGISTERED', 'EXPIRED'],
     ['VERIFYING', 'APPROVED'],
     ['VERIFYING', 'REJECTED'],
+    ['VERIFYING', 'CANCELLED'],
+    ['VERIFYING', 'EXPIRED'],
     ['APPROVED', 'CHECKED_IN'],
+    ['APPROVED', 'CANCELLED'],
+    ['APPROVED', 'EXPIRED'],
     ['REJECTED', 'REGISTERED'],
     ['REJECTED', 'EXPIRED'],
     ['CHECKED_IN', 'CHECKED_OUT'],

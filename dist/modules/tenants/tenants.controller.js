@@ -1,47 +1,30 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantsController = void 0;
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
 const api_response_1 = require("../../shared/api-response");
+const housing_payment_service_1 = require("./housing-payment.service");
 const tenants_service_1 = require("./tenants.service");
-const ocr_service_1 = require("../ocr/ocr.service");
+const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 const error_handler_1 = require("../../middlewares/error-handler");
-const logger_1 = require("../../logger");
+class UploadHousingDocumentsDto {
+    roomNumber;
+}
 class TenantsController {
+    static async generatePaymentQr(req, res, next) {
+        try {
+            const input = (0, class_transformer_1.plainToInstance)(UploadHousingDocumentsDto, req.params);
+            if (!(0, class_validator_1.isString)(input.roomNumber) || !input.roomNumber.trim() || input.roomNumber.length > 30) {
+                throw new error_handler_1.AppError('กรุณาระบุห้องที่ต้องการชำระมัดจำ', 400);
+            }
+            const data = await housing_payment_service_1.HousingPaymentService.generateQr(input.roomNumber.trim());
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Housing payment QR generated', data));
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     static async uploadDocuments(req, res, next) {
         try {
             const files = req.files;
@@ -53,44 +36,15 @@ class TenantsController {
             if (!paymentSlipFile) {
                 throw new error_handler_1.AppError('paymentSlip file is required', 400);
             }
-            const uploadRoot = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/private'));
-            const idCardsDir = path.join(uploadRoot, 'id-cards');
-            const slipsDir = path.join(uploadRoot, 'payment-slips');
-            if (!fs.existsSync(idCardsDir))
-                fs.mkdirSync(idCardsDir, { recursive: true });
-            if (!fs.existsSync(slipsDir))
-                fs.mkdirSync(slipsDir, { recursive: true });
-            const safeIdCardName = path.basename(idCardFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-            const idCardName = `${Date.now()}-idcard-${safeIdCardName}`;
-            const idCardPath = path.join(idCardsDir, idCardName);
-            await fs.promises.writeFile(idCardPath, idCardFile.buffer);
-            const safeSlipName = path.basename(paymentSlipFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-            const slipName = `${Date.now()}-slip-${safeSlipName}`;
-            const slipPath = path.join(slipsDir, slipName);
-            await fs.promises.writeFile(slipPath, paymentSlipFile.buffer);
-            const idCardImagePath = `uploads/private/id-cards/${idCardName}`;
-            const paymentSlipPath = `uploads/private/payment-slips/${slipName}`;
-            let ocrData = null;
-            try {
-                const base64Str = `data:${idCardFile.mimetype};base64,${idCardFile.buffer.toString('base64')}`;
-                const userId = req.user?.id;
-                ocrData = await ocr_service_1.OcrService.verifyIdCard(base64Str, { userId });
+            const userId = req.user?.id;
+            if (!userId)
+                throw new error_handler_1.AppError('กรุณาเข้าสู่ระบบ', 401);
+            const input = (0, class_transformer_1.plainToInstance)(UploadHousingDocumentsDto, req.body);
+            if (!(0, class_validator_1.isString)(input.roomNumber) || input.roomNumber.trim().length < 1 || input.roomNumber.trim().length > 30) {
+                throw new error_handler_1.AppError('กรุณาระบุห้องที่เลือกก่อนตรวจสอบสลิป', 400);
             }
-            catch (ocrErr) {
-                logger_1.logger.warn({ err: ocrErr }, 'OCR processing failed inside document upload, proceeding with fallback');
-            }
-            return res.status(200).json((0, api_response_1.createResponse)(200, 'Documents uploaded successfully', {
-                idCardImagePath,
-                paymentSlipPath,
-                ocrData: {
-                    citizenId: ocrData?.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
-                    fullNameTh: ocrData?.fullNameTh || '',
-                    birthDateTh: ocrData?.birthDateTh || '',
-                    age: ocrData?.age ?? null,
-                    address: ocrData?.address || '',
-                    isThaiIdCard: Boolean(ocrData?.isThaiIdCard),
-                }
-            }));
+            const data = await tenants_service_1.TenantsService.uploadDocuments(idCardFile, paymentSlipFile, userId, input.roomNumber.trim());
+            return res.status(200).json((0, api_response_1.createResponse)(200, 'Documents uploaded successfully', data));
         }
         catch (error) {
             next(error);

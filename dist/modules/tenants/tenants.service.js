@@ -4,6 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantsService = void 0;
+const promises_1 = __importDefault(require("fs/promises"));
+const housing_payment_service_1 = require("./housing-payment.service");
+const ocr_service_1 = require("../ocr/ocr.service");
+const tenants_dto_1 = require("./tenants.dto");
+const logger_1 = require("../../logger");
 const db_1 = require("../../database/db");
 const error_handler_1 = require("../../middlewares/error-handler");
 const tenants_repository_1 = require("./tenants.repository");
@@ -58,34 +63,111 @@ class TenantsService {
         }
         return resolvedPath;
     }
+    static async uploadDocuments(idCardFile, paymentSlipFile, userId, roomNumber) {
+        let result;
+        try {
+            result = await ocr_service_1.OcrService.verifyIdCard(`data:${idCardFile.mimetype};base64,${idCardFile.buffer.toString('base64')}`, { userId });
+        }
+        catch (error) {
+            if (error instanceof error_handler_1.AppError) {
+                throw error;
+            }
+            logger_1.logger.warn({ err: error, userId }, 'Housing application OCR unavailable');
+            throw new error_handler_1.AppError('ไม่สามารถตรวจสอบบัตรประชาชนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง', 503);
+        }
+        if (!result.confidence.idDetected) {
+            throw new error_handler_1.AppError('ภาพนี้ไม่ผ่านการตรวจว่าเป็นบัตรประชาชน กรุณาอัปโหลดบัตรประชาชนใหม่', 422);
+        }
+        if (!result.verificationId || !result.imagePath) {
+            throw new error_handler_1.AppError('ไม่สามารถบันทึกผลตรวจบัตรประชาชนได้ กรุณาลองใหม่', 503);
+        }
+        let payment;
+        try {
+            payment = await housing_payment_service_1.HousingPaymentService.verifySlip(roomNumber, userId, paymentSlipFile, result.verificationId);
+        }
+        catch (error) {
+            if (error instanceof error_handler_1.AppError)
+                throw new error_handler_1.AppError(`ตรวจบัตรประชาชนแล้ว แต่ยังไม่ผ่านการตรวจสลิป: ${error.message}`, error.statusCode);
+            throw error;
+        }
+        const readable = (value) => ((0, tenants_dto_1.isFilledText)(value) && !value.includes('*') ? value.trim() : '');
+        return {
+            idCardImagePath: result.imagePath,
+            paymentSlipPath: payment.slipPath,
+            paymentVerification: { id: payment.id, status: 'PAID', amount: Number(payment.amount) },
+            ocrData: {
+                verificationId: result.verificationId,
+                cardDetected: true,
+                isThaiIdCard: result.isThaiIdCard,
+                citizenId: result.confidence.idChecksumValid && /^\d{13}$/.test(result.citizenId || '') ? result.citizenId : '',
+                fullNameTh: readable(result.fullNameTh),
+                birthDateTh: readable(result.birthDateTh),
+                age: result.age ?? null,
+                address: readable(result.address),
+            },
+        };
+    }
     static async submitApplication(data, db) {
+        if (!db)
+            return db_1.prisma.$transaction((tx) => this.submitApplication(data, tx), { timeout: 15000 });
         const { personalInformation, emergencyContact, roomPreference, ocrData, idCardImagePath, paymentSlipPath, contractData, userId } = data;
-        if (!personalInformation?.fullName?.trim()) {
-            throw new error_handler_1.AppError('Full Name is required', 400);
+        const validatedContract = (0, tenants_dto_1.validateHousingApplication)(data);
+        const client = db || db_1.prisma;
+        const payment = await housing_payment_service_1.HousingPaymentService.requireVerifiedPayment(client, {
+            paymentId: data.paymentId, userId: userId, roomNumber: roomPreference.roomNumber.trim(),
+            verificationId: ocrData.verificationId, slipPath: paymentSlipPath,
+            monthlyRent: validatedContract.monthlyRent, depositAmount: validatedContract.depositAmount,
+        });
+        if (payment.housingTenantId) {
+            const existing = await client.tenant.findUnique({ where: { id: payment.housingTenantId } });
+            if (existing && existing.userId === userId)
+                return existing;
+            throw new error_handler_1.AppError('รายการชำระนี้ถูกใช้ยื่นใบสมัครแล้ว', 409);
+        }
+        if (validatedContract.roomNumber !== roomPreference.roomNumber.trim()) {
+            throw new error_handler_1.AppError('ห้องในสัญญาไม่ตรงกับห้องที่ชำระเงิน', 400);
+        }
+        const verification = await client.idCardVerification.findUnique({
+            where: { id: ocrData.verificationId },
+        });
+        if (!verification || verification.userId !== userId || !verification.idDetected || !verification.imagePath) {
+            throw new error_handler_1.AppError('ไม่พบผลตรวจบัตรประชาชนที่ผ่านสำหรับผู้ใช้นี้ กรุณาอัปโหลดใหม่', 422);
+        }
+        const verifiedPath = this.resolveTenantDocumentPath(verification.imagePath);
+        const submittedPath = this.resolveTenantDocumentPath(idCardImagePath);
+        const slipPath = this.resolveTenantDocumentPath(paymentSlipPath);
+        const slipRoot = path_1.default.resolve(process.env.UPLOAD_ROOT || path_1.default.join(process.cwd(), 'uploads/private'), 'payment-slips');
+        if (verifiedPath !== submittedPath || path_1.default.dirname(slipPath) !== slipRoot) {
+            throw new error_handler_1.AppError('เอกสารไม่ตรงกับผลตรวจบัตรประชาชน กรุณาอัปโหลดใหม่', 400);
+        }
+        try {
+            await Promise.all([promises_1.default.access(verifiedPath), promises_1.default.access(slipPath)]);
+        }
+        catch {
+            throw new error_handler_1.AppError('ไม่พบไฟล์เอกสาร กรุณาอัปโหลดใหม่', 400);
         }
         const tenantPayload = {
-            fullName: personalInformation.fullName.trim(),
+            fullName: validatedContract.tenantName,
             studentId: personalInformation.studentId?.trim(),
             course: personalInformation.course?.trim(),
             yearLevel: personalInformation.yearLevel,
-            phone: personalInformation.contactNumber?.trim(),
+            phone: validatedContract.tenantPhone,
             email: personalInformation.emailAddress?.trim(),
             emergencyName: emergencyContact?.emergencyName?.trim(),
             emergencyRelation: emergencyContact?.relationship,
             emergencyContact: emergencyContact?.emergencyNumber?.trim(),
             preferredRoomType: roomPreference?.preferredRoomType,
             notes: roomPreference?.notes?.trim(),
-            citizenId: ocrData?.citizenId?.trim(),
-            address: ocrData?.address?.trim(),
-            birthDate: ocrData?.birthDate?.trim(),
+            citizenId: validatedContract.tenantCitizenId,
+            address: validatedContract.tenantAddress,
+            birthDate: verification.birthDateTh || undefined,
             idCardImagePath,
             paymentSlipPath,
-            contractData: contractData ? JSON.stringify(contractData) : null,
+            contractData: JSON.stringify(validatedContract),
             status: 'PENDING',
             isActive: true,
         };
-        const client = db || db_1.prisma;
-        // Resolve room assignment (selected room or random room on chosen floor)
+        // The verified payment identifies the concrete room, including a room picked randomly in the UI.
         let targetRoomId = null;
         const requestedRoomNumber = roomPreference?.roomNumber?.trim() || (contractData?.roomNumber ? String(contractData.roomNumber).trim() : '');
         if (requestedRoomNumber) {
@@ -93,43 +175,42 @@ class TenantsService {
                 where: { roomNumber: requestedRoomNumber },
             });
             if (room) {
+                if (room.status !== 'AVAILABLE')
+                    throw new error_handler_1.AppError('ห้องไม่พร้อมรับสมัคร กรุณาติดต่อเจ้าหน้าที่', 409);
                 const maxOccupants = await this.getMaxOccupants();
                 const roomWithTenants = await client.room.findUnique({ where: { id: room.id }, include: { tenants: { where: { isActive: true } } } });
                 this.assertRoomHasCapacity({ capacity: room.capacity, tenants: roomWithTenants?.tenants }, maxOccupants);
                 targetRoomId = room.id;
             }
         }
-        else if (roomPreference?.isRandomRoom) {
-            const floorMatch = roomPreference?.preferredRoomType?.match(/Floor\s*(\d+)/i) || roomPreference?.preferredRoomType?.match(/ชั้น\s*(\d+)/i);
-            const floorNum = floorMatch ? parseInt(floorMatch[1], 10) : undefined;
-            const availableRooms = await client.room.findMany({
-                where: {
-                    ...(floorNum ? { floor: floorNum } : {}),
-                    status: 'AVAILABLE',
-                },
-                include: { tenants: true },
-            });
-            const maxOccupants = await this.getMaxOccupants();
-            const openRooms = availableRooms.filter((r) => (r.tenants?.length ?? 0) < Math.min(r.capacity ?? maxOccupants, maxOccupants));
-            if (openRooms.length > 0) {
-                const randomIndex = Math.floor(Math.random() * openRooms.length);
-                targetRoomId = openRooms[randomIndex].id;
-            }
-        }
         if (targetRoomId) {
             tenantPayload.room = { connect: { id: targetRoomId } };
         }
-        if (userId) {
-            const existing = await client.tenant.findUnique({ where: { userId } });
-            if (existing) {
-                return client.tenant.update({
-                    where: { userId },
-                    data: tenantPayload,
-                });
-            }
-            tenantPayload.user = { connect: { id: userId } };
+        if (!targetRoomId || targetRoomId !== payment.housingRoomId) {
+            throw new error_handler_1.AppError('ห้องไม่ตรงกับรายการชำระเงิน กรุณาติดต่อเจ้าหน้าที่', 409);
         }
-        return client.tenant.create({ data: tenantPayload });
+        // OCC serializes submissions by this applicant without trusting browser state.
+        const applicant = await client.user.findUnique({ where: { id: userId }, select: { version: true } });
+        if (!applicant)
+            throw new error_handler_1.AppError('ไม่พบผู้สมัคร', 404);
+        const claimedUser = await client.user.updateMany({
+            where: { id: userId, version: applicant.version }, data: { version: { increment: 1 } },
+        });
+        if (claimedUser.count !== 1)
+            throw new error_handler_1.AppError('มีคำขอยื่นใบสมัครพร้อมกัน กรุณาลองใหม่', 409);
+        const existing = await client.tenant.findUnique({ where: { userId } });
+        if (existing && ['APPROVED', 'ACTIVE'].includes(existing.status)) {
+            throw new error_handler_1.AppError('ใบสมัครได้รับการอนุมัติแล้ว ไม่สามารถส่งทับได้', 409);
+        }
+        const tenant = existing
+            ? await client.tenant.update({ where: { id: existing.id }, data: tenantPayload })
+            : await client.tenant.create({ data: { ...tenantPayload, user: { connect: { id: userId } } } });
+        const consumed = await client.payment.updateMany({
+            where: { id: payment.id, status: 'PAID', housingTenantId: null }, data: { housingTenantId: tenant.id },
+        });
+        if (consumed.count !== 1)
+            throw new error_handler_1.AppError('รายการชำระนี้ถูกใช้ยื่นใบสมัครแล้ว', 409);
+        return tenant;
     }
     static async createTenant(data, db) {
         if (data.userId !== undefined && data.userId !== null) {

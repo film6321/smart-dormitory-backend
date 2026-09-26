@@ -4,54 +4,66 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { FaceVerificationService } from '../../src/modules/face-verification/face-verification.service';
 import { prisma } from '../../src/database/db';
-
-const db = prisma as any;
+import { Prisma } from '@prisma/client';
+import { faceVerificationMonitoringBus } from '../../src/modules/face-verification/face-verification-monitoring';
 
 describe('FaceVerificationService (unit)', () => {
   // Save originals to restore
-  const originalUserFindUnique = db.user.findUnique;
-  const originalVisitorFindUnique = db.visitor.findUnique;
-  const originalPhotoCreate = db.faceEnrollmentPhoto.create;
-  const originalEmbeddingFindUnique = db.faceEmbedding.findUnique;
-  const originalEmbeddingDelete = db.faceEmbedding.delete;
-  const originalEmbeddingCreate = db.faceEmbedding.create;
-  const originalEmbeddingFindMany = db.faceEmbedding.findMany;
-  const originalPhotoFindMany = db.faceEnrollmentPhoto.findMany;
-  const originalPhotoFindUnique = db.faceEnrollmentPhoto.findUnique;
-  const originalAccessLogCreate = db.accessLog.create;
-  const originalVisitorUpdate = db.visitor.update;
-  const originalVisitorLogCreate = db.visitorLog.create;
+  const originalUserFindUnique = prisma.user.findUnique.bind(prisma);
+  const originalVisitorFindUnique = prisma.visitor.findUnique.bind(prisma);
+  const originalPhotoCreate = prisma.faceEnrollmentPhoto.create.bind(prisma);
+  const originalEmbeddingFindUnique = prisma.faceEmbedding.findUnique.bind(prisma);
+  const originalEmbeddingDelete = prisma.faceEmbedding.delete.bind(prisma);
+  const originalEmbeddingCreate = prisma.faceEmbedding.create.bind(prisma);
+  const originalEmbeddingFindMany = prisma.faceEmbedding.findMany.bind(prisma);
+  const originalPhotoFindMany = prisma.faceEnrollmentPhoto.findMany.bind(prisma);
+  const originalPhotoFindUnique = prisma.faceEnrollmentPhoto.findUnique.bind(prisma);
+  const originalAccessLogCreate = prisma.accessLog.create.bind(prisma);
+  const originalVisitorUpdate = prisma.visitor.update.bind(prisma);
+  const originalVisitorLogCreate = prisma.visitorLog.create.bind(prisma);
 
   const restorePrisma = () => {
-    db.user.findUnique = originalUserFindUnique;
-    db.visitor.findUnique = originalVisitorFindUnique;
-    db.faceEnrollmentPhoto.create = originalPhotoCreate;
-    db.faceEmbedding.findUnique = originalEmbeddingFindUnique;
-    db.faceEmbedding.delete = originalEmbeddingDelete;
-    db.faceEmbedding.create = originalEmbeddingCreate;
-    db.faceEmbedding.findMany = originalEmbeddingFindMany;
-    db.faceEnrollmentPhoto.findMany = originalPhotoFindMany;
-    db.faceEnrollmentPhoto.findUnique = originalPhotoFindUnique;
-    db.accessLog.create = originalAccessLogCreate;
-    db.visitor.update = originalVisitorUpdate;
-    db.visitorLog.create = originalVisitorLogCreate;
+    prisma.user.findUnique = originalUserFindUnique;
+    prisma.visitor.findUnique = originalVisitorFindUnique;
+    prisma.faceEnrollmentPhoto.create = originalPhotoCreate;
+    prisma.faceEmbedding.findUnique = originalEmbeddingFindUnique;
+    prisma.faceEmbedding.delete = originalEmbeddingDelete;
+    prisma.faceEmbedding.create = originalEmbeddingCreate;
+    prisma.faceEmbedding.findMany = originalEmbeddingFindMany;
+    prisma.faceEnrollmentPhoto.findMany = originalPhotoFindMany;
+    prisma.faceEnrollmentPhoto.findUnique = originalPhotoFindUnique;
+    prisma.accessLog.create = originalAccessLogCreate;
+    prisma.visitor.update = originalVisitorUpdate;
+    prisma.visitorLog.create = originalVisitorLogCreate;
   };
 
   it('successfully registers a face', async () => {
-    db.user.findUnique = (async ({ where }: any) => {
-      if (where.id === 99) return { id: 99, email: 'student@dorm.ac.th' };
+    prisma.user.findUnique = (async ({ where }: Prisma.UserFindUniqueArgs) => {
+      if (where.id === 99) {
+        return {
+          id: 99,
+          email: 'student@dorm.ac.th',
+          username: 'student99',
+          password: 'hashedpassword',
+          role: 'STUDENT',
+          lastLogin: null,
+          version: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
       return null;
-    }) as any;
+    }) as unknown as typeof prisma.user.findUnique;
 
-    db.faceEnrollmentPhoto.create = (async ({ data }: any) => {
+    prisma.faceEnrollmentPhoto.create = (async ({ data }: Prisma.FaceEnrollmentPhotoCreateArgs) => {
       return {
         id: 12,
-        userId: data.userId,
-        visitorId: data.visitorId,
+        userId: typeof data.user?.connect?.id === 'number' ? data.user.connect.id : null,
+        visitorId: typeof data.visitor?.connect?.id === 'number' ? data.visitor.connect.id : null,
         photoPath: data.photoPath,
         createdAt: new Date('2026-07-06T18:00:00Z'),
       };
-    }) as any;
+    }) as unknown as typeof prisma.faceEnrollmentPhoto.create;
 
     try {
       const buffer = Buffer.from('fake-image-bytes');
@@ -72,11 +84,33 @@ describe('FaceVerificationService (unit)', () => {
 
   it('verifies a real enrollment image through the external API contract', async () => {
     const originalFetch = globalThis.fetch;
-    db.user.findUnique = (async ({ where }: any) => {
-      if (where.id === 99) return { id: 99, firstName: 'Test', lastName: 'Resident' };
+    prisma.user.findUnique = (async ({ where }: Prisma.UserFindUniqueArgs) => {
+      if (where.id === 99) {
+        return {
+          id: 99,
+          email: 'resident@dorm.ac.th',
+          username: 'resident99',
+          password: 'hashedpassword',
+          role: 'STUDENT',
+          lastLogin: null,
+          version: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
       return null;
-    }) as any;
-    db.accessLog.create = (async () => ({})) as any;
+    }) as unknown as typeof prisma.user.findUnique;
+
+    prisma.accessLog.create = (async ({ data }: Prisma.AccessLogCreateArgs) => ({
+      id: 1,
+      userId: typeof data.user?.connect?.id === 'number' ? data.user.connect.id : null,
+      method: data.method,
+      path: data.path,
+      ip: data.ip ?? null,
+      duration: data.duration ?? null,
+      createdAt: new Date(),
+    })) as unknown as typeof prisma.accessLog.create;
+
     globalThis.fetch = (async () => new Response(JSON.stringify({
       matched: true,
       user_id: 99,
@@ -116,28 +150,52 @@ describe('FaceVerificationService (unit)', () => {
   });
 
   it('manages face templates via service methods', async () => {
-    db.faceEmbedding.findUnique = (async ({ where }: any) => {
+    prisma.faceEmbedding.findUnique = (async ({ where }: Prisma.FaceEmbeddingFindUniqueArgs) => {
       if (where.id === 12) {
         return {
           id: 12,
           userId: 99,
+          visitorId: null,
           vector: [0.1, 0.2],
           modelVersion: 'buffalo_l',
+          qualityScore: 0.95,
           createdAt: new Date('2026-07-06T18:00:00Z'),
           updatedAt: new Date('2026-07-06T18:00:00Z'),
         };
       }
       return null;
-    }) as any;
+    }) as unknown as typeof prisma.faceEmbedding.findUnique;
 
-    db.user.findUnique = (async () => ({ id: 99 })) as any;
-    db.faceEnrollmentPhoto.create = (async ({ data }: any) => ({
+    prisma.user.findUnique = (async () => ({
+      id: 99,
+      email: 'student@dorm.ac.th',
+      username: 'student99',
+      password: 'hashedpassword',
+      role: 'STUDENT',
+      lastLogin: null,
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })) as unknown as typeof prisma.user.findUnique;
+
+    prisma.faceEnrollmentPhoto.create = (async ({ data }: Prisma.FaceEnrollmentPhotoCreateArgs) => ({
       id: 12,
-      ...data,
+      userId: typeof data.user?.connect?.id === 'number' ? data.user.connect.id : null,
+      visitorId: typeof data.visitor?.connect?.id === 'number' ? data.visitor.connect.id : null,
+      photoPath: data.photoPath,
       createdAt: new Date('2026-07-06T18:00:00Z'),
-    })) as any;
+    })) as unknown as typeof prisma.faceEnrollmentPhoto.create;
 
-    db.faceEmbedding.delete = (async () => ({})) as any;
+    prisma.faceEmbedding.delete = (async ({ where }: Prisma.FaceEmbeddingDeleteArgs) => ({
+      id: where.id ?? 12,
+      userId: 99,
+      visitorId: null,
+      vector: [0.1, 0.2],
+      modelVersion: 'buffalo_l',
+      qualityScore: 0.95,
+      createdAt: new Date('2026-07-06T18:00:00Z'),
+      updatedAt: new Date('2026-07-06T18:00:00Z'),
+    })) as unknown as typeof prisma.faceEmbedding.delete;
 
     try {
       const template = await FaceVerificationService.getFaceTemplate(12);
@@ -162,19 +220,21 @@ describe('FaceVerificationService (unit)', () => {
 
   it('manages FaceGate.Edge sync and enrollment photos', async () => {
     // 1. getEmbeddings
-    db.faceEmbedding.findMany = (async () => [
+    prisma.faceEmbedding.findMany = (async () => [
       {
         id: 1,
         userId: 99,
         visitorId: null,
         vector: [0.1, 0.2, 0.3],
         modelVersion: 'buffalo_l',
+        qualityScore: 0.99,
+        createdAt: new Date(),
         updatedAt: new Date(),
       },
-    ]) as any;
+    ]) as unknown as typeof prisma.faceEmbedding.findMany;
 
     // 2. getPendingEnrollments
-    db.faceEnrollmentPhoto.findMany = (async () => [
+    prisma.faceEnrollmentPhoto.findMany = (async () => [
       {
         id: 15,
         userId: 99,
@@ -182,31 +242,55 @@ describe('FaceVerificationService (unit)', () => {
         photoPath: 'uploads/face-photo/user_99_file.jpg',
         createdAt: new Date(),
       },
-    ]) as any;
+    ]) as unknown as typeof prisma.faceEnrollmentPhoto.findMany;
 
     // 3. storeEmbeddings
-    db.user.findUnique = (async () => ({ id: 99 })) as any;
-    const createdEmbeddings: any[] = [];
-    db.faceEmbedding.create = (async ({ data }: any) => {
-      createdEmbeddings.push(data);
-      return { id: 1, ...data };
-    }) as any;
+    prisma.user.findUnique = (async () => ({
+      id: 99,
+      email: 'student@dorm.ac.th',
+      username: 'student99',
+      password: 'hashedpassword',
+      role: 'STUDENT',
+      lastLogin: null,
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })) as unknown as typeof prisma.user.findUnique;
+
+    const createdEmbeddings: Prisma.FaceEmbeddingCreateInput[] = [];
+    prisma.faceEmbedding.create = (async ({ data }: Prisma.FaceEmbeddingCreateArgs) => {
+      // storeEmbeddings uses TenantUncheckedCreateInput-style flat userId/visitorId fields
+      const flat = data as Prisma.FaceEmbeddingUncheckedCreateInput;
+      createdEmbeddings.push(data as Prisma.FaceEmbeddingCreateInput);
+      return {
+        id: 1,
+        userId: typeof flat.userId === 'number' ? flat.userId : null,
+        visitorId: typeof flat.visitorId === 'number' ? flat.visitorId : null,
+        vector: data.vector as number[],
+        modelVersion: data.modelVersion,
+        qualityScore: data.qualityScore ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }) as unknown as typeof prisma.faceEmbedding.create;
 
     try {
       const embs = await FaceVerificationService.getEmbeddings();
       assert.equal(embs.data.length, 1);
-      assert.equal(embs.data[0].student_code, 'user_99');
+      assert.equal(embs.data[0]?.student_code, 'user_99');
 
-      const pendings = (await FaceVerificationService.getPendingEnrollments()) as any;
+      const pendings = await FaceVerificationService.getPendingEnrollments();
       assert.equal(pendings.data.length, 1);
-      assert.equal(pendings.data[0].student_id, 99);
-      assert.equal(pendings.data[0].photos[0].id, 15);
+      assert.equal(pendings.data[0]?.student_id, 99);
+      assert.equal(pendings.data[0]?.photos[0]?.id, 15);
 
       const count = await FaceVerificationService.storeEmbeddings(99, 'buffalo_l', [[0.1, 0.2, 0.3]]);
       assert.equal(count, 1);
       assert.equal(createdEmbeddings.length, 1);
-      assert.equal(createdEmbeddings[0].userId, 99);
-      assert.deepEqual(createdEmbeddings[0].vector, [0.1, 0.2, 0.3]);
+      // storeEmbeddings uses flat userId field (TenantUncheckedCreateInput pattern)
+      const flat0 = createdEmbeddings[0] as unknown as Prisma.FaceEmbeddingUncheckedCreateInput;
+      assert.equal(flat0?.userId, 99);
+      assert.deepEqual(createdEmbeddings[0]?.vector, [0.1, 0.2, 0.3]);
     } finally {
       restorePrisma();
     }
@@ -214,34 +298,115 @@ describe('FaceVerificationService (unit)', () => {
 
   it('records attendance scan for user and visitor', async () => {
     // mock user check
-    db.user.findUnique = (async ({ where }: any) => {
-      if (where.id === 99) return { id: 99, username: 'John Doe', tenant: { fullName: 'John Doe' } };
+    prisma.user.findUnique = (async ({ where }: Prisma.UserFindUniqueArgs) => {
+      if (where.id === 99) {
+        return {
+          id: 99,
+          username: 'John Doe',
+          email: 'john@example.com',
+          password: 'hashedpassword',
+          role: 'STUDENT',
+          lastLogin: null,
+          version: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          tenant: { fullName: 'John Doe' },
+        };
+      }
       return null;
-    }) as any;
+    }) as unknown as typeof prisma.user.findUnique;
 
-    const accessLogs: any[] = [];
-    db.accessLog.create = (async ({ data }: any) => {
-      accessLogs.push(data);
-      return { id: 1, ...data };
-    }) as any;
+    const accessLogs: Prisma.AccessLogCreateInput[] = [];
+    prisma.accessLog.create = (async ({ data }: Prisma.AccessLogCreateArgs) => {
+      accessLogs.push(data as Prisma.AccessLogCreateInput);
+      // recordScan uses flat userId field (AccessLogUncheckedCreateInput pattern)
+      const flat = data as Prisma.AccessLogUncheckedCreateInput;
+      return {
+        id: 1,
+        userId: typeof flat.userId === 'number' ? flat.userId : null,
+        method: data.method,
+        path: data.path,
+        ip: data.ip ?? null,
+        duration: data.duration ?? null,
+        createdAt: new Date(),
+      };
+    }) as unknown as typeof prisma.accessLog.create;
 
     // mock visitor check
-    db.visitor.findUnique = (async ({ where }: any) => {
-      if (where.id === 5) return { id: 5, guestName: 'Jane Smith', checkedInAt: null, checkedOutAt: null };
+    prisma.visitor.findUnique = (async ({ where }: Prisma.VisitorFindUniqueArgs) => {
+      if (where.id === 5) {
+        return {
+          id: 5,
+          guestName: 'Jane Smith',
+          checkedInAt: null,
+          checkedOutAt: null,
+          tenantId: null,
+          roomId: null,
+          phone: null,
+          citizenId: null,
+          citizenIdMasked: null,
+          relationship: null,
+          age: null,
+          birthDate: null,
+          address: null,
+          idCardImagePath: null,
+          purpose: null,
+          expectedEntryTime: null,
+          status: 'REGISTERED',
+          pdpaConsent: true,
+          pdpaConsentAt: new Date(),
+          expiresAt: null,
+          cancelledAt: null,
+          qrCodeData: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
       return null;
-    }) as any;
+    }) as unknown as typeof prisma.visitor.findUnique;
 
-    const visitorUpdates: any[] = [];
-    db.visitor.update = (async ({ where, data }: any) => {
-      visitorUpdates.push({ where, data });
-      return { ...where, ...data };
-    }) as any;
+    const visitorUpdates: Prisma.VisitorUpdateArgs[] = [];
+    prisma.visitor.update = (async (args: Prisma.VisitorUpdateArgs) => {
+      visitorUpdates.push(args);
+      return {
+        id: typeof args.where.id === 'number' ? args.where.id : 5,
+        guestName: 'Jane Smith',
+        status: typeof args.data.status === 'string' ? args.data.status : 'CHECKED_OUT',
+        checkedInAt: null,
+        checkedOutAt: new Date(),
+        tenantId: null,
+        roomId: null,
+        phone: null,
+        citizenId: null,
+        citizenIdMasked: null,
+        relationship: null,
+        age: null,
+        birthDate: null,
+        address: null,
+        idCardImagePath: null,
+        purpose: null,
+        expectedEntryTime: null,
+        pdpaConsent: true,
+        pdpaConsentAt: new Date(),
+        expiresAt: null,
+        cancelledAt: null,
+        qrCodeData: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }) as unknown as typeof prisma.visitor.update;
 
-    const visitorLogs: any[] = [];
-    db.visitorLog.create = (async ({ data }: any) => {
-      visitorLogs.push(data);
-      return { id: 1, ...data };
-    }) as any;
+    const visitorLogs: Prisma.VisitorLogCreateInput[] = [];
+    prisma.visitorLog.create = (async ({ data }: Prisma.VisitorLogCreateArgs) => {
+      visitorLogs.push(data as Prisma.VisitorLogCreateInput);
+      return {
+        id: 1,
+        visitorId: typeof data.visitor?.connect?.id === 'number' ? data.visitor.connect.id : 5,
+        eventType: data.eventType,
+        note: data.note ?? null,
+        createdAt: new Date(),
+      };
+    }) as unknown as typeof prisma.visitorLog.create;
 
     try {
       FaceVerificationService.clearCooldowns();
@@ -257,8 +422,10 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(userScan.cooldown_active, false);
       assert.equal(userScan.student.name, 'John Doe');
       assert.equal(accessLogs.length, 1);
-      assert.equal(accessLogs[0].userId, 99);
-      assert.equal(accessLogs[0].path, 'IN');
+      // recordScan uses flat userId field
+      const flatLog = accessLogs[0] as unknown as Prisma.AccessLogUncheckedCreateInput;
+      assert.equal(flatLog?.userId, 99);
+      assert.equal(accessLogs[0]?.path, 'IN');
 
       // Second rapid scan for the same user should activate cooldown and NOT create duplicate AccessLog
       const duplicateUserScan = await FaceVerificationService.recordScan(
@@ -270,7 +437,7 @@ describe('FaceVerificationService (unit)', () => {
       );
       assert.equal(duplicateUserScan.status, 'ok');
       assert.equal(duplicateUserScan.cooldown_active, true);
-      assert.equal(accessLogs.length, 1); // AccessLog length still 1 (no duplicate!)
+      assert.equal(accessLogs.length, 1);
 
       const visitorScan = await FaceVerificationService.recordScan(
         'visitor_5',
@@ -284,10 +451,12 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(visitorScan.cooldown_active, false);
       assert.equal(visitorScan.student.name, 'Jane Smith');
       assert.equal(visitorUpdates.length, 1);
-      assert.equal(visitorUpdates[0].data.status, 'CHECKED_OUT');
+      assert.equal(visitorUpdates[0]?.data.status, 'CHECKED_OUT');
       assert.equal(visitorLogs.length, 1);
-      assert.equal(visitorLogs[0].visitorId, 5);
-      assert.equal(visitorLogs[0].eventType, 'CHECK_OUT');
+      // face-verification service uses flat visitorId field (VisitorLogUncheckedCreateInput pattern)
+      const flatVLog = visitorLogs[0] as unknown as Prisma.VisitorLogUncheckedCreateInput;
+      assert.equal(flatVLog?.visitorId, 5);
+      assert.equal(visitorLogs[0]?.eventType, 'CHECK_OUT');
 
       // Duplicate visitor scan in cooldown
       const duplicateVisitorScan = await FaceVerificationService.recordScan(
@@ -298,7 +467,7 @@ describe('FaceVerificationService (unit)', () => {
         'CAMERA_02'
       );
       assert.equal(duplicateVisitorScan.cooldown_active, true);
-      assert.equal(visitorLogs.length, 1); // No duplicate visitor log
+      assert.equal(visitorLogs.length, 1);
     } finally {
       FaceVerificationService.clearCooldowns();
       restorePrisma();
@@ -307,10 +476,22 @@ describe('FaceVerificationService (unit)', () => {
 
   it('rejects low confidence match when similarity is below threshold to prevent false identity mismatch', async () => {
     const originalFetch = globalThis.fetch;
-    db.user.findUnique = (async ({ where }: any) => {
-      if (where.id === 1) return { id: 1, firstName: 'System', lastName: 'Admin' };
+    prisma.user.findUnique = (async ({ where }: Prisma.UserFindUniqueArgs) => {
+      if (where.id === 1) {
+        return {
+          id: 1,
+          email: 'admin@dorm.ac.th',
+          username: 'admin',
+          password: 'hashedpassword',
+          role: 'ADMIN',
+          lastLogin: null,
+          version: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
       return null;
-    }) as any;
+    }) as unknown as typeof prisma.user.findUnique;
 
     // External API mistakenly matches Admin with low confidence (0.61) below threshold (0.68)
     globalThis.fetch = (async () => new Response(JSON.stringify({
@@ -330,10 +511,9 @@ describe('FaceVerificationService (unit)', () => {
         buffer,
         'image/jpeg',
         'somchai-face.jpg',
-        0.68 // strict threshold
+        0.68
       );
 
-      // Should be rejected by threshold guardrail instead of falsely matching Admin
       assert.equal(result.matched, false);
       assert.equal(result.user_id, null);
       assert.equal(result.similarity, 0.61);
@@ -345,7 +525,6 @@ describe('FaceVerificationService (unit)', () => {
   });
 
   it('clears scan history from monitoring bus', () => {
-    const { faceVerificationMonitoringBus } = require('../../src/modules/face-verification/face-verification-monitoring');
     faceVerificationMonitoringBus.recordScan({
       id: 'test-scan-1',
       student_code: 'user_99',

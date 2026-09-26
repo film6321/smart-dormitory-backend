@@ -1,14 +1,27 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
+import { HousingPaymentService } from './housing-payment.service';
 import { TenantsService } from './tenants.service';
-import { OcrService } from '../ocr/ocr.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
+import { isString } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { AppError } from '../../middlewares/error-handler';
-import { logger } from '../../logger';
+
+class UploadHousingDocumentsDto { roomNumber!: string; }
 
 export class TenantsController {
+  static async generatePaymentQr(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = plainToInstance(UploadHousingDocumentsDto, req.params);
+      if (!isString(input.roomNumber) || !input.roomNumber.trim() || input.roomNumber.length > 30) {
+        throw new AppError('กรุณาระบุห้องที่ต้องการชำระมัดจำ', 400);
+      }
+      const data = await HousingPaymentService.generateQr(input.roomNumber.trim());
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json(createResponse(200, 'Housing payment QR generated', data));
+    } catch (error) { next(error); }
+  }
+
   static async uploadDocuments(req: Request, res: Response, next: NextFunction) {
     try {
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -22,47 +35,14 @@ export class TenantsController {
         throw new AppError('paymentSlip file is required', 400);
       }
 
-      const uploadRoot = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/private'));
-      const idCardsDir = path.join(uploadRoot, 'id-cards');
-      const slipsDir = path.join(uploadRoot, 'payment-slips');
-
-      if (!fs.existsSync(idCardsDir)) fs.mkdirSync(idCardsDir, { recursive: true });
-      if (!fs.existsSync(slipsDir)) fs.mkdirSync(slipsDir, { recursive: true });
-
-      const safeIdCardName = path.basename(idCardFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-      const idCardName = `${Date.now()}-idcard-${safeIdCardName}`;
-      const idCardPath = path.join(idCardsDir, idCardName);
-      await fs.promises.writeFile(idCardPath, idCardFile.buffer);
-
-      const safeSlipName = path.basename(paymentSlipFile.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-      const slipName = `${Date.now()}-slip-${safeSlipName}`;
-      const slipPath = path.join(slipsDir, slipName);
-      await fs.promises.writeFile(slipPath, paymentSlipFile.buffer);
-
-      const idCardImagePath = `uploads/private/id-cards/${idCardName}`;
-      const paymentSlipPath = `uploads/private/payment-slips/${slipName}`;
-
-      let ocrData: Awaited<ReturnType<typeof OcrService.verifyIdCard>> | null = null;
-      try {
-        const base64Str = `data:${idCardFile.mimetype};base64,${idCardFile.buffer.toString('base64')}`;
-        const userId = (req as AuthenticatedRequest).user?.id;
-        ocrData = await OcrService.verifyIdCard(base64Str, { userId });
-      } catch (ocrErr) {
-        logger.warn({ err: ocrErr }, 'OCR processing failed inside document upload, proceeding with fallback');
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) throw new AppError('กรุณาเข้าสู่ระบบ', 401);
+      const input = plainToInstance(UploadHousingDocumentsDto, req.body);
+      if (!isString(input.roomNumber) || input.roomNumber.trim().length < 1 || input.roomNumber.trim().length > 30) {
+        throw new AppError('กรุณาระบุห้องที่เลือกก่อนตรวจสอบสลิป', 400);
       }
-
-      return res.status(200).json(createResponse(200, 'Documents uploaded successfully', {
-        idCardImagePath,
-        paymentSlipPath,
-        ocrData: {
-          citizenId: ocrData?.citizenId ? `********${ocrData.citizenId.slice(-4)}` : '',
-          fullNameTh: ocrData?.fullNameTh || '',
-          birthDateTh: ocrData?.birthDateTh || '',
-          age: ocrData?.age ?? null,
-          address: ocrData?.address || '',
-          isThaiIdCard: Boolean(ocrData?.isThaiIdCard),
-        }
-      }));
+      const data = await TenantsService.uploadDocuments(idCardFile, paymentSlipFile, userId, input.roomNumber.trim());
+      return res.status(200).json(createResponse(200, 'Documents uploaded successfully', data));
     } catch (error) {
       next(error);
     }

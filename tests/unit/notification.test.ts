@@ -5,6 +5,10 @@ import NotificationService from '../../src/modules/notifications/notification.se
 import { validateNotificationPayload } from '../../src/modules/notifications/notification.dto';
 import NotificationPreferenceController from '../../src/modules/notifications/notification-preferences.controller';
 import { startNotificationWorker, stopNotificationWorker } from '../../src/workers/notificationWorker';
+import { AuthenticatedRequest } from '../../src/middlewares/auth-jwt';
+import { Response } from 'express';
+import { DbClient } from '../../src/database/db';
+import { NotificationChannel, NotificationStatus, NotificationType, Prisma, Role } from '@prisma/client';
 
 describe('NotificationService (unit)', () => {
   it('accepts a valid notification payload for SMS delivery', () => {
@@ -20,19 +24,25 @@ describe('NotificationService (unit)', () => {
   });
 
   it('returns notifications through the controller response wrapper', async () => {
-    const req: any = { user: { id: 2, role: 'TENANT' }, query: {} };
-    const res: any = {
-      statusCode: 0,
-      body: undefined,
+    const req = {
+      user: { id: 2, role: Role.STUDENT },
+      query: {},
+    } as unknown as AuthenticatedRequest;
+
+    let responseStatusCode = 0;
+    let responseBody: unknown = undefined;
+
+    const res = {
       status(code: number) {
-        this.statusCode = code;
+        responseStatusCode = code;
         return this;
       },
-      json(payload: any) {
-        this.body = payload;
+      json(payload: unknown) {
+        responseBody = payload;
         return this;
-      }
-    };
+      },
+    } as unknown as Response;
+
     const next = () => {
       throw new Error('next should not be called');
     };
@@ -44,12 +54,12 @@ describe('NotificationService (unit)', () => {
       templateId: null,
       tenantId: null,
       userId: 2,
-      channel: 'SMS',
-      type: 'GENERIC',
+      channel: NotificationChannel.SMS,
+      type: NotificationType.GENERIC,
       recipientPhone: null,
       recipientEmail: null,
       payload: null,
-      status: 'PENDING',
+      status: NotificationStatus.PENDING,
       providerMessageId: null,
       attempts: 0,
       lastError: null,
@@ -61,37 +71,60 @@ describe('NotificationService (unit)', () => {
 
     try {
       await NotificationController.listNotifications(req, res, next);
-      assert.equal(res.statusCode, 200);
-      assert.equal(res.body.data[0]?.id, 1);
-      assert.equal(res.body.data[0]?.status, 'PENDING');
+      assert.equal(responseStatusCode, 200);
+      const parsedBody = responseBody as { data: Array<{ id: number; status: string }> };
+      assert.equal(parsedBody.data[0]?.id, 1);
+      assert.equal(parsedBody.data[0]?.status, 'PENDING');
     } finally {
       NotificationService.prototype.listNotifications = original;
     }
   });
 
   it('retries failed sends with backoff and updates status', async () => {
-    const notificationRecord = { id: 2, channel: 'SMS', attempts: 0, payload: '{"message":"hi"}', templateId: null, recipientPhone: '+66912345678' };
-    const updates: any[] = [];
+    const notificationRecord = {
+      id: 2,
+      providerId: null,
+      tenantId: null,
+      userId: null,
+      recipientEmail: null,
+      providerMessageId: null,
+      lastError: null,
+      scheduledAt: null,
+      sentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      channel: NotificationChannel.SMS,
+      type: NotificationType.GENERIC,
+      attempts: 0,
+      status: NotificationStatus.PENDING,
+      payload: '{"message":"hi"}',
+      templateId: null,
+      recipientPhone: '+66912345678',
+    };
+    const updates: Prisma.NotificationUpdateArgs[] = [];
     let attemptCount = 0;
 
-    const mockDb: any = {
+    const mockDb = {
       notification: {
-        findUnique: async ({ where }: any) => (where.id === 2 ? { ...notificationRecord } : null),
-        update: async ({ where, data }: any) => { updates.push({ where, data }); return { ...notificationRecord, ...data }; },
+        findUnique: async ({ where }: Prisma.NotificationFindUniqueArgs) => (where.id === 2 ? { ...notificationRecord } : null),
+        update: async (args: Prisma.NotificationUpdateArgs) => {
+          updates.push(args);
+          return { ...notificationRecord, ...args.data };
+        },
       },
       notificationPreference: {
         findFirst: async () => null,
       },
       notificationProvider: {
-        findFirst: async () => ({ id: 'prov-1', name: 'stub', channel: 'SMS', config: '{}', isActive: true }),
+        findFirst: async () => ({ id: 1, name: 'stub', channel: NotificationChannel.SMS, config: '{}', isActive: true, createdAt: new Date(), updatedAt: new Date() }),
       },
       notificationTemplate: {
         findUnique: async () => null,
-      }
-    };
+      },
+    } as unknown as DbClient;
 
     const simpleProvider = await import('../../src/modules/notifications/provider/simpleProvider');
-    const providerModule: any = simpleProvider.default ?? simpleProvider;
+    const providerModule = simpleProvider.default ?? simpleProvider;
     const originalSend = providerModule.send;
     providerModule.send = async () => {
       attemptCount += 1;
@@ -113,26 +146,28 @@ describe('NotificationService (unit)', () => {
   });
 
   it('lists notification preferences through the controller', async () => {
-    const req: any = { user: { id: 7, role: 'TENANT' } };
-    const res: any = {
-      statusCode: 0,
-      body: undefined,
+    const req = { user: { id: 7, role: Role.STUDENT } } as unknown as AuthenticatedRequest;
+    let responseStatusCode = 0;
+    let responseBody: unknown = undefined;
+
+    const res = {
       status(code: number) {
-        this.statusCode = code;
+        responseStatusCode = code;
         return this;
       },
-      json(payload: any) {
-        this.body = payload;
+      json(payload: unknown) {
+        responseBody = payload;
         return this;
-      }
-    };
+      },
+    } as unknown as Response;
 
-    const original = NotificationPreferenceController.prototype['getPreferences'];
-    NotificationPreferenceController.prototype['getPreferences'] = async () => [{
+    const controllerPrototype = NotificationPreferenceController.prototype as unknown as Record<string, () => Promise<unknown>>;
+    const original = controllerPrototype.getPreferences;
+    controllerPrototype.getPreferences = async () => [{
       id: 1,
       tenantId: null,
       userId: 7,
-      channel: 'SMS',
+      channel: NotificationChannel.SMS,
       optedOut: false,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -140,17 +175,18 @@ describe('NotificationService (unit)', () => {
 
     try {
       await NotificationPreferenceController.listPreferences(req, res, () => { throw new Error('next should not be called'); });
-      assert.equal(res.statusCode, 200);
-      assert.equal(res.body.data[0]?.channel, 'SMS');
-      assert.equal(res.body.data[0]?.optedOut, false);
+      assert.equal(responseStatusCode, 200);
+      const parsedBody = responseBody as { data: Array<{ channel: string; optedOut: boolean }> };
+      assert.equal(parsedBody.data[0]?.channel, 'SMS');
+      assert.equal(parsedBody.data[0]?.optedOut, false);
     } finally {
-      NotificationPreferenceController.prototype['getPreferences'] = original;
+      controllerPrototype.getPreferences = original;
     }
   });
 
   it('resolves recipient phone from tenant data when scheduling notifications', async () => {
-    const created: any[] = [];
-    const mockDb: any = {
+    const created: Prisma.NotificationCreateInput[] = [];
+    const mockDb = {
       tenant: {
         findUnique: async () => ({ id: 1, phone: '+66912345678', user: null }),
       },
@@ -158,9 +194,31 @@ describe('NotificationService (unit)', () => {
         findUnique: async () => null,
       },
       notification: {
-        create: async ({ data }: any) => { created.push(data); return data; },
+        create: async ({ data }: Prisma.NotificationCreateArgs) => {
+          created.push(data as Prisma.NotificationCreateInput);
+          return {
+            id: 1,
+            providerId: null,
+            templateId: null,
+            tenantId: null,
+            userId: null,
+            channel: NotificationChannel.SMS,
+            type: NotificationType.GENERIC,
+            recipientPhone: data.recipientPhone ?? null,
+            recipientEmail: null,
+            payload: data.payload ?? null,
+            status: NotificationStatus.PENDING,
+            providerMessageId: null,
+            attempts: 0,
+            lastError: null,
+            scheduledAt: null,
+            sentAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        },
       },
-    };
+    } as unknown as DbClient;
 
     const svc = new NotificationService(mockDb);
     await svc.scheduleNotification({ tenantId: 1, channel: 'SMS', type: 'GENERIC', payload: '{}' });
@@ -171,23 +229,23 @@ describe('NotificationService (unit)', () => {
   it('starts and stops the notification worker to process pending notifications', async () => {
     let processed = 0;
 
-    const mockDb: any = {
+    const mockDb = {
       notification: {
         findMany: async () => [{ id: 42 }],
         count: async () => 0,
-        findUnique: async () => ({ id: 42, channel: 'SMS', attempts: 0, payload: '{"message":"hi"}', templateId: null }),
-        update: async (_args: any) => ({ status: 'SENT' }),
+        findUnique: async () => ({ id: 42, channel: NotificationChannel.SMS, attempts: 0, payload: '{"message":"hi"}', templateId: null }),
+        update: async () => ({ status: NotificationStatus.SENT }),
       },
       notificationPreference: {
         findFirst: async () => null,
       },
       notificationProvider: {
-        findFirst: async () => ({ id: 'prov-1', name: 'stub', channel: 'SMS', config: '{}', isActive: true }),
+        findFirst: async () => ({ id: 1, name: 'stub', channel: NotificationChannel.SMS, config: '{}', isActive: true }),
       },
       notificationTemplate: {
         findUnique: async () => null,
-      }
-    };
+      },
+    } as unknown as DbClient;
 
     const original = NotificationService.prototype.sendNotification;
     NotificationService.prototype.sendNotification = async () => {
@@ -206,22 +264,28 @@ describe('NotificationService (unit)', () => {
   });
 
   it('records webhooks as audit events and moves failed deliveries to dead-letter', async () => {
-    const events: any[] = [];
-    const deadLetters: any[] = [];
+    const events: Prisma.NotificationAuditLogCreateInput[] = [];
+    const deadLetters: Prisma.NotificationDeadLetterCreateInput[] = [];
 
-    const mockDb: any = {
+    const mockDb = {
       notification: {
-        findFirst: async () => ({ id: 7, providerMessageId: 'twilio-msg-1', status: 'PENDING' }),
-        update: async ({ where, data }: any) => ({ id: where.id, ...data }),
+        findFirst: async () => ({ id: 7, providerMessageId: 'twilio-msg-1', status: NotificationStatus.PENDING }),
+        update: async ({ where, data }: Prisma.NotificationUpdateArgs) => ({ id: where.id, ...data }),
       },
       notificationAuditLog: {
-        create: async ({ data }: any) => { events.push(data); return data; },
+        create: async ({ data }: Prisma.NotificationAuditLogCreateArgs) => {
+          events.push(data as Prisma.NotificationAuditLogCreateInput);
+          return { id: 1, notificationId: 7, eventType: data.eventType, payload: data.payload ?? null, createdAt: new Date() };
+        },
       },
       notificationDeadLetter: {
         findFirst: async () => null,
-        create: async ({ data }: any) => { deadLetters.push(data); return data; },
+        create: async ({ data }: Prisma.NotificationDeadLetterCreateArgs) => {
+          deadLetters.push(data as Prisma.NotificationDeadLetterCreateInput);
+          return { id: 1, notificationId: 7, reason: data.reason, details: data.details ?? null, createdAt: new Date() };
+        },
       },
-    };
+    } as unknown as DbClient;
 
     const svc = new NotificationService(mockDb);
     await svc.handleProviderWebhook({ MessageSid: 'twilio-msg-1', MessageStatus: 'undelivered' });
@@ -231,35 +295,38 @@ describe('NotificationService (unit)', () => {
   });
 
   it('sends notification with provider and marks sent', async () => {
-    // Arrange: mock DB with minimal methods used by the service
-    const notificationRecord = { id: 1, channel: 'SMS', attempts: 0, payload: '{"message":"hi"}', templateId: null };
-    let updated: any = null;
+    const notificationRecord = { id: 1, channel: NotificationChannel.SMS, attempts: 0, payload: '{"message":"hi"}', templateId: null };
+    let updatedArgs: Prisma.NotificationUpdateArgs | null = null;
 
-    const mockDb: any = {
+    const mockDb = {
       notification: {
-        findUnique: async ({ where }: any) => (where.id === 1 ? { ...notificationRecord } : null),
-        update: async ({ where, data }: any) => { updated = { where, data }; return { ...notificationRecord, ...data }; },
+        findUnique: async ({ where }: Prisma.NotificationFindUniqueArgs) => (where.id === 1 ? { ...notificationRecord } : null),
+        update: async (args: Prisma.NotificationUpdateArgs) => {
+          updatedArgs = args;
+          return { ...notificationRecord, ...args.data };
+        },
       },
       notificationPreference: {
         findFirst: async () => null,
       },
       notificationProvider: {
-        findFirst: async () => ({ id: 'prov-1', name: 'stub', channel: 'SMS', config: '{}', isActive: true }),
+        findFirst: async () => ({ id: 1, name: 'stub', channel: NotificationChannel.SMS, config: '{}', isActive: true }),
       },
       notificationTemplate: {
         findUnique: async () => null,
-      }
-    };
+      },
+    } as unknown as DbClient;
 
     const svc = new NotificationService(mockDb);
 
-    // Act
     const result = await svc.sendNotification(1);
 
-    // Assert
-    assert.equal(typeof (result as any).id, 'string');
-    assert.equal(updated?.where?.id, 1);
-    assert.equal(updated?.data?.status, 'SENT');
-    assert.equal(updated?.data?.attempts, 1);
+    assert.equal(typeof (result as { id?: string }).id, 'string');
+    if (updatedArgs) {
+      const updateRef = updatedArgs as Prisma.NotificationUpdateArgs;
+      assert.equal(updateRef.where.id, 1);
+      assert.equal(updateRef.data.status, 'SENT');
+      assert.equal(updateRef.data.attempts, 1);
+    }
   });
 });

@@ -20,6 +20,7 @@ describe('state transitions', () => {
 
   it('allows valid visitor transitions', () => {
     assert.equal(canTransitionVisitorStatus('REGISTERED', 'VERIFYING'), true);
+    assert.equal(canTransitionVisitorStatus('REGISTERED', 'CANCELLED'), true);
     assert.equal(canTransitionVisitorStatus('VERIFYING', 'APPROVED'), true);
     assert.equal(canTransitionVisitorStatus('APPROVED', 'CHECKED_IN'), true);
     assert.equal(canTransitionVisitorStatus('CHECKED_IN', 'CHECKED_OUT'), true);

@@ -17,5 +17,8 @@ require("./unit/analytics.test.ts");
 require("./unit/route-aliases.test.ts");
 require("./unit/route-aliases-additional.test.ts");
 require("./unit/face-verification.test.ts");
+require("./unit/housing-ocr-flow.test.ts");
 require("./integration/health-route.test.ts");
 require("./integration/error-response.test.ts");
+
+require("./unit/payment-provider.test.ts");

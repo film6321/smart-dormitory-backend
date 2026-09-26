@@ -1,6 +1,14 @@
-# CHANGELOG.md - Smart-Dormitory-Management-System
+# CHANGELOG.md - MEEDEE-Dormitory-Management-System
 
 ## [Unreleased]
+
+### 2026-09-25 — Visitor Registration OCR-First Flow & Route Aliases Hardening
+
+- **OCR & Visitor Route Aliases**: เพิ่ม Route Aliases สำหรับ OCR (`POST /api/ocr/identity-card`, `/id-card`, `/idcard`, `/jobs`) และ Visitor (`POST /api/visitor/verify-id-card`, `/verify`, `GET /:id`) รวมถึง mount aliases `/ocr` และ `/visitor` ใน `src/app.ts` เพื่อป้องกัน 404 Not Found
+- **Multipart Upload Support**: ติดตั้ง Multer Upload Handler ให้กับ `src/modules/visitor/visitor.routes.ts` รองรับการอัปโหลดไฟล์รูปภาพ (`file`, `image`, `idCard`, `document`) ร่วมกับ JSON Base64 ใน `VisitorController.scanVisitorIdCard`
+- **Room & Tenant Resolution**: ปรับปรุง `VisitorService.registerVisitor` ให้ค้นหาและผูก `roomId` อัตโนมัติจาก `roomNumber` (เช่น `"301"` หรือ `"ห้อง 301"`) และผูก `tenantId` จาก `tenantName`
+- **Zero-Any Compliance**: ปฏิบัติตามนโยบายห้ามใช้ `any` และ `@ts-ignore` อย่างเคร่งครัด โดยใช้ Axios Type Guard (`axios.isAxiosError`) และ Prisma Unchecked/Checked types
+- **Testing & Verification**: เพิ่ม Unit Tests สำหรับ roomNumber resolution และ route aliases coverage โดยรัน `npm test` ผ่านครบ 53 tests (0 failed), `npm run lint` ผ่าน (0 errors, 0 warnings), และ `npm run build` ผ่านสมบูรณ์
 
 ### 2026-09-13 — Full Type-Safety & ESLint Zero-Error Refactoring (Backend & Frontend)
 
@@ -81,7 +89,7 @@
 
 ### 2026-05-27 — Repository and Git Setup
 
-- แยกโค้ด `frontend` และ `backend` ออกจากกันเป็น 2 GitHub repository แยก: `smart-dormitory-frontend` และ `smart-dormitory-backend`
+- แยกโค้ด `frontend` และ `backend` ออกจากกันเป็น 2 GitHub repository แยก: `MEEDEE-dormitory-frontend` และ `MEEDEE-dormitory-backend`
 - ตั้งค่า remote ของแต่ละ repo ให้ถูกต้อง และสร้าง branch `dev` สำหรับพัฒนาทุกฝั่ง
 - ตรวจสอบและ push ข้อมูลขึ้น GitHub เรียบร้อยทั้ง `frontend` และ `backend`
 - ปรับ `frontend` remote ที่เคยชี้ผิดไปยัง backend ให้ชี้กลับไป repo frontend อย่างถูกต้อง

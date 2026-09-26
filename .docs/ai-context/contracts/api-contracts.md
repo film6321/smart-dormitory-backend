@@ -53,3 +53,33 @@ Payment batch: POST /api/payment-batches
 The payment-batch creation request requires an idempotency key. Its slip files are private; internal provider response, slip path, slip hash, and idempotency values are not public API response fields.
 
 For valid bill, visitor, and maintenance state changes, use `state-machine.md`. Before changing a route, reconcile this index with its route file and automated tests.
+
+## Housing document payment verification
+
+`GET /api/tenants/payment-qr/:roomNumber` requires authentication. The server checks
+availability and capacity, reads `Room.monthlyRent`, and uses the same Payment API
+QR generator as billing. Response data: `{ roomNumber, amount, qrImage }`, where
+`qrImage` is a PNG data URL. This endpoint does not create a payment or reserve a room.
+The client must discard stale QR responses after room changes and refuse an amount
+that differs from its displayed room price. Upload the bank slip in the next step.
+
+
+`POST /api/tenants/upload-documents` requires authenticated multipart fields `idCard`,
+`paymentSlip` (JPG/PNG/WebP), and `roomNumber`. A successful response includes
+`paymentVerification: { id, status: "PAID", amount }` alongside document paths and OCR data.
+The server obtains the expected one-month deposit from `Room.monthlyRent`, verifies the
+slip through the existing Payment API, and persists the result in `Payment` with
+`housingRoomId` and `housingVerificationId` (no bill yet).
+
+`POST /api/tenants/apply` additionally requires `paymentId`. The server checks PAID status,
+owner, room, verified ID card, slip path, and contract amounts inside a transaction;
+then binds `housingTenantId`. Repeating an accepted application returns the same tenant.
+Failed verification cannot be replaced by a client-supplied file path or success flag.
+Provider outages enter MANUAL_REVIEW and must not trigger another transfer.
+
+Payment and PaymentBatch reserve slip hashes and provider references using shared
+PostgreSQL transaction locks. This prevents reuse across housing and billing flows.
+A successful retry of the same unconsumed housing slip reuses the stored verification.
+Deploy migration `20260925010000_housing_payment_verification` before the updated backend
+and frontend; legacy housing uploads without verified payment must be reverified.
+Thunder response contract: https://document.thunder.in.th/th/v2/verify/bank/image

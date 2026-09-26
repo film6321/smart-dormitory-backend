@@ -117,7 +117,7 @@ const getStringValue = (value) => {
         return undefined;
     }
     const trimmed = value.trim();
-    return trimmed && trimmed !== '-' ? trimmed : undefined;
+    return trimmed && !/^[\s\-–—_*]+$/u.test(trimmed) ? trimmed : undefined;
 };
 const stripDataUrlPrefix = (imageBase64) => {
     const commaIndex = imageBase64.indexOf(',');
@@ -296,7 +296,7 @@ class OcrService {
             throw new error_handler_1.AppError(payload.message || payload.error || 'OCR service is unavailable', 502);
         }
         const result = this.mapIdCardVerification(payload);
-        const imagePath = result.isThaiIdCard ? await savePrivateIdCardImage(imageBase64, sanitizedImage) : undefined;
+        const imagePath = result.confidence.idDetected ? await savePrivateIdCardImage(imageBase64, sanitizedImage) : undefined;
         const savedVerification = await this.saveVerificationResult(result, imagePath, options.userId);
         const publicResult = {
             verificationId: result.verificationId,

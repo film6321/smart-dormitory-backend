@@ -42,6 +42,32 @@ export const verifyToken = (req: AuthenticatedRequest, res: Response, next: Next
   }
 };
 
+export const optionalVerifyToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const cookieToken = (req.headers.cookie ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('access_token='))
+    ?.slice('access_token='.length);
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
+  const resolvedToken = token || cookieToken || queryToken;
+
+  if (!resolvedToken) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(
+      resolvedToken,
+      getJwtSecret()
+    ) as { id: number; role: Role };
+    req.user = decoded;
+    next();
+  } catch {
+    next();
+  }
+};
+
 // 2. Middleware แยกส่วนที่เอาไว้ตรวจจำกัดสิทธิ์เฉพาะบาง Role เช่น ADMIN เท่านั้น
 export const requireRole = (roles: Role[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

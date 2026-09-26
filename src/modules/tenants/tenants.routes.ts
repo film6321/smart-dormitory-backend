@@ -27,6 +27,7 @@ const uploadFields = upload.fields([
 ]);
 
 router.get('/', verifyToken, requireRole(['ADMIN']), TenantsController.listTenants);
+router.get('/payment-qr/:roomNumber', verifyToken, TenantsController.generatePaymentQr);
 router.get('/me', verifyToken, TenantsController.getMyTenant);
 router.get('/me/documents/:documentType', verifyToken, TenantsController.getMyDocument);
 router.get('/:id/documents/:documentType', verifyToken, requireRole(['ADMIN']), TenantsController.getTenantDocumentById);

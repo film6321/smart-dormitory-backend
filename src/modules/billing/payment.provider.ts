@@ -6,6 +6,7 @@ export interface PaymentVerificationResult {
   duplicate: boolean;
   amount: number | null;
   rawData: unknown;
+  transactionId?: string;
   message?: string;
 }
 
@@ -18,6 +19,7 @@ interface PaymentProviderResponse {
     isDuplicate?: boolean;
     matchedAccount?: unknown;
     rawSlip?: {
+      transRef?: string;
       amount?: {
         amount?: number | string;
       };
@@ -57,6 +59,7 @@ const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Respons
 };
 
 const parseAmount = (value: number | string | undefined): number | null => {
+  if ((typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '') return null;
   const amount = Number(value);
   return Number.isFinite(amount) ? amount : null;
 };
@@ -66,11 +69,12 @@ const normalizeResponse = (payload: PaymentProviderResponse): PaymentVerificatio
   const rawAmount = payload.data?.rawSlip?.amount?.amount;
 
   return {
-    success: payload.success === true,
-    recipientMatched: matchedAccount !== null && matchedAccount !== undefined,
+    success: payload.success === true && payload.data?.isDuplicate === false,
+    recipientMatched: typeof matchedAccount === 'object' && matchedAccount !== null && !Array.isArray(matchedAccount) && Object.keys(matchedAccount).length > 0,
     duplicate: payload.data?.isDuplicate === true,
     amount: parseAmount(rawAmount),
     rawData: payload.data ?? payload,
+    transactionId: typeof payload.data?.rawSlip?.transRef === 'string' ? payload.data.rawSlip.transRef.trim() || undefined : undefined,
     message: payload.message || payload.error,
   };
 };
@@ -117,6 +121,7 @@ export class PaymentProviderClient {
       throw new AppError('Payment Gateway is unavailable. Please try again later.', 503);
     }
 
-    return normalizeResponse(payload);
+    const result = normalizeResponse(payload);
+    return { ...result, success: response.ok && result.success };
   }
 }
