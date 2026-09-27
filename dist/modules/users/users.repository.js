@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersRepository = void 0;
+const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
 class UsersRepository {
     static baseUserSelect = {
@@ -87,7 +88,18 @@ class UsersRepository {
         return db.user.update({ where: { id }, data: data });
     }
     static async deleteUser(id, db = db_1.prisma) {
-        return db.user.delete({ where: { id } });
+        const remove = async (transaction) => {
+            await transaction.$queryRaw `SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`;
+            const record = await transaction.user.findUnique({ where: { id }, include: { _count: true } });
+            if (!record)
+                throw new error_handler_1.AppError('ไม่พบผู้ใช้ที่ต้องการลบ', 404);
+            if (Object.values(record._count).some((count) => count > 0)) {
+                throw new error_handler_1.AppError('ลบผู้ใช้ไม่ได้ เนื่องจากมีข้อมูลหรือประวัติที่เกี่ยวข้องอยู่', 409);
+            }
+            return transaction.user.delete({ where: { id } });
+        };
+        return typeof db.$transaction === 'function'
+            ? db.$transaction(remove) : remove(db);
     }
 }
 exports.UsersRepository = UsersRepository;

@@ -523,9 +523,10 @@ export class OcrService {
       throw new AppError('Id card verification record not found', 404);
     }
 
-    const imageDeleted = await deletePrivateImageIfExists(verification.imagePath);
-
+    // Delete the row first: a rejected delete must never remove its evidence image.
     await OcrRepository.deleteIdCardVerification(id);
+
+    const imageDeleted = await deletePrivateImageIfExists(verification.imagePath);
 
     await invalidateIdCardVerificationListCache();
 

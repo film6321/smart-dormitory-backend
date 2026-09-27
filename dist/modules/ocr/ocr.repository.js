@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OcrRepository = void 0;
+const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
 class OcrRepository {
     static async createOcrJob(data, db = db_1.prisma) {
@@ -53,7 +54,13 @@ class OcrRepository {
         });
     }
     static async deleteIdCardVerification(id, db = db_1.prisma) {
-        return db.idCardVerification.delete({ where: { id } });
+        return db.$transaction(async (tx) => {
+            await tx.$queryRaw `SELECT id FROM "IdCardVerification" WHERE id = ${id} FOR UPDATE`;
+            if (await tx.payment.count({ where: { housingVerificationId: id } })) {
+                throw new error_handler_1.AppError('ลบประวัติตรวจบัตรไม่ได้ เนื่องจากใช้เป็นหลักฐานการชำระเงินแล้ว', 409);
+            }
+            return tx.idCardVerification.delete({ where: { id } });
+        });
     }
     static async listIdCardVerifications(page, limit, db = db_1.prisma) {
         const safePage = Math.max(1, page);

@@ -1,3 +1,4 @@
+import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 
@@ -140,8 +141,12 @@ export class BillingRepository {
 
   static async deleteBill(id: number, db = prisma) {
     return db.$transaction(async (transaction) => {
-      await transaction.paymentBatchItem.deleteMany({ where: { billId: id } });
-      await transaction.payment.deleteMany({ where: { billId: id } });
+      await transaction.$queryRaw`SELECT id FROM "Bill" WHERE id = ${id} FOR UPDATE`;
+      const bill = await transaction.bill.findUnique({ where: { id }, include: { _count: true } });
+      if (!bill) throw new AppError('ไม่พบบิลที่ต้องการลบ', 404);
+      if (bill.status === 'PAID' || bill.status === 'VERIFYING' || Object.values(bill._count).some((count) => count > 0)) {
+        throw new AppError('ลบบิลไม่ได้ เนื่องจากมีประวัติหรือรายการชำระเงินที่ต้องเก็บรักษา', 409);
+      }
       return transaction.bill.delete({ where: { id } });
     });
   }

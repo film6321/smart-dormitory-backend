@@ -83,3 +83,23 @@ A successful retry of the same unconsumed housing slip reuses the stored verific
 Deploy migration `20260925010000_housing_payment_verification` before the updated backend
 and frontend; legacy housing uploads without verified payment must be reverified.
 Thunder response contract: https://document.thunder.in.th/th/v2/verify/bank/image
+
+
+## Protected deletion and visitor schema
+
+Tenant, room and user DELETE operations reject referenced records with HTTP 409;
+they do not cascade-delete financial or operational history. Bill deletion rejects
+PAID/VERIFYING bills and bills with Payment or PaymentBatchItem references. OCR
+verification deletion rejects housing-payment evidence before removing its image.
+DELETE database conflicts map to 409 and missing records to 404. Other unexpected
+errors remain 500. Locks and checks occur in the same database transaction.
+
+Migration `20260928010000_complete_visitor_registration` adds the 13 registration
+fields already declared in the Visitor schema and its expiresAt index. Existing
+records retain their data and default to pdpaConsent=false; consent is not inferred.
+
+Regression suite (disposable PostgreSQL only): set DATABASE_URL to a database named
+`delete_guard_test`, apply migrations, then run
+`node --test -r ts-node/register tests/integration/delete-guards.test.ts`
+with TS_NODE_PROJECT=tsconfig.test.json. This suite inserts test records and must not
+run against production.

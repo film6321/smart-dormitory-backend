@@ -1,3 +1,4 @@
+import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../database/db';
 
@@ -99,6 +100,16 @@ export class UsersRepository {
   }
 
   static async deleteUser(id: number, db: DbClient = prisma) {
-    return db.user.delete({ where: { id } });
+    const remove = async (transaction: Prisma.TransactionClient) => {
+      await transaction.$queryRaw`SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`;
+      const record = await transaction.user.findUnique({ where: { id }, include: { _count: true } });
+      if (!record) throw new AppError('ไม่พบผู้ใช้ที่ต้องการลบ', 404);
+      if (Object.values(record._count).some((count) => count > 0)) {
+        throw new AppError('ลบผู้ใช้ไม่ได้ เนื่องจากมีข้อมูลหรือประวัติที่เกี่ยวข้องอยู่', 409);
+      }
+      return transaction.user.delete({ where: { id } });
+    };
+    return typeof db.$transaction === 'function'
+      ? (db as typeof prisma).$transaction(remove) : remove(db);
   }
 }

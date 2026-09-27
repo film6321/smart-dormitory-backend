@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoomsRepository = void 0;
+const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
 class RoomsRepository {
     static tenantSelect = {
@@ -58,7 +59,18 @@ class RoomsRepository {
         return db.room.update({ where: { id }, data });
     }
     static async deleteRoom(id, db = db_1.prisma) {
-        return db.room.delete({ where: { id } });
+        const remove = async (transaction) => {
+            await transaction.$queryRaw `SELECT id FROM "Room" WHERE id = ${id} FOR UPDATE`;
+            const record = await transaction.room.findUnique({ where: { id }, include: { _count: true } });
+            if (!record)
+                throw new error_handler_1.AppError('ไม่พบห้องที่ต้องการลบ', 404);
+            if (Object.values(record._count).some((count) => count > 0)) {
+                throw new error_handler_1.AppError('ลบห้องไม่ได้ เนื่องจากมีข้อมูลหรือประวัติที่เกี่ยวข้องอยู่', 409);
+            }
+            return transaction.room.delete({ where: { id } });
+        };
+        return typeof db.$transaction === 'function'
+            ? db.$transaction(remove) : remove(db);
     }
 }
 exports.RoomsRepository = RoomsRepository;

@@ -1,3 +1,4 @@
+import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../database/db';
 
@@ -63,6 +64,16 @@ export class RoomsRepository {
   }
 
   static async deleteRoom(id: number, db: DbClient = prisma) {
-    return db.room.delete({ where: { id } });
+    const remove = async (transaction: Prisma.TransactionClient) => {
+      await transaction.$queryRaw`SELECT id FROM "Room" WHERE id = ${id} FOR UPDATE`;
+      const record = await transaction.room.findUnique({ where: { id }, include: { _count: true } });
+      if (!record) throw new AppError('ไม่พบห้องที่ต้องการลบ', 404);
+      if (Object.values(record._count).some((count) => count > 0)) {
+        throw new AppError('ลบห้องไม่ได้ เนื่องจากมีข้อมูลหรือประวัติที่เกี่ยวข้องอยู่', 409);
+      }
+      return transaction.room.delete({ where: { id } });
+    };
+    return typeof db.$transaction === 'function'
+      ? (db as typeof prisma).$transaction(remove) : remove(db);
   }
 }

@@ -1,3 +1,4 @@
+import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../database/db';
 
@@ -55,29 +56,17 @@ export class TenantsRepository {
 
   static async deleteTenant(id: number, db: DbClient = prisma) {
     const deleteRelatedRecords = async (transaction: Prisma.TransactionClient | typeof prisma) => {
-      const visitors = await transaction.visitor.findMany({
-        where: { tenantId: id },
-        select: { id: true },
-      });
-      const visitorIds = visitors.map((visitor: { id: number }) => visitor.id);
-
-      if (visitorIds.length > 0) {
-        await transaction.visitorLog.deleteMany({ where: { visitorId: { in: visitorIds } } });
-        await transaction.visitor.deleteMany({ where: { id: { in: visitorIds } } });
+      await transaction.$queryRaw`SELECT id FROM "Tenant" WHERE id = ${id} FOR UPDATE`;
+      const tenant = await transaction.tenant.findUnique({ where: { id }, include: { _count: true } });
+      if (!tenant) throw new AppError('ไม่พบผู้พักที่ต้องการลบ', 404);
+      if (Object.values(tenant._count).some((count) => count > 0)) {
+        throw new AppError('ลบผู้พักไม่ได้ เนื่องจากมีประวัติชำระเงิน บิล ผู้มาติดต่อ หรือแจ้งซ่อมที่ต้องเก็บรักษา', 409);
       }
-
-      await transaction.bill.deleteMany({ where: { tenantId: id } });
-      await transaction.maintenanceTicket.deleteMany({ where: { tenantId: id } });
-
-      // Retrieve tenant's roomId and release the room status to AVAILABLE
-      const tenant = await transaction.tenant.findUnique({
-        where: { id },
-        select: { roomId: true },
-      });
-      if (tenant?.roomId) {
-        await transaction.room.update({
-          where: { id: tenant.roomId },
-          data: { status: 'AVAILABLE' },
+      if (tenant.roomId) {
+        await transaction.$queryRaw`SELECT id FROM "Room" WHERE id = ${tenant.roomId} FOR UPDATE`;
+        const remaining = await transaction.tenant.count({ where: { roomId: tenant.roomId, id: { not: id } } });
+        if (remaining === 0) await transaction.room.updateMany({
+          where: { id: tenant.roomId, status: 'OCCUPIED' }, data: { status: 'AVAILABLE' },
         });
       }
 

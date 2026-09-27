@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillingRepository = void 0;
+const error_handler_1 = require("../../middlewares/error-handler");
 const db_1 = require("../../database/db");
 class BillingRepository {
     static async listBills(userId, role, db = db_1.prisma) {
@@ -121,8 +122,13 @@ class BillingRepository {
     }
     static async deleteBill(id, db = db_1.prisma) {
         return db.$transaction(async (transaction) => {
-            await transaction.paymentBatchItem.deleteMany({ where: { billId: id } });
-            await transaction.payment.deleteMany({ where: { billId: id } });
+            await transaction.$queryRaw `SELECT id FROM "Bill" WHERE id = ${id} FOR UPDATE`;
+            const bill = await transaction.bill.findUnique({ where: { id }, include: { _count: true } });
+            if (!bill)
+                throw new error_handler_1.AppError('ไม่พบบิลที่ต้องการลบ', 404);
+            if (bill.status === 'PAID' || bill.status === 'VERIFYING' || Object.values(bill._count).some((count) => count > 0)) {
+                throw new error_handler_1.AppError('ลบบิลไม่ได้ เนื่องจากมีประวัติหรือรายการชำระเงินที่ต้องเก็บรักษา', 409);
+            }
             return transaction.bill.delete({ where: { id } });
         });
     }

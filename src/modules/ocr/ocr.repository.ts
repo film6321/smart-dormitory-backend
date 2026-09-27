@@ -1,3 +1,4 @@
+import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 
@@ -57,7 +58,13 @@ export class OcrRepository {
   }
 
   static async deleteIdCardVerification(id: number, db = prisma) {
-    return db.idCardVerification.delete({ where: { id } });
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "IdCardVerification" WHERE id = ${id} FOR UPDATE`;
+      if (await tx.payment.count({ where: { housingVerificationId: id } })) {
+        throw new AppError('ลบประวัติตรวจบัตรไม่ได้ เนื่องจากใช้เป็นหลักฐานการชำระเงินแล้ว', 409);
+      }
+      return tx.idCardVerification.delete({ where: { id } });
+    });
   }
 
   static async listIdCardVerifications(page: number, limit: number, db = prisma) {
