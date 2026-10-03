@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../../middlewares/auth-jwt';
-import { validateDto } from '../shared/dto-validation';
+import { validateDto } from '../../middlewares/dto-validation';
 import NotificationController from './notification.controller';
 import { createNotificationSchema } from './notification.dto';
 

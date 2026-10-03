@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { requireRole, verifyToken } from '../../middlewares/auth-jwt';
-import { validateDto } from '../shared/dto-validation';
+import { validateDto } from '../../middlewares/dto-validation';
 import { MaintenanceController } from './maintenance.controller';
 import { createMaintenanceTicketSchema, updateMaintenanceStatusSchema } from './maintenance.dto';
 import { AppError } from '../../middlewares/error-handler';

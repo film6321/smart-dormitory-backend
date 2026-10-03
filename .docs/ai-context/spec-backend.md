@@ -2,7 +2,7 @@
 
 เอกสารกำหนดคู่มือและมาตรฐานทางเทคนิคสำหรับผู้พัฒนาและ AI ในการแก้ไข Backend
 
-**Version:** 1.0.0 | **Updated:** 2026-06-29
+**Version:** 1.0.1 | **Updated:** 2026-10-04
 
 ---
 
@@ -19,26 +19,45 @@
 
 ## 2. Directory & Component Ownership
 
-สถาปัตยกรรม **Modular Monolith**:
+ใช้ **Modular Architecture** ใน Backend แบบ **Modular Monolith**: แบ่งไฟล์ตามฟีเจอร์ และแยกหน้าที่ภายในโมดูลตามความจำเป็น ผังนี้แสดงตำแหน่งปัจจุบัน ไม่ใช่คำสั่งให้สร้างโฟลเดอร์เพิ่มหรือย้ายตามรูปแบบใหม่:
 
 ```text
 src/
   modules/
     auth/             ← controller, service, routes
     users/            ← ข้อมูลนักศึกษาและผู้ดูแล
+    tenants/          ← ผู้เช่าและการชำระเงินเอกสารเข้าพัก
+    rooms/            ← ห้องพัก
     visitor/          ← บันทึกและตรวจสอบผู้ติดต่อ
     billing/          ← สร้างบิลและตรวจสลิป
     maintenance/      ← คิวและสถานะงานซ่อม
+    notifications/    ← การแจ้งเตือนและผู้ให้บริการส่งข้อความ
+    audit/            ← ประวัติการดำเนินงาน
+    settings/         ← การตั้งค่าระบบ
+    analytics/        ← รายงานและการวิเคราะห์
     ocr/              ← Wrapper ยิง External OCR API
     face-verification/ ← FaceGate.Edge integration (embeddings, scan, enrollment)
+  middlewares/        ← JWT, Roles, Access Log, Error Handler และ DTO Validation
   shared/
     api-response.ts   ← Wrapper response กลาง
-    middlewares/      ← Auth, Rate limiter, Trace, Validation
+    state-transitions.ts ← กฎการเปลี่ยนสถานะกลาง
+    ...               ← env, Redis, cache, rate limit, presence และ date utilities
   workers/            ← Background jobs
   database/           ← Prisma client instance
+  realtime/           ← Socket.IO notification gateway
+  routes/             ← health endpoints
+  setup/              ← Security, Swagger และ Observability initialization
+  logger.ts           ← logger กลาง
   app.ts              ← Router & Middleware registration
   index.ts            ← HTTP Server & Socket.IO startup
 ```
+
+- ภายในโมดูลใช้ไฟล์ `<module>.routes.ts`, `.controller.ts`, `.service.ts`, `.repository.ts`, `.dto.ts` หรือ `.types.ts` เท่าที่มีการใช้งานจริง; ไม่จำเป็นต้องมีครบทุกแบบหรือสร้าง subfolders เพิ่มทุกโมดูล.
+- Validation middleware อยู่ที่ `src/middlewares/dto-validation.ts` และถูกใช้จาก routes ของ Billing, Maintenance, Notifications และ Visitor. คง export `validateDto` และพฤติกรรมตรวจคำขอเดิม.
+- Swagger สร้างจาก annotations ใน `src/modules/**/*.routes.ts` ผ่าน `src/setup/setupSwagger.ts` และแสดงที่ `/api-docs`.
+- HTTP routes ลงทะเบียนใน `src/app.ts`; HTTP server, Socket.IO และ workers เริ่ม/หยุดใน `src/index.ts`. การจัดโครงสร้างต้องรักษา public routes และจุดเริ่มระบบเหล่านี้.
+- โค้ด React/Vite อยู่ใน repo `smart-dormitory-frontend` แยกต่างหาก ไม่สร้าง Frontend หรือ engine OCR/Face Verification ซ้ำใน Backend.
+- ดูหน้าที่โฟลเดอร์นอก src ที่ [README](../../README.md#project-structure) และแผนงานที่ยังไม่ลงมือย้ายใน [Backend Architecture](../architecture/03-backend-architecture.md).
 
 ### ⚠️ กฎ Isolation บังคับ
 * **Thin Controller Rule:** Controller ทำได้เฉพาะ ตรวจสิทธิ์ Role, กรอง DTO, แปลง Payload — ห้ามเขียน Business Logic และห้ามเรียก `prisma.*` โดยตรง

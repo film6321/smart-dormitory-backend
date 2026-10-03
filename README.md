@@ -16,7 +16,7 @@ Backend API สำหรับ Smart Dormitory Management System
 
 ## Overview
 
-- Node.js + Express + TypeScript (Multi-Worker 2 Replicas หลัง Nginx)
+- Node.js + Express + TypeScript หลัง Nginx (Compose เริ่มต้น 1 replica; ปรับผ่าน `BACKEND_REPLICAS`)
 - PgBouncer Connection Pooler กับ PostgreSQL 16
 - Redis สำหรับ Rate Limit และ Cache
 - Libuv Threadpool: `UV_THREADPOOL_SIZE=64` สำหรับ Bcrypt Hashing
@@ -63,12 +63,16 @@ cp .env.example .env
 ## Project Structure
 
 ```text
-backend/
+smart-dormitory-backend/
 ├── package.json
+├── package-lock.json
+├── docker-compose.yml
+├── Dockerfile
 ├── prisma.config.ts
 ├── prisma/
 │   ├── schema.prisma
-│   └── migrations/
+│   ├── migrations/
+│   └── seed.ts
 ├── src/
 │   ├── app.ts
 │   ├── index.ts
@@ -76,23 +80,69 @@ backend/
 │   ├── modules/
 │   │   ├── auth/
 │   │   ├── users/
+│   │   ├── tenants/
+│   │   ├── rooms/
 │   │   ├── visitor/
 │   │   ├── billing/
 │   │   ├── maintenance/
+│   │   ├── notifications/
+│   │   ├── audit/
+│   │   ├── settings/
+│   │   ├── analytics/
 │   │   ├── ocr/
 │   │   └── face-verification/
 │   ├── middlewares/
 │   ├── setup/
 │   ├── shared/
-│   └── docs/
+│   ├── realtime/
+│   ├── routes/
+│   ├── workers/
+│   └── logger.ts
+├── scripts/
+├── tests/
+├── postman/
+├── docker/
+├── .docs/
 └── tsconfig.json
 ```
+
+ใช้ **Modular Architecture** โดยเก็บไฟล์ของฟีเจอร์เดียวกันไว้ใน `src/modules/<feature>/`. ภายในโมดูลแยก routes, controller, service, repository และ DTO ตามหน้าที่ที่ใช้งานจริง ไม่สร้างโครงสร้าง Frontend ซ้ำใน repo นี้.
+
+| ตำแหน่ง | หน้าที่และจุดเริ่มอ่าน |
+| --- | --- |
+| `src/app.ts`, `src/index.ts` | ลงทะเบียน routes/middleware และเริ่มหรือหยุด server/Socket/workers |
+| `src/modules/` | ฟีเจอร์ของ Backend; ดูขอบเขตใน [Backend spec](.docs/ai-context/spec-backend.md) |
+| `src/middlewares/`, `src/shared/` | การตรวจคำขอ/สิทธิ์ รวม DTO validation และ utilities ที่ใช้ข้ามโมดูล |
+| `src/database/`, `prisma/` | Prisma client, schema, migration history และ seed; seed มีการล้างข้อมูล ไม่ใช่ขั้นตอนตรวจโครงสร้าง |
+| `src/realtime/`, `src/workers/` | Socket gateway และงานเบื้องหลัง เช่น OCR, notifications และ visitor expiry |
+| `src/setup/`, `src/routes/` | เริ่ม security/Swagger/metrics และ health routes; Swagger สร้างจาก annotations ใน routes ผ่าน `src/setup/setupSwagger.ts` |
+| `scripts/` | เครื่องมือตรวจหรือดูแลระบบ แยกจากโค้ดที่ server เรียกใช้งาน |
+| `tests/`, `postman/` | Automated tests, load tests และ collection สำหรับตรวจ API; ดูข้อกำหนดฐานข้อมูลของ test ก่อนรัน |
+| `docker/`, `docker-compose.yml` | Configuration และ topology ของ service; Frontend และ external services อยู่คนละ repo |
+| `.docs/`, `AI-INDEX.md` | เริ่มที่ [AI-INDEX.md](AI-INDEX.md) เพื่อเลือก active specs/contracts; architecture เป็นข้อมูลอ้างอิง และ archive เป็นประวัติ |
+
+### เครื่องมือดูแลระบบและ validation กลาง
+
+- `scripts/inspect-db.ts`, `scripts/check_faces.ts`: เครื่องมือตรวจข้อมูล; ตรวจ env และข้อมูลที่จะแสดงก่อนรัน.
+- `scripts/fix-db-statuses.ts`, `scripts/clear-face-data.ts`, `scripts/clear_mock_face_logs.ts`: เปลี่ยนหรือลบข้อมูล ไม่รันเพื่อทดสอบการย้ายไฟล์.
+- `scripts/face-verification-flow.ps1` และ `.sh`: เครื่องมือตรวจ flow; อ่านคำขอที่ส่งและบัญชีทดสอบก่อนใช้งาน.
+- DTO validation อยู่ที่ `src/middlewares/dto-validation.ts` ใช้ร่วมกันใน Billing, Maintenance, Notifications และ Visitor; ดูความคืบหน้าใน [แผนจัดโครงสร้าง](.docs/architecture/03-backend-architecture.md).
+
+### Build, runtime และข้อมูลเฉพาะเครื่อง
+
+| ตำแหน่ง | การจัดการ |
+| --- | --- |
+| `node_modules/`, `dist/`, `*.tsbuildinfo` | Dependencies และผล build/cache สร้างใหม่จาก lockfile และคำสั่ง build; ไม่ commit |
+| `.env`, `cookies.txt` | Configuration ส่วนตัวและข้อมูล authentication; ไม่ commit และไม่ใส่ Docker build context |
+| `uploads/` | ข้อมูลที่ระบบเก็บระหว่างใช้งาน ไม่ใช่ source code และไม่ลบในงานจัดโครงสร้าง |
+| `tmp/`, `temp/`, log files | ไฟล์ชั่วคราวบนเครื่อง; ตรวจผู้ใช้งานก่อนทำความสะอาด |
+| Docker volumes | ข้อมูลฐานข้อมูลและ service แยกจาก Git; ไม่ลบเพียงเพื่อให้โครงสร้าง repo เรียบร้อย |
 
 ## Run Locally
 
 ```bash
-cd backend
-npm install
+# Run from the smart-dormitory-backend repository root.
+npm ci
 npx prisma generate
 npm run dev
 ```

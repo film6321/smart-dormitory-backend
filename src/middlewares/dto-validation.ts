@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../../middlewares/error-handler';
+import { AppError } from './error-handler';
 
 export const validateDto = (schema: Record<string, (value: unknown) => boolean>) => {
   return (req: Request, _res: Response, next: NextFunction) => {

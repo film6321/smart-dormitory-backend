@@ -2,7 +2,7 @@ import { NextFunction, Request, Response, Router } from 'express';
 import multer from 'multer';
 import { AppError } from '../../middlewares/error-handler';
 import { verifyToken, requireRole, optionalVerifyToken } from '../../middlewares/auth-jwt';
-import { validateDto } from '../shared/dto-validation';
+import { validateDto } from '../../middlewares/dto-validation';
 import { VisitorController } from './visitor.controller';
 import {
   registerVisitorSchema,
