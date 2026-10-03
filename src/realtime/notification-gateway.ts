@@ -3,6 +3,7 @@ import type { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../shared/env';
 import { logger } from '../logger';
+import { clearUserOnline, listOnlineUserIds, markUserOnline } from '../shared/presence';
 
 export interface RealtimeNotification {
   id: number;
@@ -13,6 +14,12 @@ export interface RealtimeNotification {
   payload?: string | null;
   status: string;
   createdAt: Date | string;
+}
+
+export interface UserPresencePayload {
+  userId: number;
+  isOnline: boolean;
+  lastSeenAt?: string;
 }
 
 let realtimeServer: Server | undefined;
@@ -59,6 +66,20 @@ export const initializeNotificationGateway = (httpServer: HttpServer, resolveUse
     }
     logger.info({ userId: user.id, role: user.role, rooms: user.role === 'ADMIN' ? ['admins', `user:${user.id}`] : [`user:${user.id}`] }, 'Realtime client connected');
 
+    void (async () => {
+      try {
+        await markUserOnline(user.id);
+        publishUserPresence(user.id, true);
+
+        if (user.role === 'ADMIN') {
+          const onlineIds = await listOnlineUserIds();
+          socket.emit('users:online', onlineIds);
+        }
+      } catch (err) {
+        logger.warn({ error: err, userId: user.id }, 'Failed to mark user online in realtime gateway');
+      }
+    })();
+
     socket.on('joinRoom', async (room: unknown) => {
       if (typeof room !== 'string' || !/^(admins|room:[a-zA-Z0-9-]+)$/.test(room)) {
         return;
@@ -97,8 +118,20 @@ export const initializeNotificationGateway = (httpServer: HttpServer, resolveUse
       }
     });
 
-    socket.on('disconnect', (reason) => {
+    socket.on('requestOnlineUsers', async () => {
+      if (user.role === 'ADMIN') {
+        const onlineIds = await listOnlineUserIds();
+        socket.emit('users:online', onlineIds);
+      }
+    });
+
+    socket.on('disconnect', async (reason) => {
       logger.debug({ userId: user.id, reason }, 'Realtime client disconnected');
+      try {
+        await clearUserPresenceWhenDisconnected(user.id);
+      } catch (err) {
+        logger.warn({ error: err, userId: user.id }, 'Failed to clear user presence on disconnect');
+      }
     });
   });
 
@@ -158,6 +191,32 @@ export const publishAdminAlert = (id: number, type: string, message: string, sta
     payload: JSON.stringify({ message }),
     createdAt: new Date(),
   });
+};
+
+export const publishUserPresence = (userId: number, isOnline: boolean, lastSeenAt?: string) => {
+  if (!realtimeServer) {
+    return;
+  }
+  const payload: UserPresencePayload = {
+    userId,
+    isOnline,
+    lastSeenAt: lastSeenAt ?? new Date().toISOString(),
+  };
+  realtimeServer.to('admins').emit('user:presence', payload);
+};
+
+export const clearUserPresenceWhenDisconnected = async (userId: number): Promise<boolean> => {
+  if (realtimeServer) {
+    const userSockets = await realtimeServer.in(`user:${userId}`).fetchSockets();
+    if (userSockets.length > 0) {
+      return false;
+    }
+  }
+
+  const now = new Date();
+  await clearUserOnline(userId);
+  publishUserPresence(userId, false, now.toISOString());
+  return true;
 };
 
 export const closeNotificationGateway = async () => {

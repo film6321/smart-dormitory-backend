@@ -76,3 +76,28 @@ export const resolveUsersPresence = async (
     }, {});
   }
 };
+
+export const listOnlineUserIds = async (): Promise<number[]> => {
+  try {
+    const redis = getRedisClient();
+    const onlineUserIds: number[] = [];
+    let cursor = '0';
+
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'presence:user:*', 'COUNT', 100);
+      cursor = nextCursor;
+
+      for (const key of keys) {
+        const match = key.match(/^presence:user:(\d+)$/);
+        if (match) {
+          onlineUserIds.push(Number(match[1]));
+        }
+      }
+    } while (cursor !== '0');
+
+    return onlineUserIds;
+  } catch (error) {
+    logger.warn({ error }, 'Failed to list online user IDs from Redis');
+    return [];
+  }
+};
