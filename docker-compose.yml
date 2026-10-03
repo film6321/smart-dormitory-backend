@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: smart-dormitory-db
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespw}
@@ -18,11 +18,12 @@ services:
       retries: 5
 
   pgbouncer:
+    image: smart-dormitory/pgbouncer:dev
     build:
       context: ./docker/pgbouncer
       dockerfile: Dockerfile
     container_name: smart-dormitory-pgbouncer
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRESQL_HOST: db
       POSTGRESQL_PORT: 5432
@@ -48,7 +49,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: smart-dormitory-redis
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${REDIS_HOST_PORT:-6380}:6379"
     volumes:
@@ -61,10 +62,11 @@ services:
       retries: 5
 
   backend:
+    image: smart-dormitory/backend:dev
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - .env
     environment:
@@ -81,7 +83,7 @@ services:
       FACE_API_KEY: ${FACE_API_KEY:-face-recognition-secret-key-change-me-in-production}
       PROMETHEUS_INTERNAL_URL: http://prometheus:9090
     deploy:
-      replicas: 2
+      replicas: ${BACKEND_REPLICAS:-1}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -97,11 +99,12 @@ services:
       - "host.docker.internal:host-gateway"
 
   payment:
+    image: smart-dormitory/payment:dev
     build:
       context: ../paymentProject/Dormitory-PAYMENT
       dockerfile: Dockerfile
     container_name: smart-dormitory-payment
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ../paymentProject/Dormitory-PAYMENT/.env
     environment:
@@ -118,11 +121,12 @@ services:
       start_period: 5s
 
   face-recognition:
+    image: smart-dormitory/face-recognition:dev
     build:
       context: ../Face_Recognition
       dockerfile: Dockerfile
     container_name: smart-dormitory-face-recognition
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "${FACE_RECOGNITION_PORT:-8001}:8000"
     environment:
@@ -140,7 +144,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     container_name: smart-dormitory-nginx
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       - backend
     ports:
@@ -150,9 +154,10 @@ services:
       - ../smart-dormitory-frontend/dist:/usr/share/nginx/html:ro
 
   prometheus:
+    profiles: ["monitoring"]
     image: prom/prometheus:latest
     container_name: smart-dormitory-prometheus
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       - backend
     ports:
@@ -162,9 +167,10 @@ services:
       - prometheusdata:/prometheus
 
   grafana:
+    profiles: ["monitoring"]
     image: grafana/grafana:latest
     container_name: smart-dormitory-grafana
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       - prometheus
     environment:
@@ -180,9 +186,10 @@ services:
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
   ngrok:
+    profiles: ["tunnel"]
     image: ngrok/ngrok:latest
     container_name: smart-dormitory-ngrok
-    restart: unless-stopped
+    restart: "no"
     command: http --url=${NGROK_DOMAIN} nginx:80
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
