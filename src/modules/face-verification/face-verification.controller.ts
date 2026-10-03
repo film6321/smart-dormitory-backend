@@ -63,72 +63,25 @@ export class FaceVerificationController {
       const deviceCode = (typeof req.body?.device_code === 'string' && req.body.device_code.trim()) || 'MAIN_GATE_01';
       const direction = (typeof req.body?.direction === 'string' && req.body.direction.toUpperCase() === 'OUT') ? 'OUT' : 'IN';
       let studentName = data.message || 'ผู้พักอาศัย';
-      let roomName = 'หอพัก';
       let cooldownActive = false;
 
       if (data.matched && data.user_id) {
-        try {
-          const user = await prisma.user.findUnique({
-            where: { id: data.user_id },
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              tenant: { select: { fullName: true, room: { select: { roomNumber: true } } } },
-            },
-          });
-
-          if (user) {
-            studentName = user.tenant?.fullName || user.username || user.email || `Resident #${user.id}`;
-            roomName = user.tenant?.room?.roomNumber ? `ห้อง ${user.tenant.room.roomNumber}` : 'หอพัก';
-          }
-
-          // Check Cooldown Lock to prevent duplicate scans within 5 seconds
-          const lockKey = `lock:face-cooldown:user:${data.user_id}:${deviceCode}`;
-          const isFirstScan = await FaceVerificationService.acquireCooldownLock(lockKey, 5000);
-
-          if (isFirstScan) {
-            const scannedAt = new Date().toISOString();
-
-            // Save to AccessLog in Database (Only once per cooldown window)
-            await prisma.accessLog.create({
-              data: {
-                userId: data.user_id,
-                method: 'FACE_GATE',
-                path: direction,
-                ip: deviceCode,
-                duration: Math.round((data.similarity ?? 1.0) * 100),
-              },
-            });
-
-            // Broadcast to monitoring bus (SSE)
-            faceVerificationMonitoringBus.recordScan({
-              id: `scan-${data.user_id}-${Date.now()}`,
-              student_code: `user_${data.user_id}`,
-              direction,
-              confidence: data.similarity ?? 1.0,
-              scanned_at: scannedAt,
-              device_code: deviceCode,
-              action: direction === 'IN' ? 'checkin' : 'checkout',
-              student: {
-                code: `user_${data.user_id}`,
-                name: studentName,
-                room: roomName,
-              },
-            });
-          } else {
-            cooldownActive = true;
-            logger.info({ userId: data.user_id, deviceCode }, 'Face scan in cooldown window, suppressed duplicate access log');
-          }
-        } catch (busErr) {
-          logger.warn({ busErr, userId: data.user_id }, 'Failed to process face verification access log or monitoring');
-        }
+        const studentCode = data.user_id > 1000000 ? `visitor_${data.user_id - 1000000}` : `user_${data.user_id}`;
+        const scan = await FaceVerificationService.recordScan(studentCode, direction, data.similarity,
+          new Date().toISOString(), deviceCode);
+        studentName = scan.student.name;
+        cooldownActive = scan.cooldown_active;
+        if (!cooldownActive && scan.id && scan.scanned_at) faceVerificationMonitoringBus.recordScan({
+          id: scan.id, student_code: studentCode, direction,
+          confidence: data.similarity, scanned_at: scan.scanned_at, device_code: deviceCode,
+          action: scan.action, student: scan.student,
+        });
       }
 
       const responsePayload = {
         ...data,
         student_name: studentName,
-        action: direction === 'IN' ? 'checkin' : 'checkout',
+        action: data.matched ? (direction === 'IN' ? 'checkin' : 'checkout') : 'denied',
         device_code: deviceCode,
         cooldown_active: cooldownActive,
       };
@@ -272,13 +225,13 @@ export class FaceVerificationController {
         snapshot_base64
       );
 
-      if (!result.cooldown_active) {
+      if (!result.cooldown_active && result.id && result.scanned_at) {
         faceVerificationMonitoringBus.recordScan({
-          id: `${student_code}-${scanned_at}`,
+          id: result.id,
           student_code,
           direction,
           confidence: confidence !== undefined ? Number(confidence) : 1.0,
-          scanned_at,
+          scanned_at: result.scanned_at,
           device_code,
           action: result.action,
           student: result.student,

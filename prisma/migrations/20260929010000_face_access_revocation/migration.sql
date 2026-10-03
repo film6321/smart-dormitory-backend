@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "faceRevokedAt" TIMESTAMP(3);
+ALTER TABLE "Visitor" ADD COLUMN "faceRevokedAt" TIMESTAMP(3);

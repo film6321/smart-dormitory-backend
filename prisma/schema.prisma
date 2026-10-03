@@ -48,6 +48,7 @@ enum PaymentBatchStatus {
  * ---------- Existing User Model ----------
  */
 model User {
+  faceRevokedAt DateTime?
   id        Int       @id @default(autoincrement())
   username  String?   @unique
   email     String    @unique
@@ -408,6 +409,7 @@ model MaintenanceTicket {
 }
 
 model Visitor {
+  faceRevokedAt DateTime?
   id                Int           @id @default(autoincrement())
   tenantId          Int?
   tenant            Tenant?       @relation(fields: [tenantId], references: [id])

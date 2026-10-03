@@ -42,7 +42,6 @@ export class FaceVerificationService {
   public static readonly DEFAULT_SIMILARITY_THRESHOLD = 0.68;
   private static readonly DEFAULT_DETECTION_INTERVAL = 4;
   private static readonly inMemoryCooldowns = new Map<string, number>();
-
   private static shouldUseRedis(): boolean {
     return (
       process.env.NODE_ENV !== 'test' &&
@@ -117,23 +116,17 @@ export class FaceVerificationService {
   ): Promise<FaceRegisterResponse['data']> {
     logger.info({ userId, fileName }, 'Registering face photo, saving pending file to disk');
 
-    // 1. Determine if it is a User or a Visitor
-    const userExists = await db.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-    let visitorId: number | null = null;
-    let actualUserId: number | null = userId;
-
-    if (!userExists) {
-      const visitorExists = await db.visitor.findUnique({ where: { id: userId } });
-      if (visitorExists) {
-        visitorId = userId;
-        actualUserId = null;
-      } else {
-        throw new AppError('User or Visitor not found for the provided ID', 404);
-      }
+    // Use the same explicit visitor namespace as the Edge enrollment contract.
+    if (!Number.isSafeInteger(userId) || userId <= 0 || userId === 1000000) {
+      throw new AppError('Invalid face owner ID', 400);
     }
+    const visitorId = userId > 1000000 ? userId - 1000000 : null;
+    const actualUserId = visitorId === null ? userId : null;
+    const owner = visitorId !== null
+      ? await db.visitor.findUnique({ where: { id: visitorId } })
+      : await db.user.findUnique({ where: { id: userId } });
+    if (!owner) throw new AppError('Face owner not found', 404);
+    if (owner.faceRevokedAt) throw new AppError('Face access is revoked; administrator review is required', 403);
 
     // 2. Save physical image to disk under uploads/face-photo/
     try {
@@ -190,7 +183,7 @@ export class FaceVerificationService {
     }
 
     try {
-      if (typeof fetch !== 'function') return;
+      if (typeof fetch !== 'function') throw new AppError('Face service unavailable', 503);
 
       const fileArrayBuffer = fileBuffer.buffer.slice(
         fileBuffer.byteOffset,
@@ -214,10 +207,11 @@ export class FaceVerificationService {
         logger.info({ userId, endpoint }, 'Successfully forwarded face registration to Python API');
       } else {
         await response.arrayBuffer();
-        logger.warn({ userId, status: response.status }, 'External Face API register returned non-200');
+        throw new AppError('Face enrollment was not accepted; access is not granted', 502);
       }
     } catch (error) {
-      logger.warn({ userId, error }, 'Failed to forward face registration to external Face API (will proceed with local disk copy)');
+      logger.warn({ userId, error }, 'Face enrollment remains incomplete');
+      throw new AppError('Face enrollment incomplete; retry after the face service is available', 502);
     }
   }
 
@@ -305,33 +299,22 @@ export class FaceVerificationService {
         throw new AppError('Face recognition service returned invalid JSON', 502);
       }
 
-      const rawMatched = Boolean(result.matched);
+      const rawMatched = result.matched === true;
       const similarity = Number(result.similarity ?? 0);
 
       // Strict Threshold Guardrail:
       // Even if external API returns matched, ensure similarity meets the effective threshold to prevent false positives
-      const matched = rawMatched && similarity >= effectiveThreshold;
+      const matched = rawMatched && Number.isFinite(similarity) && similarity <= 1 && similarity >= effectiveThreshold
+        && Number.isSafeInteger(result.user_id) && result.user_id > 0 && result.user_id !== 1000000;
       const matchedUserId = matched && result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
       let userName = matched ? result.message : undefined;
 
-      // If matched, lookup real user name from DB
       if (matched && matchedUserId) {
-        try {
-          const user = await db.user.findUnique({
-            where: { id: matchedUserId },
-            select: { id: true, username: true, email: true },
-          });
-          if (user) {
-            userName = user.username || user.email || `User #${user.id}`;
-          } else {
-            const visitor = await db.visitor.findUnique({ where: { id: matchedUserId } });
-            if (visitor) {
-              userName = visitor.guestName || `Visitor #${visitor.id}`;
-            }
-          }
-        } catch {
-          // ignore db lookup failure
-        }
+        const owner = matchedUserId > 1000000
+          ? await db.visitor.findUnique({ where: { id: matchedUserId - 1000000 } })
+          : await db.user.findUnique({ where: { id: matchedUserId } });
+        if (!owner || owner.faceRevokedAt) return this.createMockFaceVerificationResult(fileBuffer, fileName, effectiveThreshold);
+        userName = 'guestName' in owner ? owner.guestName : owner.username || owner.email;
       }
 
       return {
@@ -370,59 +353,68 @@ export class FaceVerificationService {
    * Retrieves face embedding details.
    */
   static async getFaceTemplate(templateId: number): Promise<FaceTemplateResponse> {
-    const embedding = await db.faceEmbedding.findUnique({
-      where: { id: templateId },
-    });
-
-    if (!embedding) {
-      throw new AppError('Template not found', 404);
-    }
-
-    const userId = embedding.userId || embedding.visitorId || 0;
-
+    const photo = await db.faceEnrollmentPhoto.findUnique({ where: { id: templateId } });
+    if (!photo) throw new AppError('Enrollment photo not found', 404);
     return {
-      id: embedding.id,
-      user_id: userId,
-      model_name: embedding.modelVersion,
-      embedding_version: 'v1',
-      created_at: embedding.createdAt.toISOString(),
-      updated_at: embedding.updatedAt.toISOString(),
+      id: photo.id,
+      user_id: photo.userId ?? (photo.visitorId! + 1000000),
+      model_name: 'buffalo_l', embedding_version: 'v1',
+      created_at: photo.createdAt.toISOString(), updated_at: photo.createdAt.toISOString(),
     };
   }
 
-  /**
-   * Updates face photo for enrollment.
-   */
   static async updateFaceTemplate(
-    templateId: number,
-    fileBuffer: Buffer,
-    mimeType: string,
-    fileName: string
+    templateId: number, fileBuffer: Buffer, mimeType: string, fileName: string
   ): Promise<FaceRegisterResponse['data']> {
-    const existing = await db.faceEmbedding.findUnique({
-      where: { id: templateId },
-    });
-
-    if (!existing) {
-      throw new AppError('Template not found', 404);
-    }
-
-    const userId = existing.userId || existing.visitorId || 0;
+    const existing = await db.faceEnrollmentPhoto.findUnique({ where: { id: templateId } });
+    if (!existing) throw new AppError('Enrollment photo not found', 404);
+    const userId = existing.userId ?? (existing.visitorId! + 1000000);
     return this.registerFace(userId, fileBuffer, mimeType, fileName);
   }
 
-  /**
-   * Deletes face template.
-   */
   static async deleteFaceTemplate(templateId: number): Promise<FaceDeleteResponse> {
-    try {
-      await db.faceEmbedding.delete({
-        where: { id: templateId },
-      });
-      return { success: true, message: 'Face template deleted successfully' };
-    } catch {
-      throw new AppError('Face template not found', 404);
+    const photo = await db.faceEnrollmentPhoto.findUnique({ where: { id: templateId } });
+    if (!photo) throw new AppError('Enrollment photo not found', 404);
+    if ((photo.userId === null) === (photo.visitorId === null)) throw new AppError('Ambiguous face owner', 409);
+    const where = photo.userId !== null ? { userId: photo.userId } : { visitorId: photo.visitorId! };
+    // Persist denial first. Failures below remain retryable and must never restore access.
+    if (photo.userId !== null) {
+      await db.user.update({ where: { id: photo.userId }, data: { faceRevokedAt: new Date() } });
+    } else {
+      await db.visitor.update({ where: { id: photo.visitorId! }, data: { faceRevokedAt: new Date() } });
     }
+    const ownerId = photo.userId ?? (photo.visitorId! + 1000000);
+    const endpoint = this.normalizeFaceApiUrl().replace(/\/verify$/, `/owners/${ownerId}`);
+    const apiKey = process.env.FACE_API_KEY?.trim();
+    if (!apiKey) throw new AppError('Face access revoked; external deletion is pending configuration', 503);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'DELETE', headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) throw new Error('External deletion failed');
+      const result = await response.json();
+      if (result.success !== true) throw new Error('External deletion not confirmed');
+    } catch {
+      throw new AppError('Face access revoked; external deletion incomplete, please retry', 502);
+    }
+    const photos = await db.faceEnrollmentPhoto.findMany({ where });
+    for (const item of photos) {
+      const fullPath = path.resolve(process.cwd(), item.photoPath);
+      const relative = path.relative(UPLOAD_DIR, fullPath);
+      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new AppError('Face access revoked; invalid photo path requires administrator review', 409);
+      }
+      try { await fs.unlink(fullPath); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw new AppError('Face access revoked; file deletion incomplete, please retry', 503);
+        }
+      }
+    }
+    await db.$transaction(async (tx) => {
+      await tx.faceEmbedding.deleteMany({ where });
+      await tx.faceEnrollmentPhoto.deleteMany({ where });
+    });
+    return { success: true, message: 'Face access revoked and all enrollment data deleted' };
   }
 
   // ── C# Edge integrations ──
@@ -431,7 +423,7 @@ export class FaceVerificationService {
    * Sync active face embeddings (since optional date)
    */
   static async getEmbeddings(since?: string) {
-    const whereClause: Prisma.FaceEmbeddingWhereInput = {};
+    const whereClause: Prisma.FaceEmbeddingWhereInput = { OR: [{ user: { faceRevokedAt: null } }, { visitor: { faceRevokedAt: null } }] };
     if (since) {
       const parsedDate = new Date(since);
       if (!Number.isNaN(parsedDate.getTime())) {
@@ -486,6 +478,7 @@ export class FaceVerificationService {
         OR: [
           {
             user: {
+              faceRevokedAt: null,
               faceEmbeddings: {
                 none: {},
               },
@@ -493,6 +486,7 @@ export class FaceVerificationService {
           },
           {
             visitor: {
+              faceRevokedAt: null,
               faceEmbeddings: {
                 none: {},
               },
@@ -571,15 +565,17 @@ export class FaceVerificationService {
       if (!visitorExists) {
         throw new AppError('Visitor not found', 404);
       }
+      if (visitorExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
     } else {
       userId = studentId;
       const userExists = await db.user.findUnique({
         where: { id: userId },
-        select: { id: true },
+        select: { id: true, faceRevokedAt: true },
       });
       if (!userExists) {
         throw new AppError('User not found', 404);
       }
+      if (userExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
     }
 
     let storedCount = 0;
@@ -614,100 +610,51 @@ export class FaceVerificationService {
     deviceCode?: string,
     _snapshotBase64?: string
   ) {
-    logger.info({ studentCode, direction, deviceCode }, 'Face scan event received from FaceGate.Edge');
-
-    const timestamp = new Date(scannedAt);
-    const normalizedDevice = deviceCode || 'EDGE_DEVICE';
-    const lockKey = `lock:face-cooldown:edge:${studentCode}:${normalizedDevice}`;
-    const isFirstScan = await this.acquireCooldownLock(lockKey, 5000);
-
-    if (studentCode.startsWith('user_')) {
-      const userId = Number(studentCode.replace('user_', ''));
-      const user = await db.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          tenant: { select: { fullName: true } },
-        },
-      });
-      if (!user) {
-        throw new AppError('User not found', 404);
+    if (!/^(user|visitor)_[1-9][0-9]*$/.test(studentCode) || !['IN', 'OUT'].includes(direction)
+      || !Number.isFinite(confidence) || confidence < this.DEFAULT_SIMILARITY_THRESHOLD || confidence > 1
+      || !Number.isFinite(Date.parse(scannedAt))) throw new AppError('Invalid face scan', 400);
+    const visitorScan = studentCode.startsWith('visitor_');
+    const id = Number(studentCode.split('_')[1]);
+    return db.$transaction(async (tx) => {
+      // Serialize access decisions against revocation and status changes.
+      if (visitorScan) await tx.$queryRaw`SELECT id FROM "Visitor" WHERE id = ${id} FOR UPDATE`;
+      else await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`;
+      const now = new Date();
+      const normalizedDevice = deviceCode || 'EDGE_DEVICE';
+      if (visitorScan) {
+        const visitor = await tx.visitor.findUnique({ where: { id } });
+        if (!visitor || visitor.faceRevokedAt || visitor.cancelledAt) throw new AppError('Visitor face access denied', 403);
+        const allowed = direction === 'IN'
+          ? visitor.status === 'APPROVED' && visitor.expiresAt !== null && visitor.expiresAt > now
+            && (!visitor.expectedEntryTime || visitor.expectedEntryTime <= now)
+          : visitor.status === 'CHECKED_IN';
+        if (!allowed) throw new AppError('Visitor is not approved, has expired, or cannot make this transition', 403);
+        const isFirst = await this.acquireCooldownLock(`lock:face-cooldown:visitor:${id}`, 5000);
+        if (!isFirst) throw new AppError('Scan already being processed', 409);
+        await tx.visitor.update({ where: { id }, data: {
+          status: direction === 'IN' ? 'CHECKED_IN' : 'CHECKED_OUT',
+          ...(direction === 'IN' ? { checkedInAt: now } : { checkedOutAt: now }),
+        } });
+        const log = await tx.visitorLog.create({ data: { visitorId: id, eventType: direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
+          note: `Scanned on device: ${normalizedDevice} (confidence: ${confidence})`, createdAt: now } });
+        return { status: 'ok', id: `visitor-db-${log.id}`, scanned_at: log.createdAt.toISOString(),
+          action: direction === 'IN' ? 'checkin' : 'checkout', cooldown_active: false,
+          student: { code: studentCode, name: visitor.guestName, room: 'Visitor' } };
       }
-
-      // Record in AccessLog only once per cooldown window
-      if (isFirstScan) {
-        await db.accessLog.create({
-          data: {
-            userId: user.id,
-            method: 'FACE_GATE',
-            path: direction,
-            ip: normalizedDevice,
-            duration: Math.round(confidence * 100),
-            createdAt: timestamp,
-          },
-        });
-      }
-
-      const studentName =
-        user.tenant?.fullName ||
-        user.username ||
-        user.email ||
-        'Resident';
-
-      return {
-        status: 'ok',
-        action: direction === 'IN' ? 'checkin' : 'checkout',
-        cooldown_active: !isFirstScan,
-        student: {
-          code: studentCode,
-          name: studentName,
-          room: 'Resident',
-        },
-      };
-    } else if (studentCode.startsWith('visitor_')) {
-      const visitorId = Number(studentCode.replace('visitor_', ''));
-      const visitor = await db.visitor.findUnique({ where: { id: visitorId } });
-      if (!visitor) {
-        throw new AppError('Visitor not found', 404);
-      }
-
-      // Update visitor status and log only once per cooldown window
-      if (isFirstScan) {
-        const nextStatus = direction === 'IN' ? 'CHECKED_IN' : 'CHECKED_OUT';
-        await db.visitor.update({
-          where: { id: visitor.id },
-          data: {
-            status: nextStatus,
-            checkedInAt: direction === 'IN' ? timestamp : visitor.checkedInAt,
-            checkedOutAt: direction === 'OUT' ? timestamp : visitor.checkedOutAt,
-          },
-        });
-
-        // Write VisitorLog
-        await db.visitorLog.create({
-          data: {
-            visitorId: visitor.id,
-            eventType: direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
-            note: `Scanned on device: ${normalizedDevice} (confidence: ${confidence})`,
-            createdAt: timestamp,
-          },
-        });
-      }
-
-      return {
-        status: 'ok',
-        action: direction === 'IN' ? 'checkin' : 'checkout',
-        cooldown_active: !isFirstScan,
-        student: {
-          code: studentCode,
-          name: visitor.guestName,
-          room: 'Visitor',
-        },
-      };
-    } else {
-      throw new AppError(`Invalid student_code format: ${studentCode}`, 400);
-    }
+      await tx.$queryRaw`SELECT id FROM "Tenant" WHERE "userId" = ${id} FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id }, include: { tenant: { include: { room: true } } } });
+      if (!user || user.faceRevokedAt) throw new AppError('Face access denied', 403);
+      const tenant = user.tenant;
+      if (user.role !== 'ADMIN' && (!tenant || !tenant.isActive || !['APPROVED', 'ACTIVE'].includes(tenant.status)
+        || !tenant.roomId || (tenant.checkInDate && tenant.checkInDate > now)
+        || (tenant.checkOutDate && tenant.checkOutDate <= now))) throw new AppError('Resident has no active room access', 403);
+      const isFirst = await this.acquireCooldownLock(`lock:face-cooldown:user:${id}:${normalizedDevice}`, 5000);
+      const log = isFirst ? await tx.accessLog.create({ data: { userId: id, method: 'FACE_GATE', path: direction,
+        ip: normalizedDevice, duration: Math.round(confidence * 100), createdAt: now } }) : null;
+      return { status: 'ok', id: log ? `db-${log.id}` : null, scanned_at: log?.createdAt.toISOString() ?? null,
+        action: direction === 'IN' ? 'checkin' : 'checkout', cooldown_active: !isFirst,
+        student: { code: studentCode, name: tenant?.fullName || user.username || user.email,
+          room: tenant?.room?.roomNumber || 'Resident' } };
+    });
   }
 }

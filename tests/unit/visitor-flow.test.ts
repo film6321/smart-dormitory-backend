@@ -72,6 +72,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     const originalTx = prisma.$transaction;
     const now = new Date();
     const mockVisitor: VisitorWithRelations = {
+      faceRevokedAt: null,
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -158,6 +159,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     const futureExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
     const mockRecord: VisitorWithRelations = {
+      faceRevokedAt: null,
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -206,6 +208,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     const now = new Date();
 
     const mockCheckedIn: VisitorWithRelations = {
+      faceRevokedAt: null,
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -254,6 +257,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     const now = new Date();
 
     const mockExpired: VisitorWithRelations = {
+      faceRevokedAt: null,
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: null,
@@ -303,6 +307,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     const now = new Date();
 
     const mockRecord: VisitorWithRelations = {
+      faceRevokedAt: null,
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: null,

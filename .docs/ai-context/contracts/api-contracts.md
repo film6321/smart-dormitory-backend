@@ -103,3 +103,16 @@ Regression suite (disposable PostgreSQL only): set DATABASE_URL to a database na
 `node --test -r ts-node/register tests/integration/delete-guards.test.ts`
 with TS_NODE_PROJECT=tsconfig.test.json. This suite inserts test records and must not
 run against production.
+
+### Face enrollment removal and access checks (2026-09-29)
+
+- Face management IDs refer to `FaceEnrollmentPhoto.id`, the ID returned by registration.
+- Registration accepts a User ID below 1,000,000 or an explicit Visitor ID + 1,000,000, matching Edge enrollment. It never guesses Visitor from a missing User.
+- DELETE `/api/face-verification/:templateId` revokes face access for the photo owner, removes all their Python templates/cache via authenticated DELETE `/api/v1/faces/owners/:ownerId`, then removes their enrollment files and PostgreSQL photos/vectors. This is owner-wide removal, not removal of a single angle.
+- `faceRevokedAt` persists before cleanup. A cleanup failure returns 502/503 (409 for invalid stored paths); it retains metadata for retry and does not restore access. Missing files are treated as already removed. Re-enrollment of a revoked owner requires administrator review; no automatic reset is provided.
+- Python owner deletion is idempotent. No historical files without database references are deleted by this flow.
+- Both browser verification and Edge attendance use the same access decision. Residents need an active APPROVED/ACTIVE tenancy, an assigned room, and valid dates; ADMIN accounts retain their administrative access policy.
+- The face-camera visitor IN/OUT state checks described here are legacy biometric access behavior, separate from the current reception flow. The current reception flow remains REGISTERED after the Admin opens a door; successful access must be tracked as an access event and must not set CHECKED_IN. Revoked biometric access is always denied.
+- Access decisions use server time and PostgreSQL row locks. Legacy face-camera status and log writes are saved in one transaction. Failed decisions never return a successful check-in action.
+- Apply migration `20260929010000_face_access_revocation` and deploy both backend and Python before using these contracts. A camera must wait for the backend decision; offline door-control behavior is outside these API guarantees.
+- Existing photo-update behavior still creates another enrollment; replacing Python templates in place and reconciling legacy ambiguous identities remain separate work.

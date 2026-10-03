@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
+import { readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { FaceVerificationService } from '../../src/modules/face-verification/face-verification.service';
 import { prisma } from '../../src/database/db';
@@ -8,6 +9,27 @@ import { Prisma } from '@prisma/client';
 import { faceVerificationMonitoringBus } from '../../src/modules/face-verification/face-verification-monitoring';
 
 describe('FaceVerificationService (unit)', () => {
+  const restorers: Array<() => void> = [];
+  function stub<T extends object, K extends keyof T>(target: T, key: K, implementation: unknown) {
+    const original = target[key];
+    const replacement = mock.fn(implementation as (...args: unknown[]) => unknown);
+    Reflect.set(target, key, replacement);
+    restorers.push(() => { Reflect.set(target, key, original); });
+    return replacement;
+  }
+  beforeEach(() => {
+    stub(prisma, '$transaction', async (callback: (tx: typeof prisma) => unknown) => callback(prisma));
+    stub(prisma, '$queryRaw', async () => []);
+    stub(prisma.user, 'update', async () => ({}));
+    stub(prisma.faceEnrollmentPhoto, 'findUnique', async () => ({
+      id: 12, userId: 99, visitorId: null, photoPath: 'uploads/face-photo/test.jpg', createdAt: new Date(),
+    }));
+    stub(prisma.faceEnrollmentPhoto, 'findMany', async () => []);
+    stub(prisma.faceEnrollmentPhoto, 'deleteMany', async () => ({ count: 1 }));
+    stub(prisma.faceEmbedding, 'deleteMany', async () => ({ count: 1 }));
+    stub(globalThis, 'fetch', async () => new Response(JSON.stringify({ success: true }), { status: 200 }));
+  });
+  afterEach(() => { while (restorers.length) restorers.pop()!(); mock.restoreAll(); });
   // Save originals to restore
   const originalUserFindUnique = prisma.user.findUnique.bind(prisma);
   const originalVisitorFindUnique = prisma.visitor.findUnique.bind(prisma);
@@ -310,7 +332,7 @@ describe('FaceVerificationService (unit)', () => {
           version: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
-          tenant: { fullName: 'John Doe' },
+          tenant: { fullName: 'John Doe', isActive: true, status: 'ACTIVE', roomId: 1 },
         };
       }
       return null;
@@ -352,7 +374,7 @@ describe('FaceVerificationService (unit)', () => {
           idCardImagePath: null,
           purpose: null,
           expectedEntryTime: null,
-          status: 'REGISTERED',
+          status: 'CHECKED_IN',
           pdpaConsent: true,
           pdpaConsentAt: new Date(),
           expiresAt: null,
@@ -420,6 +442,8 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(userScan.status, 'ok');
       assert.equal(userScan.action, 'checkin');
       assert.equal(userScan.cooldown_active, false);
+      assert.equal(userScan.id, 'db-1');
+      assert.ok(userScan.scanned_at && Number.isFinite(Date.parse(userScan.scanned_at)));
       assert.equal(userScan.student.name, 'John Doe');
       assert.equal(accessLogs.length, 1);
       // recordScan uses flat userId field
@@ -437,6 +461,7 @@ describe('FaceVerificationService (unit)', () => {
       );
       assert.equal(duplicateUserScan.status, 'ok');
       assert.equal(duplicateUserScan.cooldown_active, true);
+      assert.equal(duplicateUserScan.id, null);
       assert.equal(accessLogs.length, 1);
 
       const visitorScan = await FaceVerificationService.recordScan(
@@ -449,6 +474,7 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(visitorScan.status, 'ok');
       assert.equal(visitorScan.action, 'checkout');
       assert.equal(visitorScan.cooldown_active, false);
+      assert.equal(visitorScan.id, 'visitor-db-1');
       assert.equal(visitorScan.student.name, 'Jane Smith');
       assert.equal(visitorUpdates.length, 1);
       assert.equal(visitorUpdates[0]?.data.status, 'CHECKED_OUT');
@@ -459,14 +485,9 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(visitorLogs[0]?.eventType, 'CHECK_OUT');
 
       // Duplicate visitor scan in cooldown
-      const duplicateVisitorScan = await FaceVerificationService.recordScan(
-        'visitor_5',
-        'OUT',
-        0.84,
-        new Date().toISOString(),
-        'CAMERA_02'
-      );
-      assert.equal(duplicateVisitorScan.cooldown_active, true);
+      await assert.rejects(FaceVerificationService.recordScan(
+        'visitor_5', 'OUT', 0.84, new Date().toISOString(), 'CAMERA_02'
+      ), /Scan already being processed/);
       assert.equal(visitorLogs.length, 1);
     } finally {
       FaceVerificationService.clearCooldowns();
@@ -522,6 +543,63 @@ describe('FaceVerificationService (unit)', () => {
       globalThis.fetch = originalFetch;
       restorePrisma();
     }
+  });
+
+  it('revokes first and retains cleanup records if Python deletion fails', async () => {
+    let revoked = false;
+    let removed = false;
+    stub(prisma.user, 'update', async () => { revoked = true; return {}; });
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, faceRevokedAt: revoked ? new Date() : null }));
+    stub(prisma.faceEnrollmentPhoto, 'deleteMany', async () => { removed = true; return { count: 1 }; });
+    stub(globalThis, 'fetch', async () => new Response('{}', { status: 503 }));
+    await assert.rejects(FaceVerificationService.deleteFaceTemplate(12), /external deletion incomplete/);
+    assert.equal(revoked, true);
+    assert.equal(removed, false);
+    await assert.rejects(FaceVerificationService.recordScan('user_99', 'IN', 0.99, new Date().toISOString()), /access denied/);
+  });
+
+  it('deletes physical enrollment files and both local tables after Python confirms', async () => {
+    const file = path.join('uploads', 'face-photo', `deletion-test-${randomUUID()}.jpg`);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'synthetic test data');
+    const actions: string[] = [];
+    stub(prisma.user, 'update', async () => { actions.push('revoke'); return {}; });
+    stub(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+      assert.ok(String(url).endsWith('/faces/owners/99'));
+      assert.equal(options.method, 'DELETE');
+      actions.push('python');
+      return new Response(JSON.stringify({ success: true }));
+    });
+    stub(prisma.faceEnrollmentPhoto, 'findMany', async () => [{ photoPath: file }]);
+    stub(prisma.faceEmbedding, 'deleteMany', async () => { actions.push('vectors'); return { count: 1 }; });
+    stub(prisma.faceEnrollmentPhoto, 'deleteMany', async () => {
+      assert.equal(existsSync(file), false); actions.push('photos'); return { count: 1 };
+    });
+    try {
+      assert.equal((await FaceVerificationService.deleteFaceTemplate(12)).success, true);
+      assert.deepEqual(actions, ['revoke', 'python', 'vectors', 'photos']);
+    } finally { rmSync(file, { force: true }); }
+  });
+
+  it('denies inactive residents and expired, cancelled, unapproved or revoked visitors', async () => {
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, role: 'STUDENT', tenant: { isActive: false } }));
+    await assert.rejects(FaceVerificationService.recordScan('user_99', 'IN', 0.99, new Date().toISOString()), /no active room access/);
+    for (const override of [
+      { status: 'REGISTERED' }, { status: 'CANCELLED' }, { status: 'REJECTED' },
+      { status: 'CHECKED_OUT' }, { expiresAt: new Date(0) }, { expiresAt: null },
+      { faceRevokedAt: new Date() }, { expectedEntryTime: new Date(Date.now() + 60000) },
+    ]) {
+      stub(prisma.visitor, 'findUnique', async () => ({ id: 5, status: 'APPROVED',
+        expiresAt: new Date(Date.now() + 60000), ...override }));
+      await assert.rejects(FaceVerificationService.recordScan('visitor_5', 'IN', 0.99, new Date(0).toISOString()));
+    }
+  });
+
+  it('does not treat an unencoded missing user as a visitor with the same ID', async () => {
+    stub(prisma.user, 'findUnique', async () => null);
+    const visitorLookup = stub(prisma.visitor, 'findUnique', async () => ({ id: 99 }));
+    await assert.rejects(FaceVerificationService.registerFace(99, Buffer.from('test'), 'image/jpeg', 'test.jpg'), /owner not found/);
+    assert.equal(visitorLookup.mock.callCount(), 0);
   });
 
   it('clears scan history from monitoring bus', () => {
