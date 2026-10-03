@@ -1,5 +1,10 @@
 node_modules/
 
+# Generated build output and local authentication artifacts
+dist/
+*.tsbuildinfo
+cookies.txt
+
 # Dependencies
 npm.lockb
 package-lock.json

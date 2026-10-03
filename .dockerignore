@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+cookies.txt
+*.tsbuildinfo
+*.log
+coverage
+.codex-build-observability
+.agents
+.docs
+tests
+tmp
