@@ -48,16 +48,22 @@ enum PaymentBatchStatus {
  * ---------- Existing User Model ----------
  */
 model User {
-  faceRevokedAt DateTime?
-  id        Int       @id @default(autoincrement())
-  username  String?   @unique
-  email     String    @unique
-  password  String
-  role      Role      @default(STUDENT)
-  lastLogin DateTime?
-  version   Int       @default(1) // Optimistic Concurrency Control (OCC)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  faceRevokedAt               DateTime?
+  id                          Int       @id @default(autoincrement())
+  username                    String?   @unique
+  email                       String    @unique
+  phone                       String?   @unique
+  password                    String
+  passwordResetOtpHash        String?   @unique
+  passwordResetOtpExpiresAt   DateTime?
+  passwordResetOtpAttempts    Int       @default(0)
+  passwordResetGrantHash      String?   @unique
+  passwordResetGrantExpiresAt DateTime?
+  role                        Role      @default(STUDENT)
+  lastLogin                   DateTime?
+  version                     Int       @default(1) // Optimistic Concurrency Control (OCC)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   // Relations
   accessLogs           AccessLog[]
@@ -409,7 +415,7 @@ model MaintenanceTicket {
 }
 
 model Visitor {
-  faceRevokedAt DateTime?
+  faceRevokedAt     DateTime?
   id                Int           @id @default(autoincrement())
   tenantId          Int?
   tenant            Tenant?       @relation(fields: [tenantId], references: [id])

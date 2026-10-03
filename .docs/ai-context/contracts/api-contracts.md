@@ -37,7 +37,20 @@ REST endpoints return the shared `ApiResponse<T>` envelope unless they intention
 
 ## Authentication
 
-`POST /api/auth/login` accepts an email and password. On success the server returns a token and a user summary containing `id`, `email`, optional `username`, `role`, `lastLogin`, and `isOnline`; it also sets the HttpOnly `access_token` cookie. The current `User` schema has no `firstName` or `lastName` fields.
+`POST /api/auth/login` accepts an email and password. On success the server returns a token and a user summary containing `id`, `email`, optional `username`, `role`, `lastLogin`, and `isOnline`; it also sets the HttpOnly `access_token` cookie. Public `POST /api/auth/register` requires `email`, a Thai mobile `phone`, and `password`; `username` is optional and role remains assigned by the server. The current `User` schema has no `firstName` or `lastName` fields.
+
+Password recovery uses `POST /api/auth/forgot-password` with `{ "phone" }`,
+`POST /api/auth/verify-reset-otp` with `{ "phone", "otp" }`, and
+`POST /api/auth/reset-password` with `{ "phone", "token", "password" }`.
+The account recovery phone is stored uniquely on `User.phone`; legacy accounts
+without it may still use the phone on their linked Tenant. The OTP is six digits, expires after five minutes, and allows at most five
+verification attempts. It is stored as an HMAC-SHA256 digest and becomes a
+one-time, ten-minute reset grant after verification. The grant is consumed
+atomically with the password update. Phone lookup uses the linked Tenant phone
+and accepts a unique matching account only. The current Mock SMS provider returns
+the OTP in the no-store response only when `PASSWORD_RESET_SMS_MODE=mock` and
+the runtime is not staging/production; it does not send a real SMS. The default
+mode is disabled. Do not enable Mock mode in a deployed environment.
 
 ## Monitor scan history
 

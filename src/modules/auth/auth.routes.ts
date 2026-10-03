@@ -1,20 +1,58 @@
-import { Response, Router } from 'express';
+import { Request, Response, Router } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { createHash } from 'node:crypto';
 import { AuthenticatedRequest, requireRole, verifyToken } from '../../middlewares/auth-jwt';
 import { createResponse } from '../../shared/api-response';
 import { createRateLimitStore } from '../../shared/rate-limit-store';
 import { AuthController } from './auth.controller';
+import { normalizeThaiMobilePhone } from './phone-utils';
 
 const router = Router();
 
-// ตั้งค่า Rate Limiter ที่เข็มแข็งสำหรับ Login (ป้องกัน Brute Force)
+const getAccountRateLimitKey = (req: Request): string => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!email) {
+    return ipKeyGenerator(req.ip ?? '127.0.0.1');
+  }
+
+  return createHash('sha256').update(email).digest('hex');
+};
+
+const getPhoneRateLimitKey = (req: Request): string => {
+  const rawPhone = typeof req.body?.phone === 'string' ? req.body.phone : '';
+  const phone = normalizeThaiMobilePhone(rawPhone);
+  return phone ? createHash('sha256').update(phone).digest('hex') : ipKeyGenerator(req.ip ?? '127.0.0.1');
+};
+
+// Limit failed attempts per normalized account so one user cannot block
+// unrelated accounts that share the same network or device.
 const loginLimiter = rateLimit({
   store: createRateLimitStore('rl:auth:login:'),
   windowMs: 5 * 60 * 1000, // 5 นาที
-  max: Number(process.env.LOGIN_RATE_LIMIT_MAX || 5), // จำกัด 5 ครั้งต่อ 1 IP
-  keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
-  message: { status: 429, message: 'Too many login attempts, please try again in 5 minutes' },
+  max: Number(process.env.LOGIN_RATE_LIMIT_MAX || 5), // จำกัด 5 ครั้งต่อบัญชี
+  keyGenerator: getAccountRateLimitKey,
+  message: { status: 429, message: 'บัญชีนี้พยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 5 นาที' },
   skipSuccessfulRequests: true, // ไม่นับ login สำเร็จ
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const passwordResetRequestLimiter = rateLimit({
+  store: createRateLimitStore('rl:auth:password-reset-request:'),
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  keyGenerator: getPhoneRateLimitKey,
+  message: { status: 429, message: 'ส่งคำขอได้ไม่เกิน 3 ครั้งต่อชั่วโมง กรุณาลองใหม่ภายหลัง' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const passwordResetLimiter = rateLimit({
+  store: createRateLimitStore('rl:auth:password-reset:'),
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: getPhoneRateLimitKey,
+  message: { status: 429, message: 'มีการลองตั้งรหัสผ่านหลายครั้ง กรุณาลองใหม่ภายหลัง' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -33,6 +71,9 @@ const registerLimiter = rateLimit({
 // เส้นทางแบบเข้าถึงได้อิสระ (Public Routes) - มี Rate Limiting
 router.post('/login', loginLimiter, AuthController.login);
 router.post('/register', registerLimiter, AuthController.register);
+router.post('/forgot-password', passwordResetRequestLimiter, AuthController.requestPasswordReset);
+router.post('/verify-reset-otp', passwordResetLimiter, AuthController.verifyPasswordResetOtp);
+router.post('/reset-password', passwordResetLimiter, AuthController.resetPassword);
 router.post('/heartbeat', verifyToken, AuthController.heartbeat);
 router.post('/logout', verifyToken, AuthController.logout);
 

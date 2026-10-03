@@ -1,5 +1,6 @@
 import { Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { logger } from '../../logger';
 import { AppError } from '../../middlewares/error-handler';
@@ -7,9 +8,11 @@ import { getJwtSecret } from '../../shared/env';
 import { markUserOnline } from '../../shared/presence';
 import { getSettingValue } from '../settings/settings.service';
 import { AuthRepository } from './auth.repository';
+import { normalizeThaiMobilePhone } from './phone-utils';
 
 interface RegisterPayload {
   email: string;
+  phone: string;
   password: string;
   username?: string;
 }
@@ -105,6 +108,8 @@ export class AuthService {
 
   static async register(data: RegisterPayload) {
     const { email, password, username } = data;
+    const phone = normalizeThaiMobilePhone(data.phone);
+    if (!phone) throw new AppError('กรุณากรอกเบอร์โทรศัพท์มือถือไทยให้ถูกต้อง', 400);
     const normalizedUsername = typeof username === 'string' ? username.trim() : undefined;
     const finalUsername = normalizedUsername ? normalizedUsername : undefined;
     
@@ -112,6 +117,10 @@ export class AuthService {
     const existing = await AuthRepository.findByEmail(email);
     if (existing) {
       throw new AppError('อีเมลนี้ถูกใช้งานแล้ว', 400);
+    }
+
+    if (await AuthRepository.findByPhone(phone)) {
+      throw new AppError('เบอร์โทรศัพท์นี้ถูกผูกกับบัญชีแล้ว', 409);
     }
 
     if (finalUsername) {
@@ -137,6 +146,7 @@ export class AuthService {
 
     const createPayload = {
       email,
+      phone,
       password: hashedPassword,
       role: Role.STUDENT,
       username: finalUsername,
@@ -155,6 +165,7 @@ export class AuthService {
         try {
           const user = await AuthRepository.createUser({
             email,
+            phone,
             password: hashedPassword,
             role: Role.STUDENT,
           });
@@ -168,6 +179,26 @@ export class AuthService {
       }
 
       throw error;
+    }
+  }
+
+  static async resetPassword(rawPhone: string, token: string, password: string): Promise<void> {
+    const phone = normalizeThaiMobilePhone(rawPhone);
+    if (!phone || !/^[a-f0-9]{64}$/i.test(token)) throw new AppError('ข้อมูลยืนยันการตั้งรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว', 400);
+    const userId = await AuthRepository.findUniqueUserIdByPhone(phone);
+    if (userId === null) throw new AppError('ข้อมูลยืนยันการตั้งรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว', 400);
+    await validatePassword(password);
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const passwordHash = await bcrypt.hash(password, 10);
+    const updated = await AuthRepository.consumePasswordResetGrant(
+      userId,
+      tokenHash,
+      passwordHash,
+      new Date(),
+    );
+
+    if (updated.count !== 1) {
+      throw new AppError('ข้อมูลยืนยันการตั้งรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว', 400);
     }
   }
 }
