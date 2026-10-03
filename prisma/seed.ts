@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { PrismaClient, Role } from '@prisma/client';
+import { Prisma, PrismaClient, Role } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -23,12 +23,11 @@ const seedAdminUser = async () => {
 
   const user = await prisma.user.upsert({
     where: { email },
-    update: { firstName: 'System', lastName: 'Admin', role: Role.ADMIN },
+    update: { username: 'admin', role: Role.ADMIN },
     create: {
+      username: 'admin',
       email,
       password: hashedPassword,
-      firstName: 'System',
-      lastName: 'Admin',
       role: Role.ADMIN,
     },
     select: { id: true, email: true, role: true },
@@ -44,15 +43,13 @@ const seedTestStudent = async () => {
   const user = await prisma.user.upsert({
     where: { email: 'somchai.test@dormitory.local' },
     update: {
-      firstName: 'สมชาย',
-      lastName: 'ทดสอบระบบ',
+      username: 'somchai',
       role: Role.STUDENT,
     },
     create: {
+      username: 'somchai',
       email: 'somchai.test@dormitory.local',
       password: hashedPassword,
-      firstName: 'สมชาย',
-      lastName: 'ทดสอบระบบ',
       role: Role.STUDENT,
     },
   });
@@ -165,11 +162,16 @@ const roomsToSeed = generateAllRooms();
 const main = async () => {
   console.info('🌱 Starting database seed...\n');
 
-  // 0. Clean up existing transactional data to avoid unique constraint / relation conflicts
+  // 0. Clean up existing transactional data in proper foreign key order
   console.info('🧹 Cleaning up database tables...');
-  await prisma.bill.deleteMany();
+  await prisma.paymentBatchItem.deleteMany();
+  await prisma.paymentBatch.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.transaction.deleteMany();
   await prisma.maintenanceTicket.deleteMany();
+  await prisma.visitorLog.deleteMany();
   await prisma.visitor.deleteMany();
+  await prisma.bill.deleteMany();
   await prisma.tenant.deleteMany();
 
   // Remove rooms that are NOT in the seed list (clean up old empty rooms)
@@ -213,16 +215,15 @@ const main = async () => {
     });
 
     if (item.tenantName) {
-      const tenantData: any = {
+      const tenantData: Prisma.TenantUncheckedCreateWithoutRoomInput = {
         fullName: item.tenantName,
         phone: '081-234-5678',
         emergencyContact: 'Contact 089-876-5432',
         checkInDate: new Date('2026-01-15'),
+        status: 'APPROVED',   // อนุมัติแล้ว — ให้ทดสอบ student flow ได้ครบ
         isActive: true,
+        userId: item.linkUserId ? studentUser.id : null,
       };
-      if (item.linkUserId) {
-        tenantData.userId = studentUser.id;
-      }
 
       const tenantRecord = await prisma.tenant.create({
         data: {
