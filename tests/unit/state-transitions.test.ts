@@ -16,6 +16,11 @@ describe('state transitions', () => {
     assert.equal(canTransitionMaintenanceStatus('IN_PROGRESS', 'RESOLVED'), true);
     assert.equal(canTransitionMaintenanceStatus('RESOLVED', 'CLOSED'), true);
     assert.equal(canTransitionMaintenanceStatus('PENDING', 'CLOSED'), false);
+    for (const terminal of ['CLOSED', 'CANCELLED']) {
+      for (const target of ['PENDING', 'APPROVED', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED', 'CLOSED']) {
+        assert.equal(canTransitionMaintenanceStatus(terminal, target), false);
+      }
+    }
   });
 
   it('allows valid visitor transitions', () => {

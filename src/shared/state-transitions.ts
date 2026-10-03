@@ -21,8 +21,6 @@ const maintenanceTransitions = new Set([
   ['APPROVED', 'PENDING'],
   ['IN_PROGRESS', 'APPROVED'],
   ['RESOLVED', 'IN_PROGRESS'],
-  ['CLOSED', 'RESOLVED'],
-  ['CANCELLED', 'PENDING'],
 ]);
 
 const visitorTransitions = new Set([

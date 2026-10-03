@@ -31,6 +31,8 @@ REST endpoints return the shared `ApiResponse<T>` envelope unless they intention
 | `/api/ocr` | ID-card verification, jobs and admin verification records | Upload routes are rate-limited; admin reads require ADMIN |
 | `/api/face-verification` | Dashboard, FaceGate.Edge, device and template routes | See `face-verification.routes.ts` for JWT/FaceGate token rules |
 | `/api/notifications` | Notification list, delivery, dead letters, audit logs, provider webhook | See `notification.routes.ts` |
+
+Maintenance submission limits: successful ticket creation is limited to 3 per account per Thai calendar day (Asia/Bangkok, reset at 00:00). Invalid or failed submissions do not consume the daily quota. PostgreSQL stores successful submissions as AccessLog entries with method `MAINTENANCE_CREATED` and resource path `/api/maintenance/<ticketId>`, in the same transaction as the ticket; deleting a ticket does not remove that record. Existing tickets from the current day without a corresponding submission record are also counted, avoiding duplicates. The account row is locked while checking and writing the quota. Creation and image uploads share a limit of 10 attempts per minute per authenticated account, using the existing rate-limit store; both limits return HTTP 429 through the standard response wrapper. The daily quota is authoritative in PostgreSQL, independent of Redis or container restarts.
 | `/api/notifications/preferences` | `GET /`, `PUT /` | JWT |
 | `/api/audit-logs` | `GET /` | ADMIN |
 | `/api/settings` | `GET /`, `PATCH /` | ADMIN |

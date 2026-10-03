@@ -14,6 +14,8 @@ require("./unit/date-utils.test.ts");
 require("./unit/notification.test.ts");
 require("./unit/setup-security.test.ts");
 require("./unit/core-domain.test.ts");
+require("./unit/state-transitions.test.ts");
+require("./unit/maintenance.test.ts");
 require("./unit/analytics.test.ts");
 require("./unit/route-aliases.test.ts");
 require("./unit/route-aliases-additional.test.ts");

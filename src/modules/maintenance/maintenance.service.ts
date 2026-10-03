@@ -5,6 +5,7 @@ import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { logger } from '../../logger';
+import { canTransitionMaintenanceStatus } from '../../shared/state-transitions';
 
 export class MaintenanceService {
   static async getTenantByUserId(userId: number) {
@@ -16,13 +17,18 @@ export class MaintenanceService {
   }
 
   static async createTicket(data: { tenantId: number; roomId?: number; category: string; description: string; contactTime?: Date }) {
-    const ticket = await MaintenanceRepository.createTicket({
+    const category = Object.values(MaintenanceCategory).find((value) => value === data.category);
+    if (category === undefined) {
+      throw new AppError('Invalid maintenance category', 400);
+    }
+
+    const ticket = await MaintenanceRepository.createTicketWithinDailyLimit({
       tenant: { connect: { id: data.tenantId } },
       room: data.roomId ? { connect: { id: data.roomId } } : undefined,
-      category: data.category as unknown as MaintenanceCategory,
+      category,
       description: data.description,
       contactTime: data.contactTime,
-    });
+    }, data.tenantId);
 
     // Fire-and-forget: notification failure must not block ticket creation
     try {
@@ -46,20 +52,49 @@ export class MaintenanceService {
   }
 
   static async updateTicketStatus(id: number, status: string, note?: string) {
-    const updated = await MaintenanceRepository.updateTicketStatus(id, {
-      status: status as unknown as MaintenanceStatus,
-      note,
-    });
-    publishAdminAlert(updated.id, 'MAINTENANCE_STATUS', `แจ้งซ่อม #${updated.id} เปลี่ยนสถานะเป็น ${updated.status}`, updated.status);
-    return updated;
+    const validatedStatus = Object.values(MaintenanceStatus).find((value) => value === status);
+    if (validatedStatus === undefined) {
+      throw new AppError('Invalid maintenance status', 400);
+    }
+
+    const existingTicket = await MaintenanceRepository.getTicketById(id);
+    if (!existingTicket) {
+      throw new AppError('Maintenance ticket not found', 404);
+    }
+    if (!canTransitionMaintenanceStatus(existingTicket.status, validatedStatus)) {
+      throw new AppError('Invalid maintenance state transition', 409);
+    }
+
+    try {
+      const updated = await MaintenanceRepository.updateTicketStatus(id, {
+        status: validatedStatus,
+        note,
+      });
+      publishAdminAlert(updated.id, 'MAINTENANCE_STATUS', `แจ้งซ่อม #${updated.id} เปลี่ยนสถานะเป็น ${updated.status}`, updated.status);
+      return updated;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        const current = await MaintenanceRepository.getTicketById(id);
+        throw new AppError(current ? 'Maintenance ticket is closed or cancelled' : 'Maintenance ticket not found', current ? 409 : 404);
+      }
+      throw error;
+    }
   }
 
   static async deleteTicket(id: number) {
+    const ticket = await MaintenanceRepository.getTicketById(id);
+    if (!ticket) {
+      throw new AppError('Maintenance ticket not found', 404);
+    }
+    if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
+      throw new AppError('Closed or cancelled maintenance tickets cannot be deleted', 409);
+    }
     try {
       return await MaintenanceRepository.deleteTicket(id);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-        throw new AppError('Maintenance ticket not found', 404);
+        const current = await MaintenanceRepository.getTicketById(id);
+        throw new AppError(current ? 'Closed or cancelled maintenance tickets cannot be deleted' : 'Maintenance ticket not found', current ? 409 : 404);
       }
       throw error;
     }

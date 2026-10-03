@@ -4,8 +4,6 @@ import path from 'path';
 import { createResponse } from '../../shared/api-response';
 import { MaintenanceService } from './maintenance.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
-import { AppError } from '../../middlewares/error-handler';
-import { canTransitionMaintenanceStatus } from '../../shared/state-transitions';
 
 export class MaintenanceController {
   static async createTicket(req: Request, res: Response, next: NextFunction) {
@@ -58,15 +56,6 @@ export class MaintenanceController {
 
       if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid ticket id'));
-      }
-
-      const existingTicket = await MaintenanceService.getTicketById(id);
-      if (!existingTicket) {
-        return res.status(404).json(createResponse(404, 'Maintenance ticket not found'));
-      }
-
-      if (!canTransitionMaintenanceStatus(existingTicket.status, status)) {
-        return next(new AppError('Invalid maintenance state transition', 409));
       }
 
       const updated = await MaintenanceService.updateTicketStatus(id, status, note);

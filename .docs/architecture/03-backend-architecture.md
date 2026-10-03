@@ -48,7 +48,7 @@ Stores all persistent application data.
 
 ## แผนจัดโครงสร้าง Backend ตามสโคป — 2026-10-04
 
-สถานะ: ดำเนินการและตรวจปิดชุด 1–4 แล้ว; ชุด 5–7 ยังเป็นแผนเสนอ ไม่มีการย้ายโมดูลธุรกิจ. เอกสารนี้เป็นข้อมูลอ้างอิง ไม่แทนกฎใน `AGENTS.md` หรือ active contracts ใน `.docs/ai-context/`.
+สถานะ: ดำเนินการและตรวจปิดชุด 1–4 แล้ว; ชุด 5 ทำส่วนตรวจสถานะใน service และ enum แล้วตามรายละเอียดด้านล่าง; ชุด 6–7 ยังเป็นแผนเสนอ ไม่มีการย้ายโมดูลธุรกิจ. เอกสารนี้เป็นข้อมูลอ้างอิง ไม่แทนกฎใน `AGENTS.md` หรือ active contracts ใน `.docs/ai-context/`.
 
 บันทึกความคืบหน้าตามลำดับ:
 
@@ -75,6 +75,26 @@ Stores all persistent application data.
 ตรวจหลังผู้ใช้ลบ: ยืนยันว่าทั้งสามไฟล์และโฟลเดอร์ src/modules/shared กับ src/docs ไม่มีอยู่แล้ว ไม่พบจุดเรียกใช้ค้างใน source/tests/scripts และ configuration ที่ตรวจ. ปรับ README/spec ให้ตรงกับไฟล์ที่เหลือ และเอา src/docs/** ที่ไม่ใช้แล้วออกจากรายการ ignore ของ ESLint. คงประวัติการลบไว้ในแผนนี้; ไม่สร้าง archive สำเนาเพิ่ม.
 
 ผลตรวจปิดชุด 4: npm run build, npm run test:typecheck, ESLint แบบไม่ใช้ --fix และ git diff --check ผ่าน; npm test ผ่าน 78/78 ไม่มีข้ามการทดสอบ. เป็นการตรวจโค้ดและ automated tests ไม่ใช่การรับรอง API ทุก endpoint บนระบบที่รันจริง. ยังไม่ commit งานจัดโครงสร้างชุดนี้.
+
+### ความคืบหน้าชุด 5: หน้าที่ Maintenance
+
+ย้ายการค้นหา ticket และตรวจ state transition สำหรับ updateTicketStatus จาก controller เข้า service เดิม เพื่อให้การเรียก service โดยตรงไม่ข้ามกฎ. Controller ยังคงตรวจ ticket id และส่ง HTTP response. Service ตรวจ category/status เทียบ enum ของ Prisma ก่อนบันทึกแทน as unknown as โดยคง public signatures เดิม; schema ที่ routes ใช้ตรวจค่า string จริงและใช้ enum เดียวกัน.
+
+เพิ่ม tests/unit/maintenance.test.ts หนึ่งไฟล์เพราะยังไม่มี service tests ของโมดูลนี้ และเชื่อมทั้งไฟล์นี้กับ state-transitions.test.ts ที่มีอยู่เข้ากับ npm test. ครอบคลุม invalid enum, ticket ไม่พบ, transition ข้ามขั้น, payload ที่ส่งให้ repository และ persist ก่อน broadcast รวมถึงไม่ broadcast เมื่อบันทึกล้มเหลว. Build, test:typecheck และ ESLint ผ่าน; npm test ผ่าน 89/89 โดยใช้ mocks ใน tests ใหม่ ไม่มีธุรกรรมฐานข้อมูลจริง.
+
+ข้อสรุปที่ผู้ใช้อนุมัติ: CLOSED/CANCELLED ดูประวัติได้เท่านั้น ห้ามแก้สถานะ หมายเหตุ และลบรายการ; งานใหม่ต้องสร้างรายการใหม่. เอา outgoing transitions ของสองสถานะนี้ออกจาก state-transitions.ts และปุ่มเปิดงานใหม่/กู้คืน/ลบออกจาก Frontend ทั้งตารางและ modal. Service ปฏิเสธการแก้และลบด้วย HTTP 409 และ repository เพิ่มเงื่อนไข status ในคำสั่ง update/delete เพื่อป้องกันคำขอที่ชนกับการปิด/ยกเลิกงาน. ไม่เปลี่ยน endpoint, public signatures หรือ schema ฐานข้อมูล.
+
+ผลตรวจส่วน terminal states: Backend build, test:typecheck และ ESLint ผ่าน; tests ผ่าน 97/97 รวมการปฏิเสธทุก transition จากสถานะจบงาน การห้ามลบ เงื่อนไขคำสั่ง repository และคำขอที่ชนกับการปิด/ยกเลิก. Frontend build และ lint ผ่าน; tests เดิมผ่าน 17/17 แต่ยังไม่ได้ทดสอบการกด UI ใน browser หรือระบบ Docker ที่รันจริง. ไม่รันธุรกรรมกับฐานข้อมูลจริง.
+
+การเปลี่ยน validation เป็น class-validator/class-transformer และการแยกงานจัดเก็บภาพออกจาก controller ยังไม่ได้ทำในชุดย่อยนี้. ยังไม่ commit.
+
+แก้ flow Maintenance เพิ่มตามผู้ใช้อนุมัติ: normalizeMaintenance ส่ง rawStatus ให้ MaintenanceCard เพื่อให้ปุ่มของสถานะที่ยังทำงานแสดงถูกต้องและสถานะจบงานซ่อนปุ่มแก้/ลบ. มุมมองรวมรายห้องเปิด modal รายการ Pending ของห้องก่อน แล้วจึงเลือกดูรายละเอียดรายการ; ไม่มีรายการ Pending ให้แสดงข้อความว่าง โดยใช้ RoomGroupCard, Modal และ DataTable เดิม.
+
+เพิ่มโควตาส่งสำเร็จ 3 รายการต่อบัญชีต่อวันตามเวลาไทยใน repository เดิม โดยใช้ PostgreSQL transaction ล็อกแถว User ก่อนตรวจโควตา สร้าง ticket และบันทึก AccessLog แบบ MAINTENANCE_CREATED เพื่อให้การลบ ticket ไม่คืนโควตา. คำขอที่ล้มเหลว rollback จึงไม่นับโควตา; ไม่เพิ่ม schema/package. คำขอสร้างและอัปโหลดรวมกันจำกัด 10 ครั้งต่อนาทีต่อบัญชีผ่าน middleware/store ที่มีอยู่. เพิ่ม regression tests ของ Frontend หนึ่งไฟล์เพราะยังไม่มี tests ของ mapping สถานะและ flow รวมรายห้อง; ใช้ React SSR/TypeScript เดิม ไม่เพิ่ม test library.
+
+รายการเดิมในวันปัจจุบันที่ยังไม่มี submission log จะนับเพิ่มจาก AccessLog โดยยกเว้น ticket id ที่มี log แล้วเพื่อไม่ให้นับซ้ำ. ผลตรวจ Backend build/typecheck/lint ผ่านและ tests 103/103; Frontend build/lint ผ่านและ tests 21/21 รวม regression tests ของปุ่มและ room modal. เป็นการทดสอบด้วย mocks/React SSR และ HTTP คำขอที่ไม่ผ่าน validation ไม่ใช่การทดสอบ concurrency กับ PostgreSQL จริงหรือ browser จริง. ยังไม่ rebuild/restart Docker หรือ commit.
+
+ผลตรวจ runtime เพิ่มเติม 2026-10-04: rebuild เฉพาะ Backend Docker แล้ว; health ผ่าน gateway :3002 และ Vite proxy :5174 ตอบ 200. บัญชี test01@gmail.com มีอยู่แล้ว จึงไม่เปลี่ยนรหัส/สิทธิ์; สร้างห้องทดสอบ 100 และ Tenant สำหรับบัญชีนี้ตามอนุมัติ. Login API และ Tenant/me ตอบ 200 และผูกห้อง 100 ถูกต้อง. ทดสอบ repository กับ PostgreSQL จริงส่งพร้อมกัน 4 ครั้ง สร้างสำเร็จ 3 รายการ อีกคำขอถูกปฏิเสธ 429; ตรวจ API คำขอที่ 4 ตอบ 429 เช่นกัน. ทดสอบ service กับรายการที่สร้างเอง: CLOSED/CANCELLED เปลี่ยนสถานะและลบถูกปฏิเสธ 409; student เรียก API แก้/ลบได้ 403. ทดสอบไม่คืนโควตาหลังลบใน transaction และ rollback เพื่อเก็บรายการ Pending ไว้. คง test tickets #244 CLOSED, #245 CANCELLED, #246 PENDING. ยังไม่ได้ยืนยันการกดหน้าจอ Admin ใน browser ด้วย session Admin จริง.
 
 ### แนวทางที่เหมาะกับโปรเจกต์
 
