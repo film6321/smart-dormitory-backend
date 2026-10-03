@@ -24,6 +24,14 @@ Backend API สำหรับ Smart Dormitory Management System
 - Modular architecture โดยแยกเป็นโมดูลใน `src/modules/`
 - Security middleware: Helmet, CORS, distributed rate limiting
 
+## Dependency maintenance
+
+- Use Node.js 24 (24.14.0 or newer within major 24), matching the Docker build and runtime.
+- Prisma CLI, client, and PostgreSQL adapter are pinned together at 7.8.0.
+- Scoped npm overrides patch pinned transitive dependencies: deepmerge-ts under @prisma/config, mysql2 under prisma, and @hono/node-server / valibot under @prisma/dev.
+- Recheck these overrides when upgrading Prisma. Validate its config, generate the client, and run build/tests before removing them.
+- Use npm ci with the repository lockfile; do not use npm audit fix --force to downgrade Prisma.
+
 ## Prerequisites
 
 - npm

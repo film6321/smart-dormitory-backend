@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 # คัดลอกไฟล์ package.json + lock แล้วติดตั้ง dependencies
 COPY package.json package-lock.json ./
@@ -12,7 +12,7 @@ RUN npx prisma generate
 # สร้าง production build
 RUN npm run build
 # ---------- Runtime image ----------
-FROM node:20-alpine
+FROM node:24-alpine
 ENV DATABASE_URL="postgresql://postgres:postgrespw@db:5432/projectdb?schema=public"
 WORKDIR /app
 COPY --from=builder /app/dist ./dist

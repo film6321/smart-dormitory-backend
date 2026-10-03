@@ -7,7 +7,6 @@ cookies.txt
 
 # Dependencies
 npm.lockb
-package-lock.json
 yarn.lock
 
 # Environment
