@@ -27,7 +27,7 @@ REST endpoints return the shared `ApiResponse<T>` envelope unless they intention
 | `/api/billing` | Bill list/report, QR, room info, room-bill generation, single-bill slip upload, status update, delete | See `billing.routes.ts` |
 | `/api/payment-batches` | `POST /`, `GET /:id`, `GET /:id/payment-qr`, `GET /:id/status`, `POST /:id/upload-slip`, admin bill payment/slip reads | JWT; admin routes require ADMIN |
 | `/api/maintenance` | Ticket create/list/status/delete and image upload/read | See `maintenance.routes.ts` |
-| `/api/visitor` | `POST /register`, `GET /`, `PATCH /:id/status` | JWT; list/status require ADMIN |
+| `/api/visitor` | `POST /register`, `GET /:id/pass`, `GET /:id`, `POST /:id/cancel`, `GET /`, `PATCH /:id/status` | Registration is public with PDPA/OCR validation and Idempotency-Key; reads/cancel/list/status require ADMIN. See visitor.routes.ts. |
 | `/api/ocr` | ID-card verification, jobs and admin verification records | Upload routes are rate-limited; admin reads require ADMIN |
 | `/api/face-verification` | Dashboard, FaceGate.Edge, device and template routes | See `face-verification.routes.ts` for JWT/FaceGate token rules |
 | `/api/notifications` | Notification list, delivery, dead letters, audit logs, provider webhook | See `notification.routes.ts` |
@@ -54,6 +54,15 @@ The payment-batch creation request requires an idempotency key. Its slip files a
 
 For valid bill, visitor, and maintenance state changes, use `state-machine.md`. Before changing a route, reconcile this index with its route file and automated tests.
 
+## Visitor registration, expiry, and simulated admin door flow
+
+- `POST /api/visitor/register` requires PDPA consent, OCR verification ID and matching private image, guest name, address, 13-digit citizen ID, exact existing room number, and active resident name in that room. The endpoint requires an `Idempotency-Key`; Redis SET NX prevents concurrent duplicate submissions. The UI permits correcting OCR-prefilled values.
+- Resolve the supplied room to an existing Room record; reject unknown room numbers rather than saving an unassigned visitor. Keep the requested resident/tenant identity associated with the visitor request so Admin can verify the name given at arrival against the room.
+- Save a submitted request as REGISTERED and notify/show it to Admin. The response is a minimal receipt; no public QR pass containing personal data is generated. The new flow has no face-enrollment approval step and does not require visitor face matching.
+- When the visitor arrives, they tell Admin the resident name they are visiting. Admin checks that name against the request and then requests the door to open. Door access is a separate event and must not set Visitor status to CHECKED_IN.
+- A request with no successful access event expires 24 hours after submission. `visitorExpiryWorker` persists EXPIRED in PostgreSQL and Admin history; expiry uses row locking and is idempotent. The Monitor door simulation records Admin open/close actions separately and does not set Visitor status to CHECKED_IN.
+- Pass reads and cancellations require an authenticated ADMIN; numeric visitor IDs are not accepted as public authorization.
+- Existing VERIFYING, APPROVED, REJECTED, CHECKED_IN, and CHECKED_OUT routes/statuses are legacy behavior and must not be assumed to implement this target flow. Preserve existing records during any future transition.
 ## Housing document payment verification
 
 `GET /api/tenants/payment-qr/:roomNumber` requires authentication. The server checks
@@ -103,6 +112,7 @@ Regression suite (disposable PostgreSQL only): set DATABASE_URL to a database na
 `node --test -r ts-node/register tests/integration/delete-guards.test.ts`
 with TS_NODE_PROJECT=tsconfig.test.json. This suite inserts test records and must not
 run against production.
+
 
 ### Face enrollment removal and access checks (2026-09-29)
 

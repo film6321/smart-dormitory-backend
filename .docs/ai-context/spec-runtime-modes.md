@@ -20,7 +20,7 @@
 ## STAGING MODE (`NODE_ENV=staging`)
 
 * JWT Auth จริงทุก Endpoint — ห้ามใช้ Mock token
-* Redis Lock จริงสำหรับ Visitor CHECKED_IN และ OCR Double Submit
+* Redis Lock จริงสำหรับ Visitor Registration Double Submit และ OCR Double Submit
 * เรียก External OCR API และ Face Verification API จริง
 * Rate Limit เต็มรูปแบบเหมือน Production
 * CORS จำกัดเฉพาะ Domain ที่กำหนดใน `ALLOWED_ORIGINS`

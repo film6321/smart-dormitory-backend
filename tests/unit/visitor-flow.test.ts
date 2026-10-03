@@ -70,7 +70,13 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
   await t.test('4. registerVisitor creates record with 24h expiresAt, QR code, and logs', async () => {
     const originalTx = prisma.$transaction;
+    const originalVerificationFind = prisma.idCardVerification.findUnique;
+    const originalRoomFind = prisma.room.findUnique;
+    const originalTenantFind = prisma.tenant.findFirst;
     const now = new Date();
+    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23' })) as unknown as typeof prisma.idCardVerification.findUnique;
+    prisma.room.findUnique = (async () => ({ id: 1, roomNumber: '301' })) as unknown as typeof prisma.room.findUnique;
+    prisma.tenant.findFirst = (async () => ({ id: 1, fullName: 'Resident Name' })) as unknown as typeof prisma.tenant.findFirst;
     const mockVisitor: VisitorWithRelations = {
       faceRevokedAt: null,
       id: 55,
@@ -96,7 +102,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       checkedInAt: null,
       checkedOutAt: null,
       expectedEntryTime: null,
-      qrCodeData: '{"visitorId":55}',
+      qrCodeData: null,
       createdAt: now,
       updatedAt: now,
       logs: [],
@@ -108,10 +114,6 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       const txMock = {
         visitor: {
           create: async () => mockVisitor,
-          update: async (args: Prisma.VisitorUpdateArgs) => ({
-            ...mockVisitor,
-            qrCodeData: typeof args.data.qrCodeData === 'string' ? args.data.qrCodeData : mockVisitor.qrCodeData,
-          }),
         },
         visitorLog: {
           create: async () => ({
@@ -137,19 +139,26 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
         citizenId: '1234567890123',
         age: 34,
         birthDate: '15 พฤษภาคม 2535',
-        address: '123/4 หมู่ 5 ขอนแก่น',
         purpose: 'มาเยี่ยม',
         roomId: 1,
+        roomNumber: '301',
         tenantId: 1,
+        tenantName: 'Resident Name',
+        address: 'Test address',
+        idCardImagePath: 'uploads/private/id-cards/visitor-card.jpg',
+        idCardVerificationId: 201,
         pdpaConsent: true,
       });
 
       assert.equal(res.id, 55);
       assert.equal(res.guestName, 'นายสมชาย ใจดี');
-      assert.ok(res.qrCodeData);
+      assert.equal(res.qrCodeData, null);
       assert.ok(res.expiresAt);
     } finally {
       prisma.$transaction = originalTx;
+      prisma.idCardVerification.findUnique = originalVerificationFind;
+      prisma.room.findUnique = originalRoomFind;
+      prisma.tenant.findFirst = originalTenantFind;
     }
   });
 
@@ -344,11 +353,8 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     ): Promise<T> => {
       const txMock = {
         visitor: {
-          update: async (args: Prisma.VisitorUpdateArgs) => ({
-            ...mockRecord,
-            status: (args.data.status as VisitorStatus) || VisitorStatus.CANCELLED,
-            cancelledAt: (args.data.cancelledAt as Date) || now,
-          }),
+          updateMany: async () => ({ count: 1 }),
+          findUnique: async () => ({ ...mockRecord, status: VisitorStatus.CANCELLED, cancelledAt: now }),
         },
         visitorLog: {
           create: async () => ({
@@ -376,14 +382,18 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     }
   });
 
-  await t.test('9. registerVisitor resolves roomId from roomNumber string', async () => {
-    const originalFindRoom = prisma.room.findFirst;
+  await t.test('9. registerVisitor links only an existing exact room and active resident', async () => {
+    const originalFindRoom = prisma.room.findUnique;
+    const originalVerificationFind = prisma.idCardVerification.findUnique;
+    const originalTenantFind = prisma.tenant.findFirst;
     const originalTx = prisma.$transaction;
     const now = new Date();
 
-    prisma.room.findFirst = (async () => ({
+    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23' })) as unknown as typeof prisma.idCardVerification.findUnique;
+    prisma.tenant.findFirst = (async () => ({ id: 2, fullName: 'Resident Name' })) as unknown as typeof prisma.tenant.findFirst;
+    prisma.room.findUnique = (async () => ({
       id: 301,
-      roomNumber: '301',
+        roomNumber: '301',
       floor: 3,
       status: 'AVAILABLE',
       capacity: 1,
@@ -427,14 +437,70 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       await VisitorService.registerVisitor({
         guestName: 'นายทดสอบ ระบบ',
         roomNumber: 'ห้อง 301',
+        tenantName: 'Resident Name',
+        citizenId: '1234567890123',
+        address: 'Test address',
+        idCardImagePath: 'uploads/private/id-cards/visitor-card.jpg',
+        idCardVerificationId: 201,
         pdpaConsent: true,
       });
 
       assert.equal(createdInputs.length, 1);
       assert.equal(createdInputs[0]?.room?.connect?.id, 301);
     } finally {
-      prisma.room.findFirst = originalFindRoom;
+      prisma.room.findUnique = originalFindRoom;
+      prisma.idCardVerification.findUnique = originalVerificationFind;
+      prisma.tenant.findFirst = originalTenantFind;
       prisma.$transaction = originalTx;
     }
   });
+
+  await t.test('10. Admin cannot approve or check in a visitor in the current flow', async () => {
+    await assert.rejects(
+      () => VisitorService.updateVisitorStatus(55, 'APPROVED'),
+      (err: unknown) => err instanceof AppError && err.statusCode === 409,
+    );
+    await assert.rejects(
+      () => VisitorService.updateVisitorStatus(55, 'CHECKED_IN'),
+      (err: unknown) => err instanceof AppError && err.statusCode === 409,
+    );
+  });
+
+  await t.test('11. expired requests are marked once and logged idempotently', async () => {
+    const originalFindMany = prisma.visitor.findMany;
+    const originalTx = prisma.$transaction;
+    let status: VisitorStatus = VisitorStatus.REGISTERED;
+    const events: string[] = [];
+    const expiredAt = new Date('2026-09-28T12:00:00.000Z');
+    prisma.visitor.findMany = (async () => [{ id: 321 }]) as unknown as typeof prisma.visitor.findMany;
+    prisma.$transaction = (async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) => {
+      const tx = {
+        $queryRawUnsafe: async () => [],
+        visitor: {
+          findUnique: async () => ({ status, expiresAt: expiredAt }),
+          updateMany: async () => { status = VisitorStatus.EXPIRED; return { count: 1 }; },
+        },
+        visitorLog: {
+          findFirst: async ({ where }: { where: { eventType: string } }) =>
+            events.includes(where.eventType) ? { id: 1 } : null,
+          create: async ({ data }: { data: { eventType: string } }) => {
+            events.push(data.eventType);
+            return { id: 1 };
+          },
+        },
+      } as unknown as Prisma.TransactionClient;
+      return callback(tx);
+    }) as typeof prisma.$transaction;
+
+    try {
+      assert.equal(await VisitorService.expirePendingVisitors(new Date('2026-09-29T12:00:00.000Z')), 1);
+      assert.equal(await VisitorService.expirePendingVisitors(new Date('2026-09-29T12:00:00.000Z')), 0);
+      assert.equal(status, VisitorStatus.EXPIRED);
+      assert.deepEqual(events, ['EXPIRED']);
+    } finally {
+      prisma.visitor.findMany = originalFindMany;
+      prisma.$transaction = originalTx;
+    }
+  });
+
 });

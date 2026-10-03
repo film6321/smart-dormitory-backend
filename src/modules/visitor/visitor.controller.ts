@@ -48,10 +48,13 @@ export class VisitorController {
         roomNumber,
         tenantId,
         tenantName,
+        idCardVerificationId,
         expectedEntryTime,
         pdpaConsent,
       } = req.body || {};
 
+      const idempotencyKey = req.header('Idempotency-Key')?.trim();
+      if (!idempotencyKey) return res.status(400).json(createResponse(400, 'Idempotency-Key header is required'));
       const visitor = await VisitorService.registerVisitor({
         guestName,
         phone,
@@ -66,11 +69,19 @@ export class VisitorController {
         roomNumber: typeof roomNumber === 'string' ? roomNumber : (typeof roomId === 'string' && isNaN(Number(roomId)) ? roomId : undefined),
         tenantId: tenantId ? Number(tenantId) : undefined,
         tenantName: typeof tenantName === 'string' ? tenantName : undefined,
+        idCardVerificationId: Number(idCardVerificationId),
         expectedEntryTime: expectedEntryTime ? new Date(expectedEntryTime) : undefined,
         pdpaConsent: Boolean(pdpaConsent),
-      });
+      }, idempotencyKey);
 
-      return res.status(201).json(createResponse(201, 'ลงทะเบียนผู้มาติดต่อสำเร็จ', visitor));
+      return res.status(201).json(createResponse(201, 'ส่งคำขอผู้มาติดต่อสำเร็จ', {
+        id: visitor.id,
+        guestName: visitor.guestName,
+        roomNumber: visitor.room?.roomNumber,
+        tenantName: visitor.tenant?.fullName,
+        status: visitor.status,
+        expiresAt: visitor.expiresAt,
+      }));
     } catch (error) {
       next(error);
     }

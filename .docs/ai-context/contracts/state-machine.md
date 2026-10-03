@@ -33,33 +33,28 @@ FAILED    -> UNPAID | OVERDUE
 
 ## 2. Visitor Access States (สถานะผู้มาติดต่อ)
 
+> Current flow (registration and expiry implemented; physical door integration pending): ผู้มาติดต่อส่งคำขอที่ผ่าน PDPA และข้อมูลบังคับครบ จะอยู่สถานะ REGISTERED เพื่อรอ Admin ตรวจเมื่อมาถึง ไม่มีขั้นอนุมัติใบหน้าหรือการเปลี่ยนเป็น CHECKED_IN จากการเปิดประตู การอนุญาตเข้าต้องถูกบันทึกเป็น access event แยกจากสถานะคำขอ
+
 ### 2.1 States
 
-- `REGISTERED` — ลงทะเบียนนัดล่วงหน้า
-- `VERIFYING` — สแกนบัตรประชาชน + รอยืนยันใบหน้า
-- `APPROVED` — เอกสารถูกต้อง ใบหน้าผ่าน
-- `REJECTED` — สแกนไม่ผ่านหรือติด Blacklist
-- `CHECKED_IN` — ผ่านประตูเข้าอาคารเรียบร้อย
-- `CHECKED_OUT` — ออกจากอาคารเรียบร้อย
-- `EXPIRED` — เกินเวลานัดหรือเกินกำหนดสูงสุด
+- REGISTERED — ส่งคำขอเข้าพบแล้ว รอ Admin ตรวจเมื่อมาถึง
+- EXPIRED — ไม่มีการอนุญาตเข้าที่สำเร็จภายใน 24 ชั่วโมงหลังส่งคำขอ
+- VERIFYING, APPROVED, REJECTED, CHECKED_IN, CHECKED_OUT — สถานะเดิมที่ยังอยู่ในระบบเพื่อรองรับข้อมูล/flow เก่า; ไม่ใช่ขั้นตอนของ target flow ใหม่
 
-### 2.2 Valid Transitions
+### 2.2 Target transition
 
-```text
-REGISTERED -> VERIFYING | EXPIRED
-VERIFYING  -> APPROVED | REJECTED
-APPROVED   -> CHECKED_IN
-REJECTED   -> REGISTERED | EXPIRED
-CHECKED_IN -> CHECKED_OUT | EXPIRED
-```
+REGISTERED -> EXPIRED
+
+การสั่งเปิดประตูไม่เปลี่ยน Visitor status; ให้บันทึกผลการอนุญาตเข้าเป็น access event แยกต่างหาก
 
 ### 2.3 Semantics
 
-- **Redis Lock:** APPROVED → CHECKED_IN ต้องมี Distributed Lock บน `visitorId` (TTL 5s)
-- **Expired Alert:** ถ้า CHECKED_IN เกินเวลา → สร้าง Log แจ้ง Admin ทันที
-
----
-
+- เวลานับอายุ 24 ชั่วโมงเริ่มเมื่อบันทึกคำขอสำเร็จ และใช้เวลาจาก PostgreSQL/server ไม่ใช้เวลาจาก Browser
+- งานหมดอายุต้องเปลี่ยนสถานะใน PostgreSQL แบบทำซ้ำได้ (idempotent) และต้องไม่หมดอายุคำขอที่มี access event สำเร็จแล้ว
+- การเปิดประตูไม่เปลี่ยน Visitor status เป็น CHECKED_IN; ให้เก็บผลการอนุญาตเข้า/ผลตอบรับจากอุปกรณ์เป็น access event แยกต่างหาก
+- Admin ต้องตรวจชื่อผู้เช่าที่ผู้มาติดต่อแจ้งว่าตรงกับห้องของคำขอก่อนสั่งเปิดประตู
+- API ดู pass/ยกเลิกจำกัดเฉพาะ Admin; ห้ามเปิดให้ผู้สมัครเรียกด้วย visitor ID เพียงอย่างเดียว
+- สถานะเดิมอื่น ๆ คงไว้เพื่อข้อมูลเก่าและ migration compatibility จนกว่าจะมีแผนย้ายข้อมูล; ห้ามนำมาใช้เป็นขั้นใหม่โดยปริยาย
 ## 3. Maintenance Job States (ใบสั่งซ่อมแซม)
 
 ### 3.1 States

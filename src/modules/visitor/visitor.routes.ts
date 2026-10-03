@@ -48,9 +48,9 @@ router.post('/scan-id-card', optionalVerifyToken, uploadIdCardImage, VisitorCont
 router.post('/verify-id-card', optionalVerifyToken, uploadIdCardImage, VisitorController.scanVisitorIdCard);
 router.post('/verify', optionalVerifyToken, uploadIdCardImage, VisitorController.scanVisitorIdCard);
 router.post('/register', optionalVerifyToken, validateDto(registerVisitorSchema), VisitorController.registerVisitor);
-router.get('/:id/pass', optionalVerifyToken, VisitorController.getVisitorPass);
-router.get('/:id', optionalVerifyToken, VisitorController.getVisitorPass);
-router.post('/:id/cancel', optionalVerifyToken, validateDto(cancelVisitorSchema), VisitorController.cancelVisitor);
+router.get('/:id/pass', verifyToken, requireRole(['ADMIN']), VisitorController.getVisitorPass);
+router.get('/:id', verifyToken, requireRole(['ADMIN']), VisitorController.getVisitorPass);
+router.post('/:id/cancel', verifyToken, requireRole(['ADMIN']), validateDto(cancelVisitorSchema), VisitorController.cancelVisitor);
 
 router.get('/', verifyToken, requireRole(['ADMIN']), VisitorController.listVisitors);
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateVisitorStatusSchema), VisitorController.updateVisitorStatus);

@@ -6,6 +6,7 @@ import { disconnectRedis } from './shared/redis';
 import { startAccessLogWorker, stopAccessLogWorker } from './workers/accessLogQueue';
 import { startOcrJobWorker, stopOcrJobWorker } from './workers/ocrJobWorker';
 import { startNotificationWorker, stopNotificationWorker } from './workers/notificationWorker';
+import { startVisitorExpiryWorker, stopVisitorExpiryWorker } from './workers/visitorExpiryWorker';
 import { closeNotificationGateway, initializeNotificationGateway } from './realtime/notification-gateway';
 
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,7 @@ server.listen(PORT, () => {
   startAccessLogWorker();
   startOcrJobWorker();
   startNotificationWorker();
+  startVisitorExpiryWorker();
   logger.info(`Backend API Gateway is running on http://localhost:${PORT}`);
 });
 
@@ -32,6 +34,7 @@ const shutdown = async (signal: string) => {
     await stopOcrJobWorker();
     await stopAccessLogWorker();
     await stopNotificationWorker();
+    stopVisitorExpiryWorker();
     await closeNotificationGateway();
     await disconnectRedis();
     await prisma.$disconnect();
