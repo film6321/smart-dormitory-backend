@@ -91,6 +91,9 @@ _ถ้าโค้ดขัดกับ AGENTS.md → แก้ที่โค�
       state-machine.md      Bill/Visitor/Maintenance state transitions
       api-contracts.md      REST API endpoints & JSON schemas
       socket-io-contracts.md Real-time events & room subscriptions
+  architecture/          Reference and learning docs; not active contracts
+  archive/               Historical documents and retired rules
+  qa/                    Feature-specific quality checklists
   archive-sprints/        ← สรุป Sprint history (read-only)
     README.md
 ```
