@@ -39,6 +39,20 @@ REST endpoints return the shared `ApiResponse<T>` envelope unless they intention
 
 `POST /api/auth/login` accepts an email and password. On success the server returns a token and a user summary containing `id`, `email`, optional `username`, `role`, `lastLogin`, and `isOnline`; it also sets the HttpOnly `access_token` cookie. The current `User` schema has no `firstName` or `lastName` fields.
 
+## Monitor scan history
+
+`GET /api/face-verification/scan-history` requires ADMIN and returns `scans` and
+`items` (the same latest 30 persisted activities for the Bangkok calendar day),
+`today_counts: { in, out, total }`, `timezone: "Asia/Bangkok"`, `day_start`,
+`day_end`, and the existing `door_status`.
+Counts cover the full half-open day range `[day_start, day_end)` in PostgreSQL,
+including resident/admin FACE_GATE and legacy biometric VisitorLog CHECK_IN/CHECK_OUT.
+MONITOR_DOOR activities remain visible but are excluded from these counts.
+Reception visitor registration and manual door closing do not create biometric checkout.
+Resident scan IDs use `db-<AccessLog.id>`; legacy visitor scan IDs use
+`visitor-db-<VisitorLog.id>`. HTTP history and SSE use the same persisted ID and
+server timestamp. Unpersisted detection telemetry is not authoritative scan history.
+
 ## Billing and payment
 
 Two payment paths are registered and must remain distinguishable in clients and tests:
@@ -62,6 +76,7 @@ For valid bill, visitor, and maintenance state changes, use `state-machine.md`. 
 - When the visitor arrives, they tell Admin the resident name they are visiting. Admin checks that name against the request and then requests the door to open. Door access is a separate event and must not set Visitor status to CHECKED_IN.
 - A request with no successful access event expires 24 hours after submission. `visitorExpiryWorker` persists EXPIRED in PostgreSQL and Admin history; expiry uses row locking and is idempotent. The Monitor door simulation records Admin open/close actions separately and does not set Visitor status to CHECKED_IN.
 - Pass reads and cancellations require an authenticated ADMIN; numeric visitor IDs are not accepted as public authorization.
+- Monitor door behavior is an in-app simulation, not a hardware integration. `POST /api/face-verification/door-command` accepts Admin `lock`/`unlock`; manual unlock is persisted as `MONITOR_DOOR`, auto-closes after 5 seconds, and records the close event. Manual close is also recorded. These events appear with face scans in `/scan-history` and the `scan` SSE event, while remaining excluded from face check-in/check-out counts. The response includes `simulated: true`; this flow does not change Visitor status or claim that a physical door was actuated.
 - Existing VERIFYING, APPROVED, REJECTED, CHECKED_IN, and CHECKED_OUT routes/statuses are legacy behavior and must not be assumed to implement this target flow. Preserve existing records during any future transition.
 ## Housing document payment verification
 

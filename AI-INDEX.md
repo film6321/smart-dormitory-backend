@@ -40,6 +40,9 @@ _หลีกเลี่ยงการโหลดเอกสารทั้�
 
 ## 3. Quick Routing (ทางลัดตามหน้างาน)
 
+**หน้าสแกนใบหน้า คะแนนความคล้าย และเอกสารประกอบเล่ม 5 บท:**
+→ อ่าน [.docs/qa/face-scan-report.md](.docs/qa/face-scan-report.md) และ QA checklist ที่ลิงก์ในรายงาน
+
 **แก้/เพิ่ม REST Endpoint:**
 → อ่าน `prisma/schema.prisma` + `contracts/api-contracts.md`
 

@@ -171,3 +171,11 @@
   - สร้างสภาพแวดล้อมจำลอง `.venv` ใหม่โดยระบุเอนจินหลักเป็น Python 3.11.9 (เวอร์ชันเสถียรที่ระบบพัฒนาและผู้ใช้มีติดตั้งอยู่แล้ว)
   - ติดตั้งและดาวน์เกรด `mediapipe` มาใช้เวอร์ชัน `0.10.14` ที่ระบุโมดูล `solutions` ครบถ้วน พร้อมอัปเกรด package ที่เกี่ยวข้อง
   - ยืนยันการเริ่มทำงานของแบบจำลองตรวจจับใบหน้า `FaceDetection` และ TensorFlow Lite XNNPACK delegate สำเร็จเรียบร้อย สามารถรันสตรีมกล้องกับเว็บแคมได้อย่างราบรื่น
+
+### 2026-09-29 — Visitor Reception and Simulated Door Monitor
+
+- Updated visitor registration to require PDPA consent, verified OCR, required identity and address fields, an existing room, and the resident name assigned to that room.
+- Added 24-hour expiry handling, authorization controls, and auditable visitor records.
+- Added the Monitor simulated door: an Admin opens access for a visitor, it auto-closes after five seconds, and manual/automatic open-close events record the acting Admin.
+- Kept simulated door events separate from face check-in/check-out totals and Visitor `CHECKED_IN` state.
+- Verified with `npm run build`, `npm test`, and `npm run lint`.

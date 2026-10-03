@@ -7,6 +7,7 @@ import { prisma } from '../../database/db';
 import { getRedisClient } from '../../shared/redis';
 import { AppError } from '../../middlewares/error-handler';
 import { logger } from '../../logger';
+import { faceVerificationMonitoringBus, type CameraScanSnapshot } from './face-verification-monitoring';
 import {
   FaceRegisterResponse,
   FaceVerifyResponse,
@@ -42,6 +43,149 @@ export class FaceVerificationService {
   public static readonly DEFAULT_SIMILARITY_THRESHOLD = 0.68;
   private static readonly DEFAULT_DETECTION_INTERVAL = 4;
   private static readonly inMemoryCooldowns = new Map<string, number>();
+  private static readonly simulatedDoorTimers = new Map<string, NodeJS.Timeout>();
+  private static readonly simulatedDoorOpen = new Set<string>();
+
+  private static async recordSimulatedDoorEvent(
+    userId: number,
+    deviceCode: string,
+    action: 'unlock' | 'lock',
+    trigger: 'MANUAL' | 'AUTO',
+  ) {
+    const now = new Date();
+    const opening = action === 'unlock';
+    const accessLog = await db.accessLog.create({
+      data: {
+        userId,
+        method: 'MONITOR_DOOR',
+        path: opening ? 'DOOR_OPEN_MANUAL' : trigger === 'AUTO' ? 'DOOR_CLOSE_AUTO' : 'DOOR_CLOSE_MANUAL',
+        ip: deviceCode,
+        createdAt: now,
+      },
+    });
+    faceVerificationMonitoringBus.recordDoorAction({
+      id: `db-${accessLog.id}`,
+      student_code: `admin_${userId}`,
+      direction: opening ? 'IN' : 'OUT',
+      confidence: 1,
+      scanned_at: now.toISOString(),
+      device_code: deviceCode,
+      action: opening ? 'door_open_manual' : trigger === 'AUTO' ? 'door_close_auto' : 'door_close_manual',
+      door_trigger: trigger,
+      student: { code: `admin_${userId}`, name: `Admin #${userId}`, room: 'Main gate' },
+    });
+    return now;
+  }
+
+  static getSimulatedDoorStatus(deviceCode: string): 'OPEN' | 'CLOSED' {
+    return this.simulatedDoorOpen.has(deviceCode) ? 'OPEN' : 'CLOSED';
+  }
+
+  static async getMonitorHistory(now = new Date()) {
+    // Bangkok has a fixed UTC+7 offset. Use a half-open day range independent of host TZ.
+    const offset = 7 * 60 * 60 * 1000;
+    const local = new Date(now.getTime() + offset);
+    const start = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - offset);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const range = { gte: start, lt: end };
+
+    const snapshot = await db.$transaction(async (tx) => {
+      const [logs, visitorLogs, residentCounts, visitorCounts] = await Promise.all([
+        tx.accessLog.findMany({
+          where: { method: { in: ['FACE_GATE', 'MONITOR_DOOR'] }, createdAt: range },
+          include: { user: { select: { id: true, username: true, email: true,
+            tenant: { select: { fullName: true, room: { select: { roomNumber: true } } } } } } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30,
+        }),
+        tx.visitorLog.findMany({
+          where: { eventType: { in: ['CHECK_IN', 'CHECK_OUT'] }, createdAt: range },
+          include: { visitor: { select: { id: true, guestName: true } } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30,
+        }),
+        tx.accessLog.groupBy({ by: ['path'],
+          where: { method: 'FACE_GATE', path: { in: ['IN', 'OUT', 'CHECKIN', 'CHECKOUT'] }, createdAt: range },
+          _count: { _all: true } }),
+        tx.visitorLog.groupBy({ by: ['eventType'],
+          where: { eventType: { in: ['CHECK_IN', 'CHECK_OUT'] }, createdAt: range },
+          _count: { _all: true } }),
+      ]);
+      return { logs, visitorLogs, residentCounts, visitorCounts };
+    }, { isolationLevel: 'RepeatableRead' });
+
+    const scans: CameraScanSnapshot[] = snapshot.logs.map((log) => {
+      const door = log.method === 'MONITOR_DOOR';
+      const opening = log.path === 'DOOR_OPEN_MANUAL';
+      const out = door ? !opening : log.path === 'OUT' || log.path === 'CHECKOUT';
+      const code = log.userId ? `${door ? 'admin' : 'user'}_${log.userId}` : 'unknown';
+      return {
+        id: `db-${log.id}`, student_code: code, direction: out ? 'OUT' : 'IN',
+        confidence: door ? 1 : log.duration !== null ? Math.min(1, Math.max(0, log.duration / 100)) : 0,
+        scanned_at: log.createdAt.toISOString(), device_code: log.ip || 'MAIN_GATE_01',
+        action: door ? opening ? 'door_open_manual' : log.path === 'DOOR_CLOSE_AUTO' ? 'door_close_auto' : 'door_close_manual'
+          : out ? 'checkout' : 'checkin',
+        activity_type: door ? 'DOOR' : 'FACE_SCAN',
+        ...(door ? { door_trigger: log.path === 'DOOR_CLOSE_AUTO' ? 'AUTO' as const : 'MANUAL' as const } : {}),
+        student: { code,
+          name: log.user?.tenant?.fullName || log.user?.username || log.user?.email || 'ผู้ใช้งาน',
+          room: door ? 'Main gate' : log.user?.tenant?.room?.roomNumber || 'Resident' },
+      };
+    });
+    for (const log of snapshot.visitorLogs) {
+      const score = Number(log.note?.match(/confidence: ([0-9.]+)/)?.[1] ?? 0);
+      const code = `visitor_${log.visitorId}`;
+      scans.push({ id: `visitor-db-${log.id}`, student_code: code,
+        direction: log.eventType === 'CHECK_OUT' ? 'OUT' : 'IN',
+        action: log.eventType === 'CHECK_OUT' ? 'checkout' : 'checkin', activity_type: 'FACE_SCAN',
+        confidence: Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0,
+        scanned_at: log.createdAt.toISOString(), student: { code, name: log.visitor.guestName, room: 'Visitor' } });
+    }
+    let inCount = 0;
+    let outCount = 0;
+    for (const group of snapshot.residentCounts) {
+      if (group.path === 'IN' || group.path === 'CHECKIN') inCount += group._count._all;
+      else outCount += group._count._all;
+    }
+    for (const group of snapshot.visitorCounts) {
+      if (group.eventType === 'CHECK_IN') inCount += group._count._all;
+      else outCount += group._count._all;
+    }
+    const items = scans.sort((a, b) => Date.parse(b.scanned_at) - Date.parse(a.scanned_at) || b.id.localeCompare(a.id)).slice(0, 30);
+    return { scans: items, items, today_counts: { in: inCount, out: outCount, total: inCount + outCount },
+      timezone: 'Asia/Bangkok', day_start: start.toISOString(), day_end: end.toISOString(),
+      door_status: this.getSimulatedDoorStatus('MAIN_GATE_01') };
+  }
+
+  static async commandSimulatedDoor(userId: number, deviceCode: string, action: 'unlock' | 'lock') {
+    if (!Number.isInteger(userId) || userId <= 0) throw new AppError('Invalid admin identity', 401);
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(deviceCode)) throw new AppError('Invalid device_code', 400);
+
+    if (action === 'unlock') {
+      if (this.simulatedDoorOpen.has(deviceCode)) throw new AppError('Door is already open', 409);
+      const openedAt = await this.recordSimulatedDoorEvent(userId, deviceCode, action, 'MANUAL');
+      this.simulatedDoorOpen.add(deviceCode);
+      const timer = setTimeout(() => {
+        this.simulatedDoorTimers.delete(deviceCode);
+        this.simulatedDoorOpen.delete(deviceCode);
+        void this.recordSimulatedDoorEvent(userId, deviceCode, 'lock', 'AUTO').catch((error) => {
+          logger.error({ error, deviceCode, userId }, 'Failed to persist simulated door auto-close event');
+        });
+      }, 5000);
+      timer.unref?.();
+      this.simulatedDoorTimers.set(deviceCode, timer);
+      return { status: 'OPEN', simulated: true, auto_close_at: new Date(openedAt.getTime() + 5000).toISOString() };
+    }
+
+    if (!this.simulatedDoorOpen.has(deviceCode)) {
+      return { status: 'CLOSED', simulated: true, already_closed: true };
+    }
+    await this.recordSimulatedDoorEvent(userId, deviceCode, 'lock', 'MANUAL');
+    const timer = this.simulatedDoorTimers.get(deviceCode);
+    if (timer) clearTimeout(timer);
+    this.simulatedDoorTimers.delete(deviceCode);
+    this.simulatedDoorOpen.delete(deviceCode);
+    return { status: 'CLOSED', simulated: true, already_closed: false };
+  }
+
   private static shouldUseRedis(): boolean {
     return (
       process.env.NODE_ENV !== 'test' &&

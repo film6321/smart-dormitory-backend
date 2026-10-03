@@ -6,7 +6,8 @@ import path from 'node:path';
 import { FaceVerificationService } from '../../src/modules/face-verification/face-verification.service';
 import { prisma } from '../../src/database/db';
 import { Prisma } from '@prisma/client';
-import { faceVerificationMonitoringBus } from '../../src/modules/face-verification/face-verification-monitoring';
+import { faceVerificationMonitoringBus, type CameraScanSnapshot } from '../../src/modules/face-verification/face-verification-monitoring';
+import * as notificationGateway from '../../src/realtime/notification-gateway';
 
 describe('FaceVerificationService (unit)', () => {
   const restorers: Array<() => void> = [];
@@ -600,6 +601,100 @@ describe('FaceVerificationService (unit)', () => {
     const visitorLookup = stub(prisma.visitor, 'findUnique', async () => ({ id: 99 }));
     await assert.rejects(FaceVerificationService.registerFace(99, Buffer.from('test'), 'image/jpeg', 'test.jpg'), /owner not found/);
     assert.equal(visitorLookup.mock.callCount(), 0);
+  });
+
+  it('uses Bangkok day boundaries and full-day database totals rather than the latest 30 rows', async () => {
+    const now = new Date('2026-10-02T17:00:00.000Z'); // Midnight on October 3 in Bangkok.
+    const start = '2026-10-02T17:00:00.000Z';
+    const end = '2026-10-03T17:00:00.000Z';
+    const assertRange = (range: Prisma.AccessLogWhereInput['createdAt'] | Prisma.VisitorLogWhereInput['createdAt']) => {
+      assert.ok(range && typeof range === 'object' && !(range instanceof Date));
+      assert.equal(new Date(String(range.gte)).toISOString(), start);
+      assert.equal(new Date(String(range.lt)).toISOString(), end);
+    };
+    stub(prisma.accessLog, 'findMany', async (args: Prisma.AccessLogFindManyArgs) => {
+      assertRange(args.where?.createdAt);
+      assert.equal(args.take, 30);
+      return Array.from({ length: 30 }, (_, index) => ({
+        id: index + 1, userId: 99, user: null, method: index === 0 ? 'MONITOR_DOOR' : 'FACE_GATE',
+        path: index === 0 ? 'DOOR_CLOSE_MANUAL' : 'IN', ip: 'MAIN_GATE_01', duration: 95,
+        createdAt: new Date(now.getTime() + index * 1000),
+      }));
+    });
+    stub(prisma.visitorLog, 'findMany', async () => [{ id: 1, visitorId: 5, visitor: { guestName: 'Test visitor' },
+      eventType: 'CHECK_OUT', note: 'confidence: 0.82', createdAt: new Date(now.getTime() + 60000) }]);
+    stub(prisma.accessLog, 'groupBy', async (args: Prisma.AccessLogGroupByArgs) => {
+      assert.equal(args.where?.method, 'FACE_GATE');
+      assertRange(args.where?.createdAt);
+      return [{ path: 'IN', _count: { _all: 42 } }, { path: 'OUT', _count: { _all: 11 } }];
+    });
+    stub(prisma.visitorLog, 'groupBy', async (args: Prisma.VisitorLogGroupByArgs) => {
+      assertRange(args.where?.createdAt);
+      return [{ eventType: 'CHECK_IN', _count: { _all: 3 } }, { eventType: 'CHECK_OUT', _count: { _all: 2 } }];
+    });
+    faceVerificationMonitoringBus.recordScan({ id: 'old-live-id', student_code: 'user_99',
+      direction: 'IN', confidence: 0.95, scanned_at: now.toISOString() });
+    const history = await FaceVerificationService.getMonitorHistory(now);
+    assert.deepEqual(history.today_counts, { in: 45, out: 13, total: 58 });
+    assert.equal(history.scans.length, 30);
+    assert.equal(history.scans[0].id, 'visitor-db-1');
+    assert.equal(new Set(history.scans.map(item => item.id)).size, 30);
+    assert.equal(history.scans.some(item => item.id === 'old-live-id'), false);
+    assert.equal(history.timezone, 'Asia/Bangkok');
+    assert.equal(history.day_start, start);
+    assert.equal(history.day_end, end);
+    faceVerificationMonitoringBus.clearScanHistory();
+  });
+
+  it('does not count simulated door actions as check-in or check-out', async () => {
+    stub(prisma.accessLog, 'findMany', async () => [{ id: 8, userId: 1, user: null,
+      method: 'MONITOR_DOOR', path: 'DOOR_CLOSE_MANUAL', ip: 'MAIN_GATE_01', duration: null, createdAt: new Date() }]);
+    stub(prisma.visitorLog, 'findMany', async () => []);
+    stub(prisma.accessLog, 'groupBy', async () => []);
+    stub(prisma.visitorLog, 'groupBy', async () => []);
+    const history = await FaceVerificationService.getMonitorHistory();
+    assert.deepEqual(history.today_counts, { in: 0, out: 0, total: 0 });
+    assert.equal(history.scans[0].action, 'door_close_manual');
+    assert.equal(history.scans[0].activity_type, 'DOOR');
+  });
+
+  it('sends open and automatic close to SSE history and Socket only after persistence', async (t) => {
+    const activities: CameraScanSnapshot[] = [];
+    let logId = 0;
+    stub(prisma.accessLog, 'create', async () => ({ id: ++logId }));
+    stub(notificationGateway, 'publishRealtimeEvent', (name: string, payload: CameraScanSnapshot) => {
+      assert.equal(name, 'faceGateActivity');
+      assert.equal(payload.id, `db-${logId}`);
+      activities.push(payload);
+    });
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const device = 'AUTO_CLOSE_TEST';
+    await FaceVerificationService.commandSimulatedDoor(1, device, 'unlock');
+    assert.equal(activities[0].action, 'door_open_manual');
+    assert.equal(activities[0].direction, 'IN');
+    t.mock.timers.tick(5000);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(activities.length, 2);
+    assert.equal(activities[1].action, 'door_close_auto');
+    assert.equal(activities[1].direction, 'OUT');
+    assert.equal(FaceVerificationService.getSimulatedDoorStatus(device), 'CLOSED');
+    assert.ok(faceVerificationMonitoringBus.getScanHistory().some(item => item.id === activities[1].id && item.action === 'door_close_auto'));
+  });
+
+  it('manual close cancels the automatic close and sends one close activity', async (t) => {
+    const activities: CameraScanSnapshot[] = [];
+    let logId = 100;
+    stub(prisma.accessLog, 'create', async () => ({ id: ++logId }));
+    stub(notificationGateway, 'publishRealtimeEvent', (_name: string, payload: CameraScanSnapshot) => activities.push(payload));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const device = 'MANUAL_CLOSE_TEST';
+    await FaceVerificationService.commandSimulatedDoor(1, device, 'unlock');
+    await FaceVerificationService.commandSimulatedDoor(1, device, 'lock');
+    t.mock.timers.tick(5000);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.deepEqual(activities.map(item => item.action), ['door_open_manual', 'door_close_manual']);
+    assert.equal(activities[1].direction, 'OUT');
+    assert.equal(FaceVerificationService.getSimulatedDoorStatus(device), 'CLOSED');
   });
 
   it('clears scan history from monitoring bus', () => {

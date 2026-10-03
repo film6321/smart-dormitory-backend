@@ -5,10 +5,10 @@ import { prisma } from '../../database/db';
 import { createResponse } from '../../shared/api-response';
 import { FaceVerificationService } from './face-verification.service';
 import { logger } from '../../logger';
-import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { faceVerificationMonitoringBus, type CameraScanSnapshot } from './face-verification-monitoring';
 import { faceVerificationStream } from './face-verification-stream';
 import { recordFaceVerificationAttempt } from '../../setup/observability-metrics';
+import type { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 
 export class FaceVerificationController {
   // ── Existing Endpoints (for backward-compatibility with current frontend) ──
@@ -74,7 +74,7 @@ export class FaceVerificationController {
         if (!cooldownActive && scan.id && scan.scanned_at) faceVerificationMonitoringBus.recordScan({
           id: scan.id, student_code: studentCode, direction,
           confidence: data.similarity, scanned_at: scan.scanned_at, device_code: deviceCode,
-          action: scan.action, student: scan.student,
+          action: scan.action, activity_type: 'FACE_SCAN', student: scan.student,
         });
       }
 
@@ -234,6 +234,7 @@ export class FaceVerificationController {
           scanned_at: result.scanned_at,
           device_code,
           action: result.action,
+          activity_type: 'FACE_SCAN',
           student: result.student,
         });
       }
@@ -261,7 +262,7 @@ export class FaceVerificationController {
 
   static async doorCommand(req: Request, res: Response, next: NextFunction) {
     try {
-      const { device_code, action, timestamp } = req.body ?? {};
+      const { device_code, action } = req.body ?? {};
       const normalizedAction = typeof action === 'string' ? action.toLowerCase() : '';
 
       if (!device_code) {
@@ -272,21 +273,10 @@ export class FaceVerificationController {
         return res.status(400).json(createResponse(400, 'action must be either lock or unlock'));
       }
 
-      const payload = {
-        device_code,
-        action: normalizedAction,
-        timestamp: timestamp || new Date().toISOString(),
-        status: normalizedAction === 'unlock' ? 'opened' : 'locked',
-      };
-
-      logger.info({ ...payload }, 'Door command processed');
-      publishAdminAlert(
-        0,
-        'DOOR_COMMAND',
-        normalizedAction === 'unlock' ? `เปิดประตู ${device_code}` : `ปิดประตู ${device_code}`,
-        payload.status.toUpperCase(),
-      );
-      return res.status(200).json(createResponse(200, 'Door command processed successfully', payload));
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) return res.status(401).json(createResponse(401, 'Authenticated admin identity is required'));
+      const result = await FaceVerificationService.commandSimulatedDoor(userId, String(device_code), normalizedAction as 'unlock' | 'lock');
+      return res.status(200).json(createResponse(200, 'Simulated door state updated', result));
     } catch (error) {
       next(error);
     }
@@ -350,65 +340,8 @@ export class FaceVerificationController {
 
   static async scanHistory(_req: Request, res: Response, next: NextFunction) {
     try {
-      const liveItems = faceVerificationMonitoringBus.getScanHistory();
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-
-      const dbLogs = await prisma.accessLog.findMany({
-        where: {
-          method: 'FACE_GATE',
-          createdAt: { gte: startOfToday },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              tenant: { select: { fullName: true, room: { select: { roomNumber: true } } } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
-      });
-
-      const mergedMap = new Map<string, CameraScanSnapshot>();
-      liveItems.forEach((item) => mergedMap.set(item.id, item));
-
-      for (const log of dbLogs) {
-        const id = `db-${log.id}`;
-        if (!mergedMap.has(id)) {
-          const isOut = log.path === 'OUT' || log.path === 'CHECKOUT';
-          const direction: 'IN' | 'OUT' = isOut ? 'OUT' : 'IN';
-          const studentName = log.user?.tenant?.fullName || log.user?.username || log.user?.email || (log.userId ? `Resident #${log.userId}` : 'ผู้พักอาศัย');
-          const room = log.user?.tenant?.room?.roomNumber ? `ห้อง ${log.user.tenant.room.roomNumber}` : 'หอพัก';
-
-          mergedMap.set(id, {
-            id,
-            student_code: log.userId ? `user_${log.userId}` : 'unknown',
-            direction,
-            confidence: log.duration ? Math.min(1, log.duration / 100) : 0.95,
-            scanned_at: log.createdAt.toISOString(),
-            device_code: log.ip || 'MAIN_GATE_01',
-            action: direction === 'IN' ? 'checkin' : 'checkout',
-            student: {
-              code: log.userId ? `user_${log.userId}` : 'unknown',
-              name: studentName,
-              room,
-            },
-          });
-        }
-      }
-
-      const items = Array.from(mergedMap.values()).slice(0, 30);
-
-      return res.status(200).json(
-        createResponse(200, 'Scan history retrieved successfully', {
-          scans: items,
-          items,
-        }),
-      );
+      const history = await FaceVerificationService.getMonitorHistory();
+      return res.status(200).json(createResponse(200, 'Scan history retrieved successfully', history));
     } catch (error) {
       next(error);
     }
@@ -425,7 +358,7 @@ export class FaceVerificationController {
       if (clearDb) {
         const deleteResult = await prisma.accessLog.deleteMany({
           where: {
-            method: { in: ['FACE_GATE', 'FACE_VERIFY'] },
+            method: { in: ['FACE_GATE', 'FACE_VERIFY', 'MONITOR_DOOR'] },
           },
         });
         deletedCount = deleteResult.count;

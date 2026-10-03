@@ -29,6 +29,15 @@
 
 ## 3. Server → Client Events
 
+### `faceGateActivity` (Monitor)
+
+- **Recipients:** `admins`; ส่งหลังบันทึกกิจกรรมลง PostgreSQL สำเร็จ
+- Payload ใช้ `CameraScanSnapshot`: `id`, `student_code`, `direction` (`IN`/`OUT`), `confidence`, `scanned_at` และข้อมูลเสริม `student`, `device_code`, `action`
+- `activity_type`: `FACE_SCAN` หรือ `DOOR`; เหตุการณ์ประตูมี `door_trigger` เป็น `MANUAL` หรือ `AUTO`
+- Frontend ใช้ ID เดียวกับประวัติเพื่อระบุกิจกรรม และใช้สีเขียวสำหรับ IN/เปิด สีแดงสำหรับ OUT/ปิด
+- ประตูปิดอัตโนมัติมีแจ้งเตือนและประวัติ แต่ไม่เพิ่มยอด Check-out ซึ่งนับเฉพาะการสแกนออก
+- API interceptor ไม่สร้าง toast สำเร็จซ้ำสำหรับ `door-command`; Monitor รับ SSE เพื่ออัปเดตประวัติและอ่านยอดจาก API
+
 ### `visitorScanEvent`
 
 - **Recipients:** `admins` group

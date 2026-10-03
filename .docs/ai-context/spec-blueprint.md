@@ -37,15 +37,21 @@
 ```
 
 ### Visitor Access Flow
-```text
-ผู้ติดต่อลงทะเบียน (Register)
-  → POST /api/visitor/register
-  → สแกนบัตรประชาชน OCR + Face Verification
-  → Visitor status: REGISTERED → VERIFYING → APPROVED
-  → กดให้สแกนคีย์การ์ด: → CHECKED_IN
-  → Socket.IO broadcast "visitorScanEvent" ไปยัง admins group
-```
 
+สถานะ: ฟอร์ม/Backend validation/การหมดอายุ implement แล้ว; การสั่งประตูจริงและ access event รอข้อมูลอุปกรณ์:
+ผู้มาติดต่อยินยอม PDPA
+  → อัปโหลดบัตรประชาชนและตรวจ/แก้ข้อมูล OCR
+  → กรอกชื่อ ที่อยู่ เลขบัตร และเลขห้องที่มีอยู่จริง (ข้อมูลบังคับ)
+  → ยืนยันส่งคำขอ → บันทึก REGISTERED และแจ้ง Admin
+  → Admin ค้นคำขอเมื่อผู้มาติดต่อมาถึง และให้ผู้มาติดต่อแจ้งชื่อผู้เช่าที่ต้องการพบ
+  → Admin ตรวจว่าชื่อผู้เช่าตรงกับห้องในคำขอ แล้วสั่งเปิดประตูจำลองใน Monitor (ยังไม่เชื่อมฮาร์ดแวร์; response ระบุ simulated: true)
+  → เมื่ออุปกรณ์ตอบยืนยัน จึงบันทึก access event แยกจากสถานะคำขอ; การเปิดประตูไม่เปลี่ยนเป็น CHECKED_IN
+
+กรณีไม่มีเหตุการณ์อนุญาตเข้าภายใน 24 ชั่วโมงนับจากเวลาส่งคำขอ:
+  → งานหมดอายุเปลี่ยน REGISTERED เป็น EXPIRED ใน PostgreSQL
+  → แจ้ง Admin/ปรับรายการในหน้าประวัติให้เห็นสถานะหมดอายุ
+
+ข้อกำหนดความปลอดภัย: API อ่าน pass/ยกเลิกจำกัดเฉพาะ Admin; การลงทะเบียนใช้ Idempotency-Key และไม่สร้าง QR ที่บรรจุข้อมูลส่วนบุคคล
 ### Maintenance Flow
 ```text
 ผู้เช่าแจ้งซ่อม

@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import { EventEmitter } from 'events';
+import { publishRealtimeEvent } from '../../realtime/notification-gateway';
 
 export type CameraDeviceStatus = 'ONLINE' | 'OFFLINE';
 
@@ -18,6 +19,8 @@ export interface CameraScanSnapshot {
   scanned_at: string;
   device_code?: string;
   action?: string;
+  activity_type?: 'FACE_SCAN' | 'DOOR';
+  door_trigger?: 'MANUAL' | 'AUTO';
   student?: {
     code: string;
     name: string;
@@ -173,6 +176,13 @@ class FaceVerificationMonitoringBus {
     }
 
     this.emitEvent('scan', scan);
+    if (scan.activity_type === 'FACE_SCAN' || scan.activity_type === 'DOOR') {
+      publishRealtimeEvent('faceGateActivity', scan);
+    }
+  }
+
+  public recordDoorAction(event: CameraScanSnapshot) {
+    this.recordScan({ ...event, activity_type: 'DOOR' });
   }
 
   public getSnapshot() {
