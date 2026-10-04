@@ -78,6 +78,7 @@ RESOLVED    -> CLOSED
 ### 3.3 Semantics
 
 - Terminal states: `CLOSED`, `CANCELLED` — ไม่มี outgoing transition
+- `RESOLVED` แก้ไขต่อได้เฉพาะการยืนยันปิดงานเป็น `CLOSED`; ห้ามย้อนกลับ ยกเลิก หรือลบรายการที่ซ่อมเสร็จแล้ว.
 - รายการ `CLOSED` และ `CANCELLED` ดูประวัติได้เท่านั้น ห้ามแก้สถานะ ข้อมูล/หมายเหตุ หรือลบรายการ; หากต้องแจ้งซ่อมอีกให้สร้างรายการใหม่.
 - เมื่อ `RESOLVED` → ส่ง Socket.IO แจ้งผู้เช่าทันที
 

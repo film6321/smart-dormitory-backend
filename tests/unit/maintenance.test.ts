@@ -119,6 +119,19 @@ it('rate limits creation and upload together before database work', async (t) =>
 });
 
 describe('MaintenanceService validation and transitions', () => {
+  it('only allows closing a resolved ticket and prevents deletion', async (t) => {
+    t.mock.method(MaintenanceRepository, 'getTicketById', async () => ({ ...ticket, status: MaintenanceStatus.RESOLVED }));
+    const write = t.mock.method(MaintenanceRepository, 'updateTicketStatus', async () => ({ ...ticket, status: MaintenanceStatus.CLOSED }));
+    const remove = t.mock.method(MaintenanceRepository, 'deleteTicket', async () => ticket);
+    t.mock.method(gateway, 'publishAdminAlert', () => {});
+    for (const target of Object.values(MaintenanceStatus).filter((status) => status !== MaintenanceStatus.CLOSED)) {
+      await assert.rejects(MaintenanceService.updateTicketStatus(1, target), { statusCode: 409 });
+    }
+    await assert.rejects(MaintenanceService.deleteTicket(1), { statusCode: 409 });
+    assert.equal(remove.mock.callCount(), 0);
+    assert.equal(write.mock.callCount(), 0);
+    assert.equal((await MaintenanceService.updateTicketStatus(1, 'CLOSED')).status, 'CLOSED');
+  });
   for (const status of [MaintenanceStatus.CLOSED, MaintenanceStatus.CANCELLED]) {
     it(`rejects all status and note changes for ${status}`, async (t) => {
       t.mock.method(MaintenanceRepository, 'getTicketById', async () => ({ ...ticket, status }));
@@ -162,9 +175,10 @@ describe('MaintenanceService validation and transitions', () => {
     });
     await MaintenanceRepository.updateTicketStatus(1, { status: MaintenanceStatus.APPROVED }, mockDb);
     await MaintenanceRepository.deleteTicket(1, mockDb);
-    const expected = { id: 1, status: { notIn: ['CLOSED', 'CANCELLED'] } };
-    assert.deepEqual(update.mock.calls[0].arguments[0]?.where, expected);
-    assert.deepEqual(remove.mock.calls[0].arguments[0]?.where, expected);
+    assert.deepEqual(update.mock.calls[0].arguments[0]?.where, { id: 1, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } });
+    await MaintenanceRepository.updateTicketStatus(1, { status: MaintenanceStatus.CLOSED }, mockDb);
+    assert.deepEqual(update.mock.calls[1].arguments[0]?.where, { id: 1, status: { notIn: ['CLOSED', 'CANCELLED'] } });
+    assert.deepEqual(remove.mock.calls[0].arguments[0]?.where, { id: 1, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } });
   });
 
   it('returns conflict without publishing when a ticket closes during update', async (t) => {

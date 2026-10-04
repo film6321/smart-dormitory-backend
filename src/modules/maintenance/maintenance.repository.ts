@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { MaintenanceStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 
@@ -54,14 +54,17 @@ export class MaintenanceRepository {
   }
 
   static async updateTicketStatus(id: number, data: Prisma.MaintenanceTicketUpdateInput, db = prisma) {
+    const blockedStatuses = data.status === MaintenanceStatus.CLOSED
+      ? [MaintenanceStatus.CLOSED, MaintenanceStatus.CANCELLED]
+      : [MaintenanceStatus.RESOLVED, MaintenanceStatus.CLOSED, MaintenanceStatus.CANCELLED];
     return db.maintenanceTicket.update({
-      where: { id, status: { notIn: ['CLOSED', 'CANCELLED'] } }, data,
+      where: { id, status: { notIn: blockedStatuses } }, data,
     });
   }
 
   static async deleteTicket(id: number, db = prisma) {
     return db.maintenanceTicket.delete({
-      where: { id, status: { notIn: ['CLOSED', 'CANCELLED'] } },
+      where: { id, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } },
     });
   }
 }

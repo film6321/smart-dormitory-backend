@@ -20,7 +20,6 @@ const maintenanceTransitions = new Set([
   // Revert transitions (for correction)
   ['APPROVED', 'PENDING'],
   ['IN_PROGRESS', 'APPROVED'],
-  ['RESOLVED', 'IN_PROGRESS'],
 ]);
 
 const visitorTransitions = new Set([

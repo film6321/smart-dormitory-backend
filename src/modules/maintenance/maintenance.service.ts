@@ -75,7 +75,7 @@ export class MaintenanceService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         const current = await MaintenanceRepository.getTicketById(id);
-        throw new AppError(current ? 'Maintenance ticket is closed or cancelled' : 'Maintenance ticket not found', current ? 409 : 404);
+        throw new AppError(current ? 'Maintenance ticket is resolved, closed or cancelled' : 'Maintenance ticket not found', current ? 409 : 404);
       }
       throw error;
     }
@@ -86,15 +86,15 @@ export class MaintenanceService {
     if (!ticket) {
       throw new AppError('Maintenance ticket not found', 404);
     }
-    if (ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
-      throw new AppError('Closed or cancelled maintenance tickets cannot be deleted', 409);
+    if (ticket.status === MaintenanceStatus.RESOLVED || ticket.status === MaintenanceStatus.CLOSED || ticket.status === MaintenanceStatus.CANCELLED) {
+      throw new AppError('Resolved, closed or cancelled maintenance tickets cannot be deleted', 409);
     }
     try {
       return await MaintenanceRepository.deleteTicket(id);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         const current = await MaintenanceRepository.getTicketById(id);
-        throw new AppError(current ? 'Closed or cancelled maintenance tickets cannot be deleted' : 'Maintenance ticket not found', current ? 409 : 404);
+        throw new AppError(current ? 'Resolved, closed or cancelled maintenance tickets cannot be deleted' : 'Maintenance ticket not found', current ? 409 : 404);
       }
       throw error;
     }
