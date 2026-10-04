@@ -96,6 +96,8 @@ Stores all persistent application data.
 
 ผลตรวจ runtime เพิ่มเติม 2026-10-04: rebuild เฉพาะ Backend Docker แล้ว; health ผ่าน gateway :3002 และ Vite proxy :5174 ตอบ 200. บัญชี test01@gmail.com มีอยู่แล้ว จึงไม่เปลี่ยนรหัส/สิทธิ์; สร้างห้องทดสอบ 100 และ Tenant สำหรับบัญชีนี้ตามอนุมัติ. Login API และ Tenant/me ตอบ 200 และผูกห้อง 100 ถูกต้อง. ทดสอบ repository กับ PostgreSQL จริงส่งพร้อมกัน 4 ครั้ง สร้างสำเร็จ 3 รายการ อีกคำขอถูกปฏิเสธ 429; ตรวจ API คำขอที่ 4 ตอบ 429 เช่นกัน. ทดสอบ service กับรายการที่สร้างเอง: CLOSED/CANCELLED เปลี่ยนสถานะและลบถูกปฏิเสธ 409; student เรียก API แก้/ลบได้ 403. ทดสอบไม่คืนโควตาหลังลบใน transaction และ rollback เพื่อเก็บรายการ Pending ไว้. คง test tickets #244 CLOSED, #245 CANCELLED, #246 PENDING. ยังไม่ได้ยืนยันการกดหน้าจอ Admin ใน browser ด้วย session Admin จริง.
 
+แก้จากผลทดสอบผู้ใช้: modal รวมรายห้องแสดงงานที่ยังไม่ CLOSED/CANCELLED รวม APPROVED, IN_PROGRESS และ RESOLVED เพื่อไม่ให้รายการหายหลังอนุมัติ; ขยายเฉพาะ modal เป็นสูงสุด 1200px พร้อมเลื่อนตามขนาดหน้าจอ. RESOLVED มีเฉพาะการยืนยันปิดงานเป็น CLOSED ห้ามย้อน/ยกเลิก/ลบ โดยตรวจทั้ง service และเงื่อนไข database write เพื่อป้องกันคำขอที่ชนกัน. ใช้ formatMaintenanceContactTime ใน hook เดิมร่วมกันทั้งตารางและการ์ด/รายละเอียด แสดงวันเวลาใน Asia/Bangkok และคงช่วงเวลาแบบข้อความเดิม. ไม่เพิ่มไฟล์หรือ package.
+
 ### แนวทางที่เหมาะกับโปรเจกต์
 
 คง Modular Monolith และแบ่งโค้ดตามฟีเจอร์ที่ `src/modules/<feature>/` ภายในแต่ละฟีเจอร์แยกหน้าที่เป็น routes, controller, service, repository และ DTO ตามความจำเป็นจริง ไม่สร้างโฟลเดอร์ `controllers/`, `services/`, `repositories/` เพิ่มในทุกโมดูลเพียงเพื่อให้รูปแบบเหมือนกัน.
