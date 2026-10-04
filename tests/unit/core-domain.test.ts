@@ -110,7 +110,7 @@ describe('core domain services', () => {
           roomNumber: data.roomNumber,
           floor: data.floor ?? null,
           status: data.status ?? 'AVAILABLE',
-          capacity: data.capacity ?? 1,
+          capacity: data.capacity ?? 4,
           monthlyRent: new Prisma.Decimal(data.monthlyRent as number),
           description: data.description ?? null,
           createdAt: new Date(),
@@ -130,5 +130,17 @@ describe('core domain services', () => {
 
     assert.equal(room.roomNumber, '101');
     assert.equal(Number(room.monthlyRent), 4500);
+    assert.equal(room.capacity, 2);
+
+    const defaultRoom = await RoomsService.createRoom(
+      { roomNumber: ' 102 ', monthlyRent: 4500 },
+      fakePrisma
+    );
+    assert.equal(defaultRoom.capacity, 4);
+
+    await assert.rejects(
+      RoomsService.createRoom({ roomNumber: '103', monthlyRent: 4500, capacity: 5 }, fakePrisma),
+      /Room capacity cannot exceed 4/
+    );
   });
 });

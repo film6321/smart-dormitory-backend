@@ -232,7 +232,7 @@ model Room {
   roomNumber  String   @unique
   floor       Int?
   status      String   @default("AVAILABLE")
-  capacity    Int      @default(1)
+  capacity    Int      @default(4)
   monthlyRent Decimal  @db.Decimal(10, 2)
   description String?
   createdAt   DateTime @default(now())

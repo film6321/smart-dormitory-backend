@@ -7,6 +7,8 @@
 
 This index records routes mounted by the current backend. DTO details and validation must be taken from the route/controller and its DTO file; do not infer a payload from an older document.
 
+Room creation (`POST /api/rooms`): omitted `capacity` defaults to 4 occupants in both the service and PostgreSQL schema. An explicitly supplied capacity remains subject to the `maxOccupants` setting (default 4). Changing the default does not modify existing rooms.
+
 ## Response rule
 
 REST endpoints return the shared `ApiResponse<T>` envelope unless they intentionally stream a file or are a health/metrics endpoint. The HTTP status must match `statusCode` in the response body.

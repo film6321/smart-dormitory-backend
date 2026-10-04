@@ -23,7 +23,8 @@ export class RoomsService {
 
   static async createRoom(data: CreateRoomInput, db?: DbClient) {
     const maxOccupants = Number(await getSettingValue('maxOccupants')) || 4;
-    if ((data.capacity ?? 1) > maxOccupants) {
+    const capacity = data.capacity ?? 4;
+    if (capacity > maxOccupants) {
       throw new AppError(`Room capacity cannot exceed ${maxOccupants}`, 400);
     }
     const roomNumber = data.roomNumber.trim().toUpperCase();
@@ -36,7 +37,7 @@ export class RoomsService {
       roomNumber,
       floor: data.floor ?? null,
       status: data.status ?? 'AVAILABLE',
-      capacity: data.capacity ?? 1,
+      capacity,
       monthlyRent: Number(data.monthlyRent),
       description: data.description?.trim() ?? null,
     }, db);
