@@ -1,8 +1,10 @@
 /// <reference lib="dom" />
+import { createHash } from 'node:crypto';
+import { FaceCleanupService, faceApiVerifyUrl } from './face-cleanup.service';
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { getRedisClient } from '../../shared/redis';
 import { AppError } from '../../middlewares/error-handler';
@@ -44,10 +46,11 @@ export class FaceVerificationService {
   private static readonly DEFAULT_DETECTION_INTERVAL = 4;
   private static readonly inMemoryCooldowns = new Map<string, number>();
   private static readonly simulatedDoorTimers = new Map<string, NodeJS.Timeout>();
+  private static readonly simulatedDoorAutoCloseAt = new Map<string, string>();
   private static readonly simulatedDoorOpen = new Set<string>();
 
   private static async recordSimulatedDoorEvent(
-    userId: number,
+    userId: number | null,
     deviceCode: string,
     action: 'unlock' | 'lock',
     trigger: 'MANUAL' | 'AUTO',
@@ -58,7 +61,7 @@ export class FaceVerificationService {
       data: {
         userId,
         method: 'MONITOR_DOOR',
-        path: opening ? 'DOOR_OPEN_MANUAL' : trigger === 'AUTO' ? 'DOOR_CLOSE_AUTO' : 'DOOR_CLOSE_MANUAL',
+        path: opening ? trigger === 'AUTO' ? 'DOOR_OPEN_AUTO' : 'DOOR_OPEN_MANUAL' : trigger === 'AUTO' ? 'DOOR_CLOSE_AUTO' : 'DOOR_CLOSE_MANUAL',
         ip: deviceCode,
         createdAt: now,
       },
@@ -70,15 +73,19 @@ export class FaceVerificationService {
       confidence: 1,
       scanned_at: now.toISOString(),
       device_code: deviceCode,
-      action: opening ? 'door_open_manual' : trigger === 'AUTO' ? 'door_close_auto' : 'door_close_manual',
+      action: opening ? trigger === 'AUTO' ? 'door_open_auto' : 'door_open_manual' : trigger === 'AUTO' ? 'door_close_auto' : 'door_close_manual',
       door_trigger: trigger,
-      student: { code: `admin_${userId}`, name: `Admin #${userId}`, room: 'Main gate' },
+      student: { code: userId ? `user_${userId}` : 'system', name: trigger === 'AUTO' ? 'ระบบประตูอัตโนมัติ' : `Admin #${userId}`, room: 'Main gate' },
     });
     return now;
   }
 
   static getSimulatedDoorStatus(deviceCode: string): 'OPEN' | 'CLOSED' {
     return this.simulatedDoorOpen.has(deviceCode) ? 'OPEN' : 'CLOSED';
+  }
+
+  static getSimulatedDoorAutoCloseAt(deviceCode: string): string | null {
+    return this.simulatedDoorAutoCloseAt.get(deviceCode) ?? null;
   }
 
   static async getMonitorHistory(now = new Date()) {
@@ -114,17 +121,17 @@ export class FaceVerificationService {
 
     const scans: CameraScanSnapshot[] = snapshot.logs.map((log) => {
       const door = log.method === 'MONITOR_DOOR';
-      const opening = log.path === 'DOOR_OPEN_MANUAL';
+      const opening = log.path === 'DOOR_OPEN_MANUAL' || log.path === 'DOOR_OPEN_AUTO';
       const out = door ? !opening : log.path === 'OUT' || log.path === 'CHECKOUT';
       const code = log.userId ? `${door ? 'admin' : 'user'}_${log.userId}` : 'unknown';
       return {
         id: `db-${log.id}`, student_code: code, direction: out ? 'OUT' : 'IN',
         confidence: door ? 1 : log.duration !== null ? Math.min(1, Math.max(0, log.duration / 100)) : 0,
         scanned_at: log.createdAt.toISOString(), device_code: log.ip || 'MAIN_GATE_01',
-        action: door ? opening ? 'door_open_manual' : log.path === 'DOOR_CLOSE_AUTO' ? 'door_close_auto' : 'door_close_manual'
+        action: door ? opening ? log.path === 'DOOR_OPEN_AUTO' ? 'door_open_auto' : 'door_open_manual' : log.path === 'DOOR_CLOSE_AUTO' ? 'door_close_auto' : 'door_close_manual'
           : out ? 'checkout' : 'checkin',
         activity_type: door ? 'DOOR' : 'FACE_SCAN',
-        ...(door ? { door_trigger: log.path === 'DOOR_CLOSE_AUTO' ? 'AUTO' as const : 'MANUAL' as const } : {}),
+        ...(door ? { door_trigger: log.path.endsWith('_AUTO') ? 'AUTO' as const : 'MANUAL' as const } : {}),
         student: { code,
           name: log.user?.tenant?.fullName || log.user?.username || log.user?.email || 'ผู้ใช้งาน',
           room: door ? 'Main gate' : log.user?.tenant?.room?.roomNumber || 'Resident' },
@@ -152,7 +159,8 @@ export class FaceVerificationService {
     const items = scans.sort((a, b) => Date.parse(b.scanned_at) - Date.parse(a.scanned_at) || b.id.localeCompare(a.id)).slice(0, 30);
     return { scans: items, items, today_counts: { in: inCount, out: outCount, total: inCount + outCount },
       timezone: 'Asia/Bangkok', day_start: start.toISOString(), day_end: end.toISOString(),
-      door_status: this.getSimulatedDoorStatus('MAIN_GATE_01') };
+      door_status: this.getSimulatedDoorStatus('MAIN_GATE_01'),
+      door_auto_close_at: this.getSimulatedDoorAutoCloseAt('MAIN_GATE_01') };
   }
 
   static async commandSimulatedDoor(userId: number, deviceCode: string, action: 'unlock' | 'lock') {
@@ -163,16 +171,9 @@ export class FaceVerificationService {
       if (this.simulatedDoorOpen.has(deviceCode)) throw new AppError('Door is already open', 409);
       const openedAt = await this.recordSimulatedDoorEvent(userId, deviceCode, action, 'MANUAL');
       this.simulatedDoorOpen.add(deviceCode);
-      const timer = setTimeout(() => {
-        this.simulatedDoorTimers.delete(deviceCode);
-        this.simulatedDoorOpen.delete(deviceCode);
-        void this.recordSimulatedDoorEvent(userId, deviceCode, 'lock', 'AUTO').catch((error) => {
-          logger.error({ error, deviceCode, userId }, 'Failed to persist simulated door auto-close event');
-        });
-      }, 5000);
-      timer.unref?.();
-      this.simulatedDoorTimers.set(deviceCode, timer);
-      return { status: 'OPEN', simulated: true, auto_close_at: new Date(openedAt.getTime() + 5000).toISOString() };
+      this.scheduleSimulatedDoorClose(userId, deviceCode);
+      return { status: 'OPEN', simulated: true,
+        auto_close_at: this.getSimulatedDoorAutoCloseAt(deviceCode) ?? new Date(openedAt.getTime() + 5000).toISOString() };
     }
 
     if (!this.simulatedDoorOpen.has(deviceCode)) {
@@ -182,6 +183,7 @@ export class FaceVerificationService {
     const timer = this.simulatedDoorTimers.get(deviceCode);
     if (timer) clearTimeout(timer);
     this.simulatedDoorTimers.delete(deviceCode);
+    this.simulatedDoorAutoCloseAt.delete(deviceCode);
     this.simulatedDoorOpen.delete(deviceCode);
     return { status: 'CLOSED', simulated: true, already_closed: false };
   }
@@ -248,6 +250,14 @@ export class FaceVerificationService {
     return frameIndex % interval === 0;
   }
 
+  private static async lockEnrollmentOwner(tx: Prisma.TransactionClient, userId: number | null, visitorId: number | null) {
+    if (userId !== null) await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+    else await tx.$queryRaw`SELECT id FROM "Visitor" WHERE id = ${visitorId} FOR UPDATE`;
+    const owner = userId !== null ? await tx.user.findUnique({ where: { id: userId } }) : await tx.visitor.findUnique({ where: { id: visitorId! } });
+    if (!owner) throw new AppError('Face owner not found', 404);
+    if (owner.faceRevokedAt) throw new AppError('Face access revoked', 403);
+  }
+
   /**
    * Registers a face photo by saving it to disk and recording it in FaceEnrollmentPhoto
    * and forwarding the photo to the Python Face Recognition API for embedding extraction.
@@ -275,24 +285,39 @@ export class FaceVerificationService {
     // 2. Save physical image to disk under uploads/face-photo/
     try {
       await fs.mkdir(UPLOAD_DIR, { recursive: true });
-      const ext = path.extname(fileName) || '.jpg';
-      const cleanFileName = `${actualUserId ? 'user' : 'visitor'}_${userId}_${Date.now()}${ext}`;
+      const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[mimeType];
+      if (!ext) throw new AppError('Unsupported face image type', 400);
+      const imageHash = createHash('sha256').update(fileBuffer).digest('hex');
+      const cleanFileName = `${actualUserId ? 'user' : 'visitor'}_${userId}_${imageHash}${ext}`;
       const fullPath = path.join(UPLOAD_DIR, cleanFileName);
       await fs.writeFile(fullPath, fileBuffer);
 
       const relativePath = path.join('uploads', 'face-photo', cleanFileName);
 
       // 3. Create metadata record in FaceEnrollmentPhoto
-      const photo = await db.faceEnrollmentPhoto.create({
-        data: {
-          userId: actualUserId,
-          visitorId: visitorId,
-          photoPath: relativePath,
-        },
+      const photo = await db.$transaction(async tx => {
+        await this.lockEnrollmentOwner(tx, actualUserId, visitorId);
+        const previous = await tx.faceEnrollmentPhoto.findFirst({ where: { userId: actualUserId, visitorId, photoPath: relativePath } });
+        return previous ?? tx.faceEnrollmentPhoto.create({ data: { userId: actualUserId, visitorId, photoPath: relativePath } });
+      }).catch(async error => {
+        // The fresh UUID path has no committed metadata; clean it if owner revocation won the race.
+        if (await db.faceEnrollmentPhoto.findFirst({ where: { photoPath: relativePath } })) throw error;
+        try { await fs.unlink(fullPath); }
+        catch (unlinkError) {
+          if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            const key = 'retention-file:' + createHash('sha256').update(fullPath).digest('hex');
+            await db.systemSetting.upsert({ where: { key }, create: { key, category: 'RETENTION_FILES', value: fullPath }, update: { value: fullPath } });
+          }
+        }
+        throw error;
       });
 
-      // 4. Forward photo to external Python Face Recognition API if configured
-      await this.forwardRegisterToExternalApi(userId, fileBuffer, mimeType, cleanFileName);
+      // Metadata is already durable if the external API fails. Keep the owner lock
+      // during forwarding so a committed deletion cannot be followed by stale enrollment.
+      await db.$transaction(async tx => {
+        await this.lockEnrollmentOwner(tx, actualUserId, visitorId);
+        await this.forwardRegisterToExternalApi(userId, fileBuffer, mimeType, cleanFileName);
+      }, { timeout: 10000 });
 
       return {
         id: photo.id,
@@ -363,15 +388,7 @@ export class FaceVerificationService {
    * Normalizes the Face API endpoint URL
    */
   private static normalizeFaceApiUrl(): string {
-    const rawUrl = process.env.FACE_API_URL?.trim() || 'http://127.0.0.1:8000';
-    const baseUrl = rawUrl.replace(/\/+$/u, '');
-    if (baseUrl.endsWith('/api/v1/faces/verify') || baseUrl.endsWith('/faces/verify')) {
-      return baseUrl;
-    }
-    if (baseUrl.endsWith('/api/v1')) {
-      return `${baseUrl}/faces/verify`;
-    }
-    return `${baseUrl}/api/v1/faces/verify`;
+    return faceApiVerifyUrl();
   }
 
   /**
@@ -386,7 +403,9 @@ export class FaceVerificationService {
     return {
       matched: false,
       user_id: null,
-      similarity: 0.1,
+      similarity: 0,
+      verification_available: false,
+      reason: 'UNAVAILABLE',
       processing_time_ms: 50,
       message: 'Face did not match registered templates',
     };
@@ -445,10 +464,11 @@ export class FaceVerificationService {
 
       const rawMatched = result.matched === true;
       const similarity = Number(result.similarity ?? 0);
+      const faceRejected = result.reason === 'NO_FACE_DETECTED' || result.reason === 'MULTIPLE_FACES_DETECTED';
 
       // Strict Threshold Guardrail:
       // Even if external API returns matched, ensure similarity meets the effective threshold to prevent false positives
-      const matched = rawMatched && Number.isFinite(similarity) && similarity <= 1 && similarity >= effectiveThreshold
+      const matched = rawMatched && !faceRejected && Number.isFinite(similarity) && similarity <= 1 && similarity >= effectiveThreshold
         && Number.isSafeInteger(result.user_id) && result.user_id > 0 && result.user_id !== 1000000;
       const matchedUserId = matched && result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
       let userName = matched ? result.message : undefined;
@@ -463,6 +483,9 @@ export class FaceVerificationService {
 
       return {
         matched,
+        reason: result.reason === 'NO_FACE_DETECTED' ? 'NO_FACE_DETECTED'
+          : result.reason === 'MULTIPLE_FACES_DETECTED' ? 'MULTIPLE_FACES_DETECTED'
+          : matched ? 'MATCHED' : 'NOT_MATCHED',
         user_id: matchedUserId,
         similarity,
         processing_time_ms: Number(result.processing_time_ms ?? 0),
@@ -517,48 +540,23 @@ export class FaceVerificationService {
   }
 
   static async deleteFaceTemplate(templateId: number): Promise<FaceDeleteResponse> {
+    if (!Number.isSafeInteger(templateId) || templateId <= 0) throw new AppError('Invalid template ID', 400);
     const photo = await db.faceEnrollmentPhoto.findUnique({ where: { id: templateId } });
-    if (!photo) throw new AppError('Enrollment photo not found', 404);
-    if ((photo.userId === null) === (photo.visitorId === null)) throw new AppError('Ambiguous face owner', 409);
-    const where = photo.userId !== null ? { userId: photo.userId } : { visitorId: photo.visitorId! };
-    // Persist denial first. Failures below remain retryable and must never restore access.
-    if (photo.userId !== null) {
-      await db.user.update({ where: { id: photo.userId }, data: { faceRevokedAt: new Date() } });
+    let taskKey: string | null;
+    if (photo) {
+      if ((photo.userId === null) === (photo.visitorId === null)) throw new AppError('Ambiguous face owner', 409);
+      const owner = photo.userId !== null ? { kind: 'user' as const, id: photo.userId } : { kind: 'visitor' as const, id: photo.visitorId! };
+      taskKey = await db.$transaction(tx => FaceCleanupService.enqueue(tx, owner), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } else {
-      await db.visitor.update({ where: { id: photo.visitorId! }, data: { faceRevokedAt: new Date() } });
+      // Metadata may already be gone; retry the durable owner-wide deletion job.
+      taskKey = await FaceCleanupService.findByTemplate(templateId);
+      if (!taskKey) throw new AppError('Enrollment photo not found', 404);
     }
-    const ownerId = photo.userId ?? (photo.visitorId! + 1000000);
-    const endpoint = this.normalizeFaceApiUrl().replace(/\/verify$/, `/owners/${ownerId}`);
-    const apiKey = process.env.FACE_API_KEY?.trim();
-    if (!apiKey) throw new AppError('Face access revoked; external deletion is pending configuration', 503);
-    try {
-      const response = await fetch(endpoint, {
-        method: 'DELETE', headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(5000),
-      });
-      if (!response.ok) throw new Error('External deletion failed');
-      const result = await response.json();
-      if (result.success !== true) throw new Error('External deletion not confirmed');
-    } catch {
-      throw new AppError('Face access revoked; external deletion incomplete, please retry', 502);
-    }
-    const photos = await db.faceEnrollmentPhoto.findMany({ where });
-    for (const item of photos) {
-      const fullPath = path.resolve(process.cwd(), item.photoPath);
-      const relative = path.relative(UPLOAD_DIR, fullPath);
-      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-        throw new AppError('Face access revoked; invalid photo path requires administrator review', 409);
-      }
-      try { await fs.unlink(fullPath); } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw new AppError('Face access revoked; file deletion incomplete, please retry', 503);
-        }
-      }
-    }
-    await db.$transaction(async (tx) => {
-      await tx.faceEmbedding.deleteMany({ where });
-      await tx.faceEnrollmentPhoto.deleteMany({ where });
-    });
-    return { success: true, message: 'Face access revoked and all enrollment data deleted' };
+    let task = { taskKey, status: 'PENDING' as 'PENDING' | 'COMPLETE' };
+    try { task = await FaceCleanupService.process(taskKey); }
+    catch (error) { logger.warn({ error, taskKey }, 'Face cleanup deferred after committed revocation'); }
+    const cleanup = { status: task.status, tasks: [task] };
+    return { success: true, message: task.status === 'COMPLETE' ? 'Face access revoked and enrollment data deleted' : 'Face access revoked; deletion pending retry', cleanup };
   }
 
   // ── C# Edge integrations ──
@@ -700,47 +698,52 @@ export class FaceVerificationService {
     vectors: number[][],
     qualityScores?: number[]
   ) {
-    let userId: number | null = null;
-    let visitorId: number | null = null;
+    if (!Number.isSafeInteger(studentId) || studentId <= 0 || studentId === 1000000) throw new AppError('Invalid face owner ID', 400);
+    return db.$transaction(async tx => {
+      let userId: number | null = null;
+      let visitorId: number | null = null;
 
-    if (studentId >= 1000000) {
-      visitorId = studentId - 1000000;
-      const visitorExists = await db.visitor.findUnique({ where: { id: visitorId } });
-      if (!visitorExists) {
-        throw new AppError('Visitor not found', 404);
+      if (studentId > 1000000) {
+        visitorId = studentId - 1000000;
+        await tx.$queryRaw`SELECT id FROM "Visitor" WHERE id = ${visitorId} FOR UPDATE`;
+        const visitorExists = await tx.visitor.findUnique({ where: { id: visitorId } });
+        if (!visitorExists) {
+          throw new AppError('Visitor not found', 404);
+        }
+        if (visitorExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
+      } else {
+        userId = studentId;
+        await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+        const userExists = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true, faceRevokedAt: true },
+        });
+        if (!userExists) {
+          throw new AppError('User not found', 404);
+        }
+        if (userExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
       }
-      if (visitorExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
-    } else {
-      userId = studentId;
-      const userExists = await db.user.findUnique({
-        where: { id: userId },
-        select: { id: true, faceRevokedAt: true },
-      });
-      if (!userExists) {
-        throw new AppError('User not found', 404);
+
+      let storedCount = 0;
+      for (let i = 0; i < vectors.length; i++) {
+        const vector = vectors[i];
+        const score = qualityScores ? qualityScores[i] : null;
+
+        await tx.faceEmbedding.create({
+          data: {
+            userId,
+            visitorId,
+            vector,
+            modelVersion,
+            qualityScore: score,
+          },
+        });
+        storedCount++;
       }
-      if (userExists.faceRevokedAt) throw new AppError('Face access revoked', 403);
-    }
 
-    let storedCount = 0;
-    for (let i = 0; i < vectors.length; i++) {
-      const vector = vectors[i];
-      const score = qualityScores ? qualityScores[i] : null;
-
-      await db.faceEmbedding.create({
-        data: {
-          userId,
-          visitorId,
-          vector,
-          modelVersion,
-          qualityScore: score,
-        },
-      });
-      storedCount++;
-    }
-
-    logger.info({ studentId, storedCount, modelVersion }, 'Successfully stored face embeddings from Edge');
-    return storedCount;
+      logger.info({ studentId, storedCount, modelVersion }, 'Successfully stored face embeddings from Edge');
+      return storedCount;
+    });
   }
 
   /**
@@ -759,7 +762,7 @@ export class FaceVerificationService {
       || !Number.isFinite(Date.parse(scannedAt))) throw new AppError('Invalid face scan', 400);
     const visitorScan = studentCode.startsWith('visitor_');
     const id = Number(studentCode.split('_')[1]);
-    return db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       // Serialize access decisions against revocation and status changes.
       if (visitorScan) await tx.$queryRaw`SELECT id FROM "Visitor" WHERE id = ${id} FOR UPDATE`;
       else await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`;
@@ -800,5 +803,31 @@ export class FaceVerificationService {
         student: { code: studentCode, name: tenant?.fullName || user.username || user.email,
           room: tenant?.room?.roomNumber || 'Resident' } };
     });
+    if (deviceCode === 'MAIN_GATE_01' && !result.cooldown_active) {
+      const actorId = visitorScan ? null : id;
+      if (!this.simulatedDoorOpen.has(deviceCode)) {
+        await this.recordSimulatedDoorEvent(actorId, deviceCode, 'unlock', 'AUTO');
+        this.simulatedDoorOpen.add(deviceCode);
+      }
+      this.scheduleSimulatedDoorClose(actorId, deviceCode);
+    }
+    return result;
+  }
+
+  private static scheduleSimulatedDoorClose(userId: number | null, deviceCode: string) {
+    const previous = this.simulatedDoorTimers.get(deviceCode);
+    if (previous) clearTimeout(previous);
+    const autoCloseAt = new Date(Date.now() + 5000);
+    this.simulatedDoorAutoCloseAt.set(deviceCode, autoCloseAt.toISOString());
+    const timer = setTimeout(() => {
+      this.simulatedDoorTimers.delete(deviceCode);
+      this.simulatedDoorAutoCloseAt.delete(deviceCode);
+      this.simulatedDoorOpen.delete(deviceCode);
+      void this.recordSimulatedDoorEvent(userId, deviceCode, 'lock', 'AUTO').catch((error) => {
+        logger.error({ error, deviceCode, userId }, 'Failed to persist simulated door auto-close event');
+      });
+    }, 5000);
+    timer.unref?.();
+    this.simulatedDoorTimers.set(deviceCode, timer);
   }
 }

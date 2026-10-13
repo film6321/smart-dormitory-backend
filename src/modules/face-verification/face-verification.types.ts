@@ -1,3 +1,4 @@
+import type { CleanupReceipt } from './face-cleanup.service';
 export interface FaceRegisterResponse {
   success: boolean;
   message: string;
@@ -17,6 +18,8 @@ export interface FaceVerifyResponse {
   similarity: number;
   processing_time_ms: number;
   message?: string;
+  verification_available?: boolean;
+  reason?: 'NO_FACE_DETECTED' | 'MULTIPLE_FACES_DETECTED' | 'NOT_MATCHED' | 'MATCHED' | 'UNAVAILABLE';
 }
 
 export interface FaceTemplateResponse {
@@ -31,4 +34,5 @@ export interface FaceTemplateResponse {
 export interface FaceDeleteResponse {
   success: boolean;
   message: string;
+  cleanup?: CleanupReceipt;
 }

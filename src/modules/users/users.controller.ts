@@ -32,6 +32,7 @@ export class UsersController {
 
   static async createUser(req: Request, res: Response, next: NextFunction) {
     try {
+      UsersService.validatePhone(req.body);
       const user = await UsersService.createUser(req.body);
       return res.status(201).json(createResponse(201, 'User created successfully', user));
     } catch (error) {
@@ -46,6 +47,7 @@ export class UsersController {
         return res.status(400).json(createResponse(400, 'Invalid user id'));
       }
 
+      UsersService.validatePhone(req.body);
       const user = await UsersService.updateUser(id, req.body);
       return res.status(200).json(createResponse(200, 'User updated successfully', user));
     } catch (error) {
@@ -60,8 +62,9 @@ export class UsersController {
         return res.status(400).json(createResponse(400, 'Invalid user id'));
       }
 
-      await UsersService.deleteUser(id);
-      return res.status(200).json(createResponse(200, 'User deleted successfully'));
+      const result = await UsersService.deleteUser(id);
+      const status = result.cleanup.status === 'PENDING' ? 202 : 200;
+      return res.status(status).json(createResponse(status, status === 202 ? 'ลบข้อมูลส่วนบุคคลแล้ว รอล้างไฟล์และข้อมูลใบหน้า' : 'User deleted successfully', result));
     } catch (error) {
       next(error);
     }

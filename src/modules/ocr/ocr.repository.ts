@@ -60,6 +60,10 @@ export class OcrRepository {
   static async deleteIdCardVerification(id: number, db = prisma) {
     return db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "IdCardVerification" WHERE id = ${id} FOR UPDATE`;
+      const verification = await tx.idCardVerification.findUnique({ where: { id }, select: { imagePath: true } });
+      if (verification?.imagePath && await tx.visitor.count({ where: { idCardImagePath: verification.imagePath } })) {
+        throw new AppError('ลบประวัติตรวจบัตรไม่ได้ เนื่องจากยังใช้เป็นหลักฐานของผู้มาติดต่อ', 409);
+      }
       if (await tx.payment.count({ where: { housingVerificationId: id } })) {
         throw new AppError('ลบประวัติตรวจบัตรไม่ได้ เนื่องจากใช้เป็นหลักฐานการชำระเงินแล้ว', 409);
       }

@@ -1,5 +1,6 @@
 import http from 'http';
 import app from './app';
+import { startAccountRetentionWorker, stopAccountRetentionWorker } from './workers/accountRetentionWorker';
 import { prisma } from './database/db';
 import { logger } from './logger';
 import { disconnectRedis } from './shared/redis';
@@ -25,6 +26,7 @@ server.listen(PORT, () => {
   startOcrJobWorker();
   startNotificationWorker();
   startVisitorExpiryWorker();
+  startAccountRetentionWorker();
   logger.info(`Backend API Gateway is running on http://localhost:${PORT}`);
 });
 
@@ -35,6 +37,7 @@ const shutdown = async (signal: string) => {
     await stopAccessLogWorker();
     await stopNotificationWorker();
     stopVisitorExpiryWorker();
+    await stopAccountRetentionWorker();
     await closeNotificationGateway();
     await disconnectRedis();
     await prisma.$disconnect();

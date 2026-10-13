@@ -1,6 +1,6 @@
 import { AppError } from '../../middlewares/error-handler';
 import { Prisma } from '@prisma/client';
-import { prisma } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
 
 export class BillingRepository {
   static async listBills(userId?: number, role?: string, db = prisma) {
@@ -50,12 +50,13 @@ export class BillingRepository {
     });
   }
 
-  static async findRoomByNumberWithTenants(roomNumber: string, db = prisma) {
+  static async findRoomByNumberWithTenants(roomNumber: string, db: DbClient = prisma) {
     return db.room.findUnique({
       where: { roomNumber: roomNumber.trim().toUpperCase() },
       include: {
         tenants: {
-          where: { isActive: true },
+          where: { isActive: true, status: { in: ['ACTIVE', 'APPROVED'] }, userId: { not: null } },
+          orderBy: { id: 'asc' },
           include: {
             user: {
               select: {
@@ -81,10 +82,11 @@ export class BillingRepository {
     penaltyAmount?: number;
     dueDate: Date;
     description?: string;
-  }>, db = prisma) {
-    return db.$transaction(
+    billingPeriod?: string;
+  }>, db: DbClient = prisma) {
+    const create = (tx: DbClient) => Promise.all(
       bills.map((bill) =>
-        db.bill.create({
+        tx.bill.create({
           data: {
             tenantId: bill.tenantId,
             roomId: bill.roomId,
@@ -95,6 +97,7 @@ export class BillingRepository {
             penaltyAmount: bill.penaltyAmount ?? 0,
             dueDate: bill.dueDate,
             description: bill.description,
+            billingPeriod: bill.billingPeriod,
             status: 'UNPAID',
           },
           include: {
@@ -115,6 +118,8 @@ export class BillingRepository {
         })
       )
     );
+    return typeof db.$transaction === 'function'
+      ? (db as typeof prisma).$transaction(create) : create(db);
   }
 
   static async updateBill(id: number, data: Prisma.BillUpdateInput, db = prisma) {

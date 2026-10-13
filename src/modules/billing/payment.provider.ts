@@ -8,12 +8,19 @@ export interface PaymentVerificationResult {
   rawData: unknown;
   transactionId?: string;
   message?: string;
+  retryable?: boolean;
+}
+
+interface PaymentProviderError {
+  code?: string;
+  message?: string;
 }
 
 interface PaymentProviderResponse {
   success?: boolean;
   message?: string;
-  error?: string;
+  error?: string | PaymentProviderError;
+  code?: string;
   matchedAccount?: unknown;
   data?: {
     isDuplicate?: boolean;
@@ -67,6 +74,10 @@ const parseAmount = (value: number | string | undefined): number | null => {
 const normalizeResponse = (payload: PaymentProviderResponse): PaymentVerificationResult => {
   const matchedAccount = payload.matchedAccount ?? payload.data?.matchedAccount;
   const rawAmount = payload.data?.rawSlip?.amount?.amount;
+  const providerError = typeof payload.error === 'string' ? payload.error : payload.error?.message;
+  const errorCode = typeof payload.error === 'object' && payload.error !== null ? payload.error.code : payload.code;
+  const message = payload.message || providerError;
+  const pendingSignal = `${message || ''} ${providerError || ''}`;
 
   return {
     success: payload.success === true && payload.data?.isDuplicate === false,
@@ -75,7 +86,8 @@ const normalizeResponse = (payload: PaymentProviderResponse): PaymentVerificatio
     amount: parseAmount(rawAmount),
     rawData: payload.data ?? payload,
     transactionId: typeof payload.data?.rawSlip?.transRef === 'string' ? payload.data.rawSlip.transRef.trim() || undefined : undefined,
-    message: payload.message || payload.error,
+    message,
+    retryable: errorCode === 'SLIP_PENDING' || /bangkok bank slip is pending|slip is pending/i.test(pendingSignal),
   };
 };
 

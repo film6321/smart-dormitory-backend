@@ -1,3 +1,4 @@
+import { getContractTerms } from '../../src/modules/settings/settings.service';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -14,6 +15,8 @@ import { OcrService } from '../../src/modules/ocr/ocr.service';
 import { requiredContractFields } from '../../src/modules/tenants/tenants.dto';
 import { prisma } from '../../src/database/db';
 import { AppError } from '../../src/middlewares/error-handler';
+import { TenantsService, type SubmitApplicationInput } from '../../src/modules/tenants/tenants.service';
+import { ROOM_RESERVATION_FILTER } from '../../src/modules/tenants/tenants.repository';
 import { HousingPaymentService } from '../../src/modules/tenants/housing-payment.service';
 import { PaymentProviderClient, type PaymentVerificationResult } from '../../src/modules/billing/payment.provider';
 import { BillingService } from '../../src/modules/billing/billing.service';
@@ -37,16 +40,18 @@ const confirmed = (overrides: Partial<PaymentVerificationResult> = {}): PaymentV
 const isStatus = (status: number) => (error: unknown) => error instanceof AppError && error.statusCode === status;
 
 before(async () => {
+  for (const [key, value] of Object.entries({ contractDocLocation: 'QA Office', contractLandlordName: 'QA Landlord', contractLandlordAddress: 'QA Address', contractLandlordPhone: '0812345678', contractBuilding: 'QA Building', contractStartDate: '2026-09-01', contractEndDate: '2027-08-31', contractKeycardDeposit: '300', contractPayDueDate: '5', contractElectricityRate: '7', contractWaterRate: '18', contractAdvanceNoticeDays: '30' })) await prisma.systemSetting.upsert({ where: { key }, create: { key, value, category: 'CONTRACT' }, update: { value, category: 'CONTRACT' } });
   uploadRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'housing-payment-test-'));
   process.env.UPLOAD_ROOT = uploadRoot;
-  const user = await prisma.user.create({ data: { email: 'housing-test@example.test', password: 'test-only', role: 'STUDENT' } });
+  const user = await prisma.user.create({ data: { email: 'housing-test@example.test', phone: '0811111111', password: 'test-only', role: 'STUDENT' } });
   userId = user.id;
   const room = await prisma.room.create({ data: { roomNumber: '101', floor: 1, monthlyRent: 100, capacity: 4 } });
   roomId = room.id;
-  const verification = await prisma.idCardVerification.create({ data: { userId, isThaiIdCard: true, idDetected: true, imagePath: 'uploads/private/id-cards/test.png' } });
+  const verification = await prisma.idCardVerification.create({ data: { userId, isThaiIdCard: true, idDetected: true, imagePath: 'uploads/private/id-cards/test.png', fullNameTh: 'ผู้สมัครทดสอบ' } });
   verificationId = verification.id;
 });
 after(async () => {
+  await redis.disconnectRedis();
   await prisma.$disconnect();
   if (uploadRoot && path.dirname(uploadRoot) === path.resolve(os.tmpdir()) && path.basename(uploadRoot).startsWith('housing-payment-test-')) {
     await fs.rm(uploadRoot, { recursive: true, force: true });
@@ -170,7 +175,7 @@ test('HTTP upload rejects a non-slip; verified upload then apply requires the bo
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const token = jwt.sign({ id: userId, role: 'STUDENT' }, process.env.JWT_SECRET);
+  const token = jwt.sign({ id: userId, role: 'STUDENT', sessionVersion: 1 }, process.env.JWT_SECRET);
   const headers = { Authorization: `Bearer ${token}` };
   const upload = () => {
     const form = new FormData();
@@ -189,13 +194,13 @@ test('HTTP upload rejects a non-slip; verified upload then apply requires the bo
     const { data } = await response.json();
     assert.equal(data.paymentVerification.status, 'PAID');
     const contract = Object.fromEntries(Object.keys(requiredContractFields).map(key => [key, 'test']));
-    Object.assign(contract, { tenantCitizenId: '1234567890123', tenantAge: '20', roomNumber: '101', monthlyRent: '100', depositAmount: '100' });
+    Object.assign(contract, { tenantName: 'ผู้สมัครทดสอบ', tenantCitizenId: '1234567890123', tenantAge: '20', roomNumber: '101', monthlyRent: '100', depositAmount: '100' });
     const application = {
-      personalInformation: { fullName: 'test', studentId: 'test', course: 'test', yearLevel: '1', contactNumber: '0812345678', emailAddress: 'test@example.test' },
+      contractAccepted: true, personalInformation: { birthDate: '2000-01-15', citizenId: '1234567890123', address: 'QA Address', fullName: 'ผู้สมัครทดสอบ', studentId: 'test', course: 'test', yearLevel: '1', contactNumber: '0812345678', emailAddress: 'test@example.test' },
       emergencyContact: { emergencyName: 'test', relationship: 'test', emergencyNumber: '0812345678' },
       roomPreference: { preferredRoomType: 'Floor 1', roomNumber: '101' },
       ocrData: data.ocrData, idCardImagePath: data.idCardImagePath, paymentSlipPath: data.paymentSlipPath,
-      contractData: contract,
+      contractData: { ...contract, ...await getContractTerms(await prisma.room.findUniqueOrThrow({ where: { id: roomId } })) },
     };
     const apply = (body: object) => fetch(`${origin}/api/tenants/apply`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -241,4 +246,173 @@ test('single-bill and batch payments still work and reject references already us
   const duplicateBatch = await PaymentBatchService.create(userId, [duplicateBatchBill.id], crypto.randomUUID());
   await assert.rejects(PaymentBatchService.uploadSlip(duplicateBatch.id, userId, file()), isStatus(409));
   assert.equal((await prisma.paymentBatch.findUniqueOrThrow({ where: { id: duplicateBatch.id } })).status, 'FAILED');
+});
+
+const capacityRoom = () => prisma.room.create({ data: {
+  roomNumber: `QA-${crypto.randomUUID().slice(0, 8)}`, capacity: 4, floor: 1, monthlyRent: 100,
+} });
+const applicationFor = async (room: { id: number; roomNumber: string }, existingUserId?: number): Promise<SubmitApplicationInput> => {
+  const applicantId = existingUserId ?? (await prisma.user.create({ data: {
+    email: `${crypto.randomUUID()}@example.test`, phone: `082${crypto.randomInt(1000000, 10000000)}`, password: 'test-only', role: 'STUDENT',
+  } })).id;
+  const name = crypto.randomUUID();
+  await fs.mkdir(path.join(uploadRoot, 'id-cards'), { recursive: true });
+  await fs.mkdir(path.join(uploadRoot, 'payment-slips'), { recursive: true });
+  await fs.writeFile(path.join(uploadRoot, 'id-cards', `${name}.png`), 'test-only');
+  await fs.writeFile(path.join(uploadRoot, 'payment-slips', `${name}.png`), 'test-only');
+  const idCardImagePath = `uploads/private/id-cards/${name}.png`;
+  const paymentSlipPath = `uploads/private/payment-slips/${name}.png`;
+  const verification = await prisma.idCardVerification.create({ data: {
+    userId: applicantId, isThaiIdCard: true, idDetected: true, imagePath: idCardImagePath, fullNameTh: 'QA',
+  } });
+  // Bound, verified evidence exists only in this disposable database; no bank call.
+  const payment = await prisma.payment.create({ data: {
+    payerUserId: applicantId, housingRoomId: room.id, housingVerificationId: verification.id,
+    amount: 100, status: 'PAID', providerTransactionId: crypto.randomUUID(),
+    idempotencyKey: crypto.randomUUID(), slipPath: paymentSlipPath,
+  } });
+  const contract = Object.fromEntries(Object.keys(requiredContractFields).map(key => [key, 'test']));
+  Object.assign(contract, { tenantCitizenId: '1234567890123', tenantAge: '20',
+    tenantName: 'QA', roomNumber: room.roomNumber, monthlyRent: '100', depositAmount: '100' });
+  return {
+    userId: applicantId, paymentId: payment.id, ocrData: { verificationId: verification.id },
+    contractAccepted: true, personalInformation: { birthDate: '2000-01-15', citizenId: '1234567890123', address: 'QA Address', fullName: 'QA', studentId: 'QA', course: 'QA', yearLevel: '1', emailAddress: 'qa@example.test' },
+    emergencyContact: { emergencyName: 'QA', relationship: 'QA', emergencyNumber: '0812345678' },
+    roomPreference: { preferredRoomType: 'Floor 1', roomNumber: room.roomNumber },
+    contractData: { ...contract, ...await getContractTerms({ ...room, floor: 1, monthlyRent: 100 }) }, idCardImagePath, paymentSlipPath,
+  };
+};
+const reserveThreePlaces = (id: number) => prisma.tenant.createMany({ data:
+  ['PENDING', 'APPROVED', 'ACTIVE'].map(status => ({ roomId: id, status, isActive: true })),
+});
+
+for (const mode of ['admin/admin', 'application/application', 'admin/application'] as const) {
+  test(`${mode}: concurrent requests cannot take the last place twice`, async () => {
+    const room = await capacityRoom();
+    await reserveThreePlaces(room.id);
+    const first = mode === 'application/application' ? await applicationFor(room) : null;
+    const second = mode !== 'admin/admin' ? await applicationFor(room) : null;
+    const results = await Promise.allSettled([
+      first ? TenantsService.submitApplication(first) : TenantsService.createTenant({ roomId: room.id }),
+      second ? TenantsService.submitApplication(second) : TenantsService.createTenant({ roomId: room.id }),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    for (const result of results) {
+      if (result.status === 'rejected') assert.ok(result.reason instanceof AppError && result.reason.statusCode === 409);
+    }
+    assert.equal(await prisma.tenant.count({ where: { ...ROOM_RESERVATION_FILTER, roomId: room.id } }), 4);
+    assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, 'OCCUPIED');
+  });
+}
+
+test('inactive and rejected history does not consume a place or block QR generation', async (t) => {
+  const room = await capacityRoom();
+  await prisma.room.update({ where: { id: room.id }, data: { status: 'OCCUPIED' } });
+  await prisma.tenant.createMany({ data: [
+    { roomId: room.id, status: 'ACTIVE', isActive: false },
+    { roomId: room.id, status: 'INACTIVE', isActive: true },
+    { roomId: room.id, status: 'REJECTED', isActive: true },
+    { roomId: room.id, status: 'REJECTED', isActive: true },
+  ] });
+  t.mock.method(PaymentProviderClient, 'generateQr', async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal((await HousingPaymentService.generateQr(room.roomNumber)).amount, 100);
+  const tenant = await TenantsService.createTenant({ roomId: room.id, status: 'ACTIVE' });
+  assert.equal(tenant.status, 'ACTIVE');
+  assert.equal(await prisma.tenant.count({ where: { ...ROOM_RESERVATION_FILTER, roomId: room.id } }), 1);
+});
+
+test('resubmitting a pending application in a full room preserves its own place and is idempotent', async () => {
+  const room = await capacityRoom();
+  await reserveThreePlaces(room.id);
+  const application = await applicationFor(room);
+  const pending = await TenantsService.createTenant({ userId: application.userId, roomId: room.id });
+  const submitted = await TenantsService.submitApplication(application);
+  assert.equal(submitted.id, pending.id);
+  assert.equal((await TenantsService.submitApplication(application)).id, pending.id);
+  assert.equal(await prisma.tenant.count({ where: { roomId: room.id } }), 4);
+});
+
+test('moving a pending application releases the old place and fills the new room atomically', async () => {
+  const old = await capacityRoom();
+  const next = await capacityRoom();
+  await reserveThreePlaces(old.id);
+  await reserveThreePlaces(next.id);
+  const application = await applicationFor(next);
+  const pending = await TenantsService.createTenant({ userId: application.userId, roomId: old.id });
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: old.id } })).status, 'OCCUPIED');
+  const submitted = await TenantsService.submitApplication(application);
+  assert.equal(submitted.id, pending.id);
+  assert.equal(submitted.roomId, next.id);
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: old.id } })).status, 'AVAILABLE');
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: next.id } })).status, 'OCCUPIED');
+});
+
+test('failed full-room application rolls back the applicant version and payment binding', async () => {
+  const room = await capacityRoom();
+  await reserveThreePlaces(room.id);
+  await TenantsService.createTenant({ roomId: room.id });
+  const application = await applicationFor(room);
+  const beforeUser = await prisma.user.findUniqueOrThrow({ where: { id: application.userId } });
+  await assert.rejects(TenantsService.submitApplication(application), isStatus(409));
+  assert.equal(await prisma.tenant.findUnique({ where: { userId: application.userId } }), null);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: application.userId } })).version, beforeUser.version);
+  assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: application.paymentId } })).housingTenantId, null);
+});
+
+for (const status of ['MAINTENANCE', 'INACTIVE']) {
+  test(`admin creation rejects a ${status} room without saving a tenant`, async () => {
+    const room = await capacityRoom();
+    await prisma.room.update({ where: { id: room.id }, data: { status } });
+    await assert.rejects(TenantsService.createTenant({ roomId: room.id }), isStatus(409));
+    assert.equal(await prisma.tenant.count({ where: { roomId: room.id } }), 0);
+    assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, status);
+  });
+}
+
+test('rejecting a reservation frees one place and permits physical deletion', async () => {
+  const room = await capacityRoom();
+  await reserveThreePlaces(room.id);
+  const tenant = await TenantsService.createTenant({ roomId: room.id });
+  await assert.rejects(TenantsService.deleteTenant(tenant.id), isStatus(409));
+  await TenantsService.updateTenant(tenant.id, { status: 'REJECTED' });
+  await TenantsService.deleteTenant(tenant.id);
+  assert.equal(await prisma.tenant.findUnique({ where: { id: tenant.id } }), null);
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, 'AVAILABLE');
+  assert.equal(await prisma.tenant.count({ where: { ...ROOM_RESERVATION_FILTER, roomId: room.id } }), 3);
+});
+
+test('updating a pending application preserves its reserved place until rejection', async () => {
+  const room = await capacityRoom();
+  await reserveThreePlaces(room.id);
+  const tenant = await TenantsService.createTenant({ roomId: room.id });
+  const updated = await TenantsService.updateTenant(tenant.id, { status: 'PENDING', fullName: 'Updated QA' });
+  assert.equal(updated.roomId, room.id);
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, 'OCCUPIED');
+  await TenantsService.updateTenant(tenant.id, { status: 'REJECTED' });
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, 'AVAILABLE');
+});
+
+test('QR, admin creation and application all enforce the configured occupant limit', async () => {
+  const room = await capacityRoom();
+  await prisma.tenant.createMany({ data: [1, 2].map(() => ({ roomId: room.id, status: 'ACTIVE' })) });
+  const application = await applicationFor(room);
+  await prisma.systemSetting.create({ data: { key: 'maxOccupants', value: '2', category: 'DORMITORY' } });
+  try {
+    await assert.rejects(HousingPaymentService.generateQr(room.roomNumber), isStatus(409));
+    await assert.rejects(TenantsService.createTenant({ roomId: room.id }), isStatus(409));
+    await assert.rejects(TenantsService.submitApplication(application), isStatus(409));
+    assert.equal(await prisma.tenant.count({ where: { roomId: room.id } }), 2);
+  } finally {
+    await prisma.systemSetting.delete({ where: { key: 'maxOccupants' } });
+  }
+});
+
+test('legacy OCCUPIED flag does not block verified upload or application when places remain', async (t) => {
+  const room = await capacityRoom();
+  const application = await applicationFor(room);
+  await prisma.room.update({ where: { id: room.id }, data: { status: 'OCCUPIED' } });
+  t.mock.method(PaymentProviderClient, 'verifySlip', async () => confirmed());
+  assert.equal((await HousingPaymentService.verifySlip(room.roomNumber, application.userId!, file(), application.ocrData!.verificationId!)).status, 'PAID');
+  assert.equal((await TenantsService.submitApplication(application)).roomId, room.id);
+  assert.equal((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).status, 'AVAILABLE');
 });

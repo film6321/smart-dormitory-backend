@@ -107,6 +107,7 @@ export function calculateAge(
     month > 12 ||
     normalizedYear < 1900 ||
     normalizedYear > currentYear
+    || new Date(Date.UTC(normalizedYear, month - 1, day)).getUTCDate() !== day
   ) {
     return undefined;
   }

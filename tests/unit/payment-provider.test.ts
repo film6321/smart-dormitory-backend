@@ -47,13 +47,26 @@ test('housing QR uses database rent and rejects unavailable rooms or invalid pro
     roomNumber: '101', status: 'AVAILABLE', capacity: 1, monthlyRent: 100, _count: { tenants: 0 },
   };
   const originalFind = prisma.room.findUnique;
-  prisma.room.findUnique = (async () => room) as unknown as typeof prisma.room.findUnique;
+  const delegate = { ...prisma.room };
+  const findRoom = t.mock.method(delegate, 'findUnique', async () => room);
+  prisma.room.findUnique = delegate.findUnique;
   t.after(() => { prisma.room.findUnique = originalFind; });
+  const settings = await import('../../src/modules/settings/settings.service');
+  t.mock.method(settings, 'getSettingValue', async () => '4');
+  let configured = true;
+  t.mock.method(settings, 'getContractTerms', async () => ({ landlordName: configured ? 'QA landlord' : '' }));
   let image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const amounts: number[] = [];
   t.mock.method(PaymentProviderClient, 'generateQr', async (amount: number) => { amounts.push(amount); return image; });
+  configured = false;
+  await assert.rejects(HousingPaymentService.generateQr('101'), (e: unknown) => e instanceof AppError && e.statusCode === 409);
+  assert.deepEqual(amounts, []);
+  configured = true;
   const first = await HousingPaymentService.generateQr('101');
   assert.equal(first.amount, 100);
+  assert.deepEqual(findRoom.mock.calls[0].arguments[0]?.include?._count, {
+    select: { tenants: { where: { isActive: true, status: { in: ['PENDING', 'APPROVED', 'ACTIVE'] } } } },
+  });
   assert.equal(first.qrImage, `data:image/png;base64,${image.toString('base64')}`);
   room = { ...room, roomNumber: '201', monthlyRent: 50 };
   assert.equal((await HousingPaymentService.generateQr('201')).amount, 50);

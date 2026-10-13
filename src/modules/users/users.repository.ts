@@ -6,6 +6,8 @@ export class UsersRepository {
   private static readonly baseUserSelect = {
     id: true,
     email: true,
+    phone: true,
+    role: true,
     lastLogin: true,
     createdAt: true,
     updatedAt: true,
@@ -65,6 +67,7 @@ export class UsersRepository {
     email: string;
     password: string;
     username?: string | null;
+    phone?: string | null;
     lastLogin?: Date | string | null;
     role: string;
   }, db: DbClient = prisma) {
@@ -96,7 +99,15 @@ export class UsersRepository {
   }
 
   static async updateUser(id: number, data: Partial<Prisma.UserUpdateInput>, db: DbClient = prisma) {
-    return db.user.update({ where: { id }, data: data as Prisma.UserUpdateInput });
+    try {
+      return await db.user.update({ where: { id }, data: data as Prisma.UserUpdateInput, select: UsersRepository.usernameUserSelect });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'P2002' && data.phone !== undefined) {
+        throw new AppError('เบอร์โทรศัพท์หรือข้อมูลบัญชีนี้ถูกใช้แล้ว กรุณาตรวจสอบข้อมูลอีกครั้ง', 409);
+      }
+      if ((error as { code?: string })?.code === 'P2025') throw new AppError('ไม่พบบัญชีผู้ใช้', 404);
+      throw error;
+    }
   }
 
   static async deleteUser(id: number, db: DbClient = prisma) {

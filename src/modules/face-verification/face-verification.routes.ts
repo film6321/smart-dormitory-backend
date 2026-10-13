@@ -99,6 +99,8 @@ router.post('/history/clear', verifyToken, requireRole(['ADMIN']), FaceVerificat
 router.get('/events', verifyToken, requireRole(['ADMIN']), FaceVerificationController.events);
 
 // ── Template Management Endpoints ──
+router.get('/cleanup', verifyToken, requireRole(['ADMIN']), FaceVerificationController.pendingCleanup);
+router.get('/cleanup/:taskKey', verifyToken, requireRole(['ADMIN']), FaceVerificationController.cleanupStatus);
 router.get('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);
 router.put('/:templateId', verifyToken, requireRole(['ADMIN']), uploadFaceImage, FaceVerificationController.updateTemplate);
 router.delete('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.deleteTemplate);

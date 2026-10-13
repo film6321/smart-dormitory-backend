@@ -1,3 +1,4 @@
+import { FaceCleanupService } from './face-cleanup.service';
 import { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs/promises';
@@ -84,6 +85,9 @@ export class FaceVerificationController {
         action: data.matched ? (direction === 'IN' ? 'checkin' : 'checkout') : 'denied',
         device_code: deviceCode,
         cooldown_active: cooldownActive,
+        door_status: FaceVerificationService.getSimulatedDoorStatus(deviceCode),
+        door_auto_close_at: FaceVerificationService.getSimulatedDoorAutoCloseAt(deviceCode),
+        similarity_threshold: effectiveThreshold,
       };
 
       const message = data.matched ? 'Face matched successfully' : (data.message || 'Face did not match registered templates');
@@ -133,6 +137,20 @@ export class FaceVerificationController {
     }
   }
 
+  static async pendingCleanup(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await FaceCleanupService.pending();
+      return res.status(200).json(createResponse(200, 'Pending cleanup retrieved', data));
+    } catch (error) { next(error); }
+  }
+
+  static async cleanupStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await FaceCleanupService.status(String(req.params.taskKey));
+      return res.status(200).json(createResponse(200, 'Cleanup status retrieved', data));
+    } catch (error) { next(error); }
+  }
+
   static async deleteTemplate(req: Request, res: Response, next: NextFunction) {
     try {
       const templateId = Number(req.params.templateId);
@@ -141,7 +159,8 @@ export class FaceVerificationController {
       }
 
       const data = await FaceVerificationService.deleteFaceTemplate(templateId);
-      return res.status(200).json(createResponse(200, 'Face template deleted successfully', data));
+      const status = data.cleanup?.status === 'PENDING' ? 202 : 200;
+      return res.status(status).json(createResponse(status, data.message, data));
     } catch (error) {
       next(error);
     }

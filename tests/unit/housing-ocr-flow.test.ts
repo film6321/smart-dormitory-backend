@@ -1,3 +1,4 @@
+import { prisma } from '../../src/database/db';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isFilledText, validateHousingApplication } from '../../src/modules/tenants/tenants.dto';
@@ -6,8 +7,43 @@ import { OcrService } from '../../src/modules/ocr/ocr.service';
 import { AppError } from '../../src/middlewares/error-handler';
 import fs from 'fs/promises';
 import { HousingPaymentService } from '../../src/modules/tenants/housing-payment.service';
+import { getContractDates } from '../../src/modules/settings/settings.service';
+
+test('contract dates use Bangkok today and five calendar months with month-end clamping', () => {
+  assert.deepEqual(getContractDates(new Date('2026-10-13T05:00:00Z')), { startDate: '2026-10-13', endDate: '2027-03-13' });
+  assert.deepEqual(getContractDates(new Date('2026-09-30T17:30:00Z')), { startDate: '2026-10-01', endDate: '2027-03-01' });
+  assert.deepEqual(getContractDates(new Date('2026-09-30T00:00:00Z')), { startDate: '2026-09-30', endDate: '2027-02-28' });
+  assert.deepEqual(getContractDates(new Date('2027-09-30T00:00:00Z')), { startDate: '2027-09-30', endDate: '2028-02-29' });
+});
 
 test('Housing Application Validation & OCR Flow', async (t) => {
+  const originalUser = prisma.user.findUnique;
+  const originalVerification = prisma.idCardVerification.findUnique;
+  Reflect.set(prisma.user, 'findUnique', async () => ({ phone: '0812345678' }));
+  Reflect.set(prisma.idCardVerification, 'findUnique', async (args: { where: { id: number } }) => ({ id: args.where.id, userId: 1, idDetected: true, imagePath: 'uploads/private/id-cards/2026/09/card.jpg' }));
+  t.after(() => { Reflect.set(prisma.user, 'findUnique', originalUser); Reflect.set(prisma.idCardVerification, 'findUnique', originalVerification); });
+  await t.test('slip verification accepts an existing account without phone but still checks document ownership', async () => {
+    const previousUser = prisma.user.findUnique;
+    const previousVerify = HousingPaymentService.verifySlip;
+    Reflect.set(prisma.user, 'findUnique', async () => ({ phone: null }));
+    let calls = 0;
+    Reflect.set(HousingPaymentService, 'verifySlip', async () => {
+      calls++; return { id: 99, slipPath: 'uploads/private/payment-slips/fixture.jpg', amount: 300 };
+    });
+    try {
+      const file = { mimetype: 'image/jpeg', buffer: Buffer.from('fixture') };
+      const result = await TenantsService.verifyHousingPayment(file, 1, '101', 103);
+      assert.equal(result.registeredPhone, ''); assert.equal(result.paymentVerification.id, 99);
+      await assert.rejects(TenantsService.verifyHousingPayment(file, 2, '101', 103), /บัญชีนี้/u);
+      assert.equal(calls, 1);
+      Reflect.set(prisma.user, 'findUnique', async () => null);
+      await assert.rejects(TenantsService.verifyHousingPayment(file, 1, '101', 103), /User not found/u);
+      assert.equal(calls, 1);
+    } finally {
+      Reflect.set(prisma.user, 'findUnique', previousUser);
+      Reflect.set(HousingPaymentService, 'verifySlip', previousVerify);
+    }
+  });
   await t.test('isFilledText rejects empty, whitespace, hyphens, and placeholder strings', () => {
     assert.equal(isFilledText(''), false);
     assert.equal(isFilledText('   '), false);
@@ -60,7 +96,8 @@ test('Housing Application Validation & OCR Flow', async (t) => {
     };
 
     const baseInput = {
-      personalInformation: {
+      contractAccepted: true,
+      personalInformation: { birthDate: '2000-01-15', citizenId: '1234567890123', address: 'QA Address',
         fullName: 'นายทดสอบ นักศึกษา',
         studentId: '65010001',
         course: 'วิทยาการคอมพิวเตอร์',
@@ -113,16 +150,16 @@ test('Housing Application Validation & OCR Flow', async (t) => {
     assert.throws(
       () => validateHousingApplication({
         ...baseInput,
-        contractData: { ...validContract, tenantAddress: '-' },
+        personalInformation: { ...baseInput.personalInformation, address: '-' },
       }),
-      (err: unknown) => err instanceof AppError && err.statusCode === 400 && err.message.includes('ที่อยู่ผู้เช่า')
+      (err: unknown) => err instanceof AppError && err.statusCode === 400 && err.message.includes('ที่อยู่')
     );
 
     // Case 5: Hyphen or invalid citizen id
     assert.throws(
       () => validateHousingApplication({
         ...baseInput,
-        contractData: { ...validContract, tenantCitizenId: '-' },
+        personalInformation: { ...baseInput.personalInformation, citizenId: '-' },
       }),
       (err: unknown) => err instanceof AppError && err.statusCode === 400
     );
@@ -131,7 +168,7 @@ test('Housing Application Validation & OCR Flow', async (t) => {
     assert.throws(
       () => validateHousingApplication({
         ...baseInput,
-        contractData: { ...validContract, tenantAge: '-' },
+        personalInformation: { ...baseInput.personalInformation, birthDate: '-' },
       }),
       (err: unknown) => err instanceof AppError && err.statusCode === 400
     );

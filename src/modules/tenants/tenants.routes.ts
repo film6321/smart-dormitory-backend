@@ -26,8 +26,15 @@ const uploadFields = upload.fields([
   { name: 'paymentSlip', maxCount: 1 },
 ]);
 
+router.get('/draft', verifyToken, TenantsController.getDraft);
+router.patch('/draft', verifyToken, TenantsController.saveDraft);
+router.get('/draft/payment-qr/:roomNumber', verifyToken, TenantsController.generateDraftQr);
+router.post('/draft/upload-identity', verifyToken, uploadFields, TenantsController.uploadDocuments);
+router.post('/draft/upload-slip', verifyToken, uploadFields, TenantsController.uploadDocuments);
+
 router.get('/', verifyToken, requireRole(['ADMIN']), TenantsController.listTenants);
 router.get('/payment-qr/:roomNumber', verifyToken, TenantsController.generatePaymentQr);
+router.post('/me/face-enrollment/complete', verifyToken, requireRole(['STUDENT']), TenantsController.completeFaceEnrollment);
 router.get('/me', verifyToken, TenantsController.getMyTenant);
 router.get('/me/documents/:documentType', verifyToken, TenantsController.getMyDocument);
 router.get('/:id/documents/:documentType', verifyToken, requireRole(['ADMIN']), TenantsController.getTenantDocumentById);

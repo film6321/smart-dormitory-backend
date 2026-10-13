@@ -1,6 +1,11 @@
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { RoomsService } from './rooms.service';
+import { plainToInstance } from 'class-transformer';
+import { isNumber, isNumberString, isObject } from 'class-validator';
+import { AppError } from '../../middlewares/error-handler';
+
+class RoomPriceDto { monthlyRent?: number | string; }
 
 export class RoomsController {
   static async listRooms(req: Request, res: Response, next: NextFunction) {
@@ -41,6 +46,12 @@ export class RoomsController {
 
   static async updateRoom(req: Request, res: Response, next: NextFunction) {
     try {
+      if (!isObject(req.body)) throw new AppError('ข้อมูลห้องต้องเป็น object', 400);
+      const input = plainToInstance(RoomPriceDto, req.body);
+      if (input.monthlyRent !== undefined && !(isNumber(input.monthlyRent, { allowNaN: false, allowInfinity: false })
+        || typeof input.monthlyRent === 'string' && isNumberString(input.monthlyRent))) {
+        throw new AppError('ค่าเช่าต้องเป็นตัวเลข', 400);
+      }
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid room id'));

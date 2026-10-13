@@ -1,6 +1,6 @@
 import { AppError } from '../../middlewares/error-handler';
 import { RoomsRepository } from './rooms.repository';
-import { type DbClient } from '../../database/db';
+import { prisma, type DbClient } from '../../database/db';
 import { getSettingValue } from '../settings/settings.service';
 
 export interface CreateRoomInput {
@@ -46,6 +46,15 @@ export class RoomsService {
   static async updateRoom(id: number, data: Partial<CreateRoomInput>) {
     const payload: Record<string, unknown> = {};
 
+    if (data.monthlyRent !== undefined) {
+      const rent = Number(data.monthlyRent);
+      if (!['number', 'string'].includes(typeof data.monthlyRent) || String(data.monthlyRent).trim() === ''
+        || !Number.isFinite(rent) || rent <= 0 || rent > 99999999.99
+        || Math.abs(rent * 100 - Math.round(rent * 100)) > 0.000001) {
+        throw new AppError('ค่าเช่าต้องมากกว่า 0 และมีทศนิยมไม่เกิน 2 ตำแหน่ง', 400);
+      }
+    }
+
     if (data.capacity !== undefined) {
       const maxOccupants = Number(await getSettingValue('maxOccupants')) || 4;
       if (data.capacity > maxOccupants) {
@@ -62,7 +71,24 @@ export class RoomsService {
     if (data.monthlyRent !== undefined) payload.monthlyRent = Number(data.monthlyRent);
     if (data.description !== undefined) payload.description = data.description?.trim() ?? null;
 
-    return RoomsRepository.updateRoom(id, payload);
+    if (data.monthlyRent === undefined) return RoomsRepository.updateRoom(id, payload);
+    return prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${id} FOR UPDATE`;
+      const room = await tx.room.findUnique({ where: { id } });
+      if (!room) throw new AppError('ไม่พบห้องที่ต้องการแก้ไข', 404);
+      if (Number(room.monthlyRent) !== Number(data.monthlyRent)) {
+        const [tenants, drafts, payments] = await Promise.all([
+          tx.tenant.count({ where: { roomId: id, status: { not: 'ARCHIVED' } } }),
+          tx.housingApplicationDraft.count({ where: { roomId: id, status: 'OPEN' } }),
+          tx.payment.count({ where: { housingRoomId: id, OR: [
+            { status: { in: ['PENDING', 'VERIFYING', 'MANUAL_REVIEW', 'PAID'] } },
+            { status: 'FAILED', failureReason: 'PROVIDER_PENDING' },
+          ] } }),
+        ]);
+        if (tenants || drafts || payments) throw new AppError('ยังเปลี่ยนราคาไม่ได้ ห้องนี้มีผู้พัก ใบสมัคร หรือรายการชำระเงินที่เกี่ยวข้อง', 409);
+      }
+      return RoomsRepository.updateRoom(id, payload, tx);
+    });
   }
 
   static async deleteRoom(id: number) {

@@ -19,9 +19,22 @@ describe('FaceVerificationService (unit)', () => {
     return replacement;
   }
   beforeEach(() => {
+    stub(prisma.faceEnrollmentPhoto, 'findFirst', async () => null);
+    const apiKey = process.env.FACE_API_KEY; process.env.FACE_API_KEY = 'synthetic-test-key';
+    restorers.push(() => { if (apiKey === undefined) delete process.env.FACE_API_KEY; else process.env.FACE_API_KEY = apiKey; });
     stub(prisma, '$transaction', async (callback: (tx: typeof prisma) => unknown) => callback(prisma));
     stub(prisma, '$queryRaw', async () => []);
     stub(prisma.user, 'update', async () => ({}));
+    let setting: { id: number; key: string; category: string; value: string } | null = null;
+    stub(prisma.systemSetting, 'findUnique', async () => setting);
+    stub(prisma.systemSetting, 'findMany', async () => setting ? [setting] : []);
+    stub(prisma.systemSetting, 'upsert', async ({ create, update }: { create: typeof setting; update: { value: string } }) => { setting = setting ? { ...setting, ...update } : { ...create!, id: 1 }; return setting; });
+    stub(prisma.systemSetting, 'updateMany', async ({ where, data }: { where: { value: string }; data: { value: string } }) => {
+      if (!setting || setting.value !== where.value) return { count: 0 };
+      setting = { ...setting, ...data }; return { count: 1 };
+    });
+    for (const model of [prisma.tenant, prisma.payment, prisma.paymentBatch, prisma.idCardVerification, prisma.ocrJob, prisma.visitor, prisma.faceEnrollmentPhoto]) stub(model, 'count', async () => 0);
+
     stub(prisma.faceEnrollmentPhoto, 'findUnique', async () => ({
       id: 12, userId: 99, visitorId: null, photoPath: 'uploads/face-photo/test.jpg', createdAt: new Date(),
     }));
@@ -59,6 +72,26 @@ describe('FaceVerificationService (unit)', () => {
     prisma.visitor.update = originalVisitorUpdate;
     prisma.visitorLog.create = originalVisitorLogCreate;
   };
+
+  it('retry after external failure reuses the saved photo instead of creating another record', async () => {
+    let photo: { id: number; userId: number; visitorId: null; photoPath: string; createdAt: Date } | null = null;
+    let creates = 0; let forwards = 0;
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, faceRevokedAt: null }));
+    stub(prisma.faceEnrollmentPhoto, 'findFirst', async () => photo);
+    stub(prisma.faceEnrollmentPhoto, 'create', async ({ data }: { data: { photoPath: string } }) => {
+      creates++; photo = { id: 900, userId: 99, visitorId: null, photoPath: data.photoPath, createdAt: new Date() }; return photo;
+    });
+    stub(globalThis, 'fetch', async () => { forwards++; return new Response(JSON.stringify({ success: forwards > 1 }), { status: forwards === 1 ? 503 : 200 }); });
+    const bytes = Buffer.from(`synthetic face retry ${randomUUID()}`);
+    try {
+      await assert.rejects(FaceVerificationService.registerFace(99, bytes, 'image/jpeg', 'retry.jpg'));
+      const result = await FaceVerificationService.registerFace(99, bytes, 'image/jpeg', 'retry.jpg');
+      assert.equal(result.id, 900); assert.equal(creates, 1); assert.equal(forwards, 2);
+    } finally {
+      const saved = photo as { photoPath: string } | null;
+      if (saved) { const target = path.resolve(saved.photoPath); const root = path.resolve('uploads/face-photo'); assert.ok(target.startsWith(root + path.sep)); rmSync(target, { force: true }); }
+    }
+  });
 
   it('successfully registers a face', async () => {
     prisma.user.findUnique = (async ({ where }: Prisma.UserFindUniqueArgs) => {
@@ -553,13 +586,14 @@ describe('FaceVerificationService (unit)', () => {
     stub(prisma.user, 'findUnique', async () => ({ id: 99, faceRevokedAt: revoked ? new Date() : null }));
     stub(prisma.faceEnrollmentPhoto, 'deleteMany', async () => { removed = true; return { count: 1 }; });
     stub(globalThis, 'fetch', async () => new Response('{}', { status: 503 }));
-    await assert.rejects(FaceVerificationService.deleteFaceTemplate(12), /external deletion incomplete/);
+    const result = await FaceVerificationService.deleteFaceTemplate(12);
+    assert.equal(result.cleanup?.status, 'PENDING');
     assert.equal(revoked, true);
-    assert.equal(removed, false);
+    assert.equal(removed, true);
     await assert.rejects(FaceVerificationService.recordScan('user_99', 'IN', 0.99, new Date().toISOString()), /access denied/);
   });
 
-  it('deletes physical enrollment files and both local tables after Python confirms', async () => {
+  it('queues and revokes atomically before removing physical files after Python confirms', async () => {
     const file = path.join('uploads', 'face-photo', `deletion-test-${randomUUID()}.jpg`);
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, 'synthetic test data');
@@ -571,15 +605,32 @@ describe('FaceVerificationService (unit)', () => {
       actions.push('python');
       return new Response(JSON.stringify({ success: true }));
     });
-    stub(prisma.faceEnrollmentPhoto, 'findMany', async () => [{ photoPath: file }]);
+    stub(prisma.faceEnrollmentPhoto, 'findMany', async () => [{ id: 12, photoPath: file }]);
     stub(prisma.faceEmbedding, 'deleteMany', async () => { actions.push('vectors'); return { count: 1 }; });
     stub(prisma.faceEnrollmentPhoto, 'deleteMany', async () => {
-      assert.equal(existsSync(file), false); actions.push('photos'); return { count: 1 };
+      assert.equal(existsSync(file), true); actions.push('photos'); return { count: 1 };
     });
     try {
       assert.equal((await FaceVerificationService.deleteFaceTemplate(12)).success, true);
-      assert.deepEqual(actions, ['revoke', 'python', 'vectors', 'photos']);
+      assert.deepEqual(actions, ['revoke', 'vectors', 'photos', 'python']);
+      assert.equal(existsSync(file), false);
     } finally { rmSync(file, { force: true }); }
+  });
+
+  it('rechecks revocation under the owner lock before committing a photo or forwarding registration', async () => {
+    let reads = 0;
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, faceRevokedAt: ++reads === 1 ? null : new Date() }));
+    const create = stub(prisma.faceEnrollmentPhoto, 'create', async () => { throw new Error('must not create'); });
+    const forward = stub(globalThis, 'fetch', async () => { throw new Error('must not forward'); });
+    await assert.rejects(FaceVerificationService.registerFace(99, Buffer.from('synthetic'), 'image/jpeg', 'race.jpg'), /revoked/);
+    assert.equal(create.mock.callCount(), 0); assert.equal(forward.mock.callCount(), 0);
+  });
+
+  it('revoked owners cannot repopulate embeddings through Edge synchronization', async () => {
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, faceRevokedAt: new Date() }));
+    const create = stub(prisma.faceEmbedding, 'create', async () => { throw new Error('must not create'); });
+    await assert.rejects(FaceVerificationService.storeEmbeddings(99, 'v1', [[0.1]]), /revoked/);
+    assert.equal(create.mock.callCount(), 0);
   });
 
   it('denies inactive residents and expired, cancelled, unapproved or revoked visitors', async () => {
@@ -697,6 +748,27 @@ describe('FaceVerificationService (unit)', () => {
     assert.equal(FaceVerificationService.getSimulatedDoorStatus(device), 'CLOSED');
   });
 
+  it('opens after an authorized scan and resets the five-second timer for a new accepted scan', async (t) => {
+    const activities: CameraScanSnapshot[] = [];
+    let logId = 200;
+    stub(prisma.user, 'findUnique', async () => ({ id: 99, role: 'ADMIN', faceRevokedAt: null, tenant: null }));
+    stub(prisma.accessLog, 'create', async () => ({ id: ++logId, createdAt: new Date() }));
+    stub(FaceVerificationService, 'acquireCooldownLock', async () => true);
+    stub(notificationGateway, 'publishRealtimeEvent', (_name: string, payload: CameraScanSnapshot) => activities.push(payload));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    await FaceVerificationService.recordScan('user_99', 'IN', 0.9, new Date().toISOString(), 'MAIN_GATE_01');
+    assert.equal(FaceVerificationService.getSimulatedDoorStatus('MAIN_GATE_01'), 'OPEN');
+    assert.equal(activities[0].action, 'door_open_auto');
+    t.mock.timers.tick(4000);
+    await FaceVerificationService.recordScan('user_99', 'IN', 0.9, new Date().toISOString(), 'MAIN_GATE_01');
+    t.mock.timers.tick(1000);
+    assert.equal(FaceVerificationService.getSimulatedDoorStatus('MAIN_GATE_01'), 'OPEN');
+    t.mock.timers.tick(4000);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(FaceVerificationService.getSimulatedDoorStatus('MAIN_GATE_01'), 'CLOSED');
+    assert.deepEqual(activities.map(item => item.action), ['door_open_auto', 'door_close_auto']);
+  });
+
   it('clears scan history from monitoring bus', () => {
     faceVerificationMonitoringBus.recordScan({
       id: 'test-scan-1',
@@ -710,5 +782,17 @@ describe('FaceVerificationService (unit)', () => {
 
     faceVerificationMonitoringBus.clearScanHistory();
     assert.equal(faceVerificationMonitoringBus.getScanHistory().length, 0);
+  });
+
+  it('preserves no-face and multiple-face reasons and rejects contradictory matched results', async () => {
+    for (const reason of ['NO_FACE_DETECTED', 'MULTIPLE_FACES_DETECTED']) {
+      stub(globalThis, 'fetch', async () => new Response(JSON.stringify({
+        matched: true, user_id: 99, similarity: 0.99, reason,
+      }), { status: 200 }));
+      const result = await FaceVerificationService.verifyFace(Buffer.from('image'), 'image/jpeg', 'capture.jpg');
+      assert.equal(result.matched, false);
+      assert.equal(result.user_id, null);
+      assert.equal(result.reason, reason);
+    }
   });
 });

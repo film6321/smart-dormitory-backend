@@ -119,81 +119,97 @@ export class BillingService {
     };
   }
 
+  private static normalizeBillingPeriod(value?: string) {
+    const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    const text = value?.trim().replace(/[๐-๙]/g, digit => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(digit)));
+    let year: number; let month: number;
+    if (!text) {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+      year = Number(parts.find(part => part.type === 'year')!.value);
+      month = Number(parts.find(part => part.type === 'month')!.value);
+    } else {
+      const canonical = /^(\d{4})-(\d{2})$/.exec(text);
+      const thai = /^(\S+)\s+(\d{4})$/.exec(text);
+      if (canonical) { year = Number(canonical[1]); month = Number(canonical[2]); }
+      else if (thai && months.includes(thai[1]!)) {
+        year = Number(thai[2]); if (year >= 2400) year -= 543;
+        month = months.indexOf(thai[1]!) + 1;
+      } else throw new AppError('กรุณาระบุรอบเดือนเป็น YYYY-MM หรือเดือนภาษาไทย เช่น ตุลาคม 2569', 400);
+    }
+    if (year < 1900 || year > 9999 || month < 1 || month > 12) throw new AppError('รอบเดือนเรียกเก็บไม่ถูกต้อง', 400);
+    return { billingPeriod: `${year}-${String(month).padStart(2, '0')}`, billingMonth: `${months[month - 1]} ${year + 543}` };
+  }
+
   static async generateRoomBills(data: GenerateRoomBillInput) {
-    const room = await BillingRepository.findRoomByNumberWithTenants(data.roomNumber);
-    if (!room) {
-      throw new AppError(`ไม่พบข้อมูลห้องพักเลขที่ ${data.roomNumber}`, 404);
-    }
-
-    const tenants = room.tenants;
-    if (!tenants || tenants.length === 0) {
-      throw new AppError(
-        `ห้อง ${room.roomNumber} ยังไม่มีผู้พักอาศัยที่ลงทะเบียนในระบบ ไม่สามารถสร้างบิลและหารค่าใช้จ่ายได้`,
-        400
-      );
-    }
-
-    // 1. คำนวณค่าไฟ (อัตราคงที่ 8 บาท/หน่วย ตามสัญญา)
-    const electricRate = data.electricRate !== undefined ? Number(data.electricRate) : 8;
-    const electricUnits = Math.max(0, Number(data.electricUnits || 0));
-    const electricTotal = electricUnits * electricRate;
-
-    // 2. คำนวณค่าน้ำ (อัตราเหมาจ่ายคงที่ 100 บาท/ห้อง ตามสัญญา)
-    const waterTotal = data.waterAmount !== undefined ? Number(data.waterAmount) : 100;
-
-    // 3. ค่าเช่าห้อง
-    const rentTotal = data.customRent !== undefined ? Number(data.customRent) : Number(room.monthlyRent);
-
-    // 4. ยอดรวมทั้งห้อง
-    const grandTotal = rentTotal + electricTotal + waterTotal;
-
-    // 5. หารตามจำนวนผู้พักอาศัยจริงในห้อง (เพื่อป้องกันเงินตกหล่น)
-    const tenantCount = tenants.length;
-    const amountPerTenant = Math.round((grandTotal / tenantCount) * 100) / 100;
-
-    // วันครบกำหนดชำระ
-    const dueDate = data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const billingMonth = data.billingMonth || new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-
-    const description = `ค่าห้องพักประจำเดือน ${billingMonth} (ค่าเช่า ฿${rentTotal.toLocaleString('th-TH')} + ค่าไฟ ${electricUnits} หน่วย @${electricRate}บ. ฿${electricTotal.toLocaleString('th-TH')} + ค่าน้ำ ฿${waterTotal.toLocaleString('th-TH')} รวม ฿${grandTotal.toLocaleString('th-TH')} หาร ${tenantCount} คน)`;
-
-    const billsPayload = tenants.map((tenant) => ({
-      tenantId: tenant.id,
-      roomId: room.id,
-      amount: amountPerTenant,
-      rentAmount: Math.round((rentTotal / tenantCount) * 100) / 100,
-      electricAmount: Math.round((electricTotal / tenantCount) * 100) / 100,
-      waterAmount: Math.round((waterTotal / tenantCount) * 100) / 100,
-      penaltyAmount: 0,
-      dueDate,
-      description,
-    }));
-
-    const createdBills = await BillingRepository.createBills(billsPayload);
-
-    return {
-      roomNumber: room.roomNumber,
-      roomId: room.id,
-      calculation: {
-        currency: 'THB',
-        rentTotal,
-        electricUnits,
-        electricRate,
-        electricTotal,
-        waterTotal,
-        grandTotal,
-        tenantCount,
-        amountPerTenant,
-        billingMonth,
-        dueDate,
-      },
-      tenants: tenants.map((t) => ({
-        id: t.id,
-        fullName: t.fullName || t.user?.username || t.user?.email || 'ไม่ระบุชื่อ',
-        studentId: t.studentId,
-      })),
-      createdBills,
+    const period = this.normalizeBillingPeriod(data.billingMonth);
+    const dueDate = data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 7 * 86400000);
+    if (!Number.isFinite(dueDate.getTime())) throw new AppError('วันที่ครบกำหนดชำระไม่ถูกต้อง', 400);
+    const cents = (value: number) => {
+      if (!Number.isFinite(value) || value < 0 || value > 99999999.99) throw new AppError('ยอดเงินต้องเป็นจำนวนไม่ติดลบและไม่เกิน 99,999,999.99 บาท', 400);
+      return Math.round((value + Number.EPSILON) * 100);
     };
+    const electricUnits = Number(data.electricUnits);
+    if (!Number.isFinite(electricUnits) || electricUnits < 0) throw new AppError('หน่วยไฟฟ้าต้องเป็นจำนวนไม่ติดลบ', 400);
+    const electricRate = data.electricRate === undefined ? 8 : Number(data.electricRate);
+    cents(electricRate);
+    const electricCents = cents(electricUnits * electricRate);
+    const waterCents = cents(data.waterAmount === undefined ? 100 : Number(data.waterAmount));
+    try {
+      return await prisma.$transaction(async tx => {
+        const snapshot = await BillingRepository.findRoomByNumberWithTenants(data.roomNumber, tx);
+        if (!snapshot) throw new AppError(`ไม่พบข้อมูลห้องพักเลขที่ ${data.roomNumber}`, 404);
+        // Match the User -> Tenant -> Room lock order used by move-out and deletion.
+        const userIds = [...new Set(snapshot.tenants.map(t => t.userId!).filter(id => id !== null))].sort((a, b) => a - b);
+        for (const id of userIds) await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`;
+        for (const tenant of snapshot.tenants) await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id = ${tenant.id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${snapshot.id} FOR UPDATE`;
+        const room = await BillingRepository.findRoomByNumberWithTenants(data.roomNumber, tx);
+        if (!room || room.id !== snapshot.id || room.tenants.map(t => t.id).join(',') !== snapshot.tenants.map(t => t.id).join(',')) {
+          throw new AppError('ผู้พักในห้องเปลี่ยนระหว่างออกบิล กรุณาโหลดข้อมูลใหม่', 409);
+        }
+        const tenants = room.tenants;
+        if (!tenants.length) throw new AppError(`ห้อง ${room.roomNumber} ยังไม่มีผู้พักที่อนุมัติเข้าพัก ไม่สามารถสร้างบิลได้`, 400);
+        if (await tx.bill.count({ where: { roomId: room.id, billingPeriod: period.billingPeriod } })) {
+          throw new AppError(`ห้อง ${room.roomNumber} มีบิลรอบ ${period.billingMonth} แล้ว กรุณาตรวจสอบบิลเดิม`, 409);
+        }
+        if (await tx.bill.count({ where: { roomId: room.id, billingPeriod: null } })) {
+          throw new AppError('ห้องนี้มีบิลเดิมที่ยังไม่ระบุรอบเดือน ต้องตรวจสอบรอบของบิลเดิมก่อนออกบิลใหม่', 409);
+        }
+        const rentCents = cents(data.customRent === undefined ? Number(room.monthlyRent) : Number(data.customRent));
+        const totalCents = rentCents + electricCents + waterCents;
+        cents(totalCents / 100);
+        const tenantCount = tenants.length;
+        // Rotate component remainders so every column sums exactly and total shares differ by <= 1 satang.
+        let cursor = 0;
+        const shares = [rentCents, electricCents, waterCents].map(total => {
+          const base = Math.floor(total / tenantCount); const remainder = total % tenantCount;
+          const values = tenants.map((_, index) => base + ((index - cursor + tenantCount) % tenantCount < remainder ? 1 : 0));
+          cursor = (cursor + remainder) % tenantCount;
+          return values;
+        });
+        const rentTotal = rentCents / 100, electricTotal = electricCents / 100, waterTotal = waterCents / 100, grandTotal = totalCents / 100;
+        const description = `ค่าห้องพักประจำเดือน ${period.billingMonth} (ค่าเช่า ฿${rentTotal.toLocaleString('th-TH')} + ค่าไฟ ${electricUnits} หน่วย @${electricRate}บ. ฿${electricTotal.toLocaleString('th-TH')} + ค่าน้ำ ฿${waterTotal.toLocaleString('th-TH')} รวม ฿${grandTotal.toLocaleString('th-TH')} หาร ${tenantCount} คน)`;
+        const billsPayload = tenants.map((tenant, index) => ({
+          tenantId: tenant.id, roomId: room.id, billingPeriod: period.billingPeriod,
+          rentAmount: shares[0]![index]! / 100, electricAmount: shares[1]![index]! / 100, waterAmount: shares[2]![index]! / 100,
+          amount: (shares[0]![index]! + shares[1]![index]! + shares[2]![index]!) / 100,
+          penaltyAmount: 0, dueDate, description,
+        }));
+        const createdBills = await BillingRepository.createBills(billsPayload, tx);
+        return {
+          roomNumber: room.roomNumber, roomId: room.id,
+          calculation: { currency: 'THB', rentTotal, electricUnits, electricRate, electricTotal, waterTotal, grandTotal,
+            tenantCount, amountPerTenant: Math.floor(totalCents / tenantCount) / 100,
+            maxAmountPerTenant: Math.ceil(totalCents / tenantCount) / 100, ...period, dueDate },
+          tenants: tenants.map(t => ({ id: t.id, fullName: t.fullName || t.user?.username || t.user?.email || 'ไม่ระบุชื่อ', studentId: t.studentId })),
+          createdBills,
+        };
+      }, { timeout: 15000 });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'P2002') throw new AppError('มีบิลรอบเดือนนี้แล้ว กรุณาตรวจสอบบิลเดิม', 409);
+      throw error;
+    }
   }
 
   static async uploadSlip(billId: number, slipHash: string) {
