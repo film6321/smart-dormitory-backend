@@ -1,0 +1,48 @@
+{
+  "purpose": "ตัวอย่างสำหรับตรวจรูปแบบเอกสารเท่านั้น ไม่ใช้ยื่นใบสมัครหรือยืนยันการชำระเงินจริง",
+  "reference": "SAMPLE-CONTRACT-20261013-001",
+  "isTestData": true,
+  "identityVerified": false,
+  "paymentVerified": false,
+  "contractAccepted": false,
+  "personalInformation": {
+    "fullName": "ผู้เช่า ทดสอบระบบ",
+    "birthDate": "2005-06-05",
+    "citizenId": "0000000000000",
+    "address": "99 ถนนทดสอบ ตำบลตัวอย่าง อำเภอตัวอย่าง จังหวัดตัวอย่าง 00000",
+    "studentId": "TEST-0001",
+    "course": "คณะทดสอบ",
+    "yearLevel": "2"
+  },
+  "emergencyContact": {
+    "emergencyName": "ผู้ติดต่อ ทดสอบระบบ",
+    "relationship": "ผู้ปกครอง",
+    "emergencyNumber": "0000000000"
+  },
+  "contractData": {
+    "docLocation": "สำนักงานหอพักทดสอบ",
+    "docDate": "13",
+    "docMonth": "ตุลาคม",
+    "docYear": "2569",
+    "landlordName": "ผู้ให้เช่าทดสอบ MEEDEE",
+    "landlordAddress": "1 ถนนทดสอบ ตำบลตัวอย่าง อำเภอตัวอย่าง จังหวัดตัวอย่าง 00000",
+    "landlordPhone": "0000000000",
+    "tenantName": "ผู้เช่า ทดสอบระบบ",
+    "tenantAge": "21",
+    "tenantCitizenId": "0000000000000",
+    "tenantAddress": "99 ถนนทดสอบ ตำบลตัวอย่าง อำเภอตัวอย่าง จังหวัดตัวอย่าง 00000",
+    "tenantPhone": "0000000000",
+    "roomNumber": "TEST-101",
+    "building": "อาคารทดสอบ A",
+    "floor": "1",
+    "startDate": "2026-10-13",
+    "endDate": "2027-03-13",
+    "monthlyRent": "2500",
+    "depositAmount": "2500",
+    "keycardDeposit": "300",
+    "payDueDate": "5",
+    "electricityRate": "8",
+    "waterRate": "18",
+    "advanceNoticeDays": "30"
+  }
+}

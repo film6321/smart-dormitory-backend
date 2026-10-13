@@ -1,6 +1,6 @@
 # ⚖️ Data Consistency, State Authorities & Tracing Specs
 
-**Version:** 1.0.0 | **Updated:** 2026-06-29
+**Version:** 1.1.0 | **Updated:** 2026-10-13
 
 ---
 
@@ -9,23 +9,12 @@
 เพื่อตัดปัญหา Multiple Writers Problem (เลเยอร์โค้ดแย่งกันเขียนสถานะมั่ว) ระบบล็อกสิทธิ์ให้เฉพาะชิ้นส่วนดังนี้:
 
 ### Billing States
-| สถานะ | ผู้มีสิทธิ์เขียน (Authority) |
-| :--- | :--- |
-| `UNPAID` | `BillingService` (สร้างบิลอัตโนมัติ) |
-| `VERIFYING` | `BillingService` (เมื่อผู้เช่า upload สลิป) |
-| `PAID` | `OcrService` (เมื่อ OCR ยืนยันสลิปสำเร็จ) |
-| `FAILED` | `OcrService` (เมื่อ OCR ตรวจสอบไม่ผ่าน) |
-| `OVERDUE` | `BillingWorker` (Background job ตรวจเวลา) |
+
+BillingService/PaymentBatchService claim and settle payments through the existing payment provider wrapper. OcrService owns ID-card verification and does not authorize PAID bills. Bills are generated atomically per room/month; settlement checks persisted payment evidence, ownership, amount, provider transaction uniqueness and current state. OVERDUE display alone does not prove a background worker wrote a transition: inspect the active service/worker before making that claim.
 
 ### Visitor States
-| สถานะ | ผู้มีสิทธิ์เขียน (Authority) |
-| :--- | :--- |
-| `REGISTERED` | `VisitorService` (REST API ขาเข้า) |
-| `VERIFYING` | `VisitorService` (เมื่อสแกนบัตร) |
-| `APPROVED` / `REJECTED` | `FaceVerificationService` (หลังตรวจใบหน้า) |
-| `CHECKED_IN` | `AccessControlService` (สแกนคีย์การ์ดเข้าตึก) + **Redis Lock** |
-| `CHECKED_OUT` | `AccessControlService` (สแกนออก) |
-| `EXPIRED` | `VisitorWorker` (Background job ตรวจเวลา) |
+
+VisitorService owns REGISTERED/CANCELLED/EXPIRED and reception logs; visitorExpiryWorker triggers expiry. The current flow does not require Face approval or an AccessControlService that is absent from this repository. WAITING/ADMITTED/COMPLETED derive from VisitorLog and do not overwrite Visitor.status. Entry/cancel/expiry serialize on the Visitor row. Manual reception records do not acknowledge physical door movement; legacy face statuses are outside this QA round's device/provider scope.
 
 ### Maintenance States
 | สถานะ | ผู้มีสิทธิ์เขียน (Authority) |
@@ -34,22 +23,18 @@
 | `APPROVED` / `CANCELLED` | `MaintenanceService` (Admin Action) |
 | `IN_PROGRESS` | `MaintenanceService` (ช่างกด Start) |
 | `RESOLVED` | `MaintenanceService` (ช่างกด Done) |
-| `CLOSED` | `MaintenanceService` (ผู้เช่ายืนยัน) |
+| `CLOSED` | `MaintenanceService` (ผู้เช่ายืนยันงานของตนผ่าน confirm endpoint หรือ Admin ตาม route เดิม) |
 
 ---
 
 ## 2. ระบบป้องกันการทำธุรกรรมซ้ำ (Distributed Idempotency)
 
-* **Slip Hash Check:** ก่อนเปลี่ยนบิลเป็น `VERIFYING` ต้องตรวจ Hash ของสลิปกับตาราง `Transaction` หากพบซ้ำให้ reject ทันที ห้ามส่ง OCR ซ้ำ
-* **Prisma Concurrency Guard:** ใช้ฟิลด์ `version` ใน Model สำคัญ (User, Bill) ในการเช็ค OCC:
-  ```typescript
-  await prisma.bill.update({
-    where: { id: billId, version: currentVersion },
-    data: { status: "PAID", version: { increment: 1 } }
-  })
-  // ถ้า version ไม่ตรง Prisma จะ throw P2025 → ให้ catch และ retry
-  ```
-* **Redis Distributed Lock:** การเปลี่ยนสถานะ APPROVED → CHECKED_IN ต้องมี Redis Lock บน `visitorId` ก่อนเสมอ ป้องกันสแกนซ้ำพร้อมกัน
+- Payment wrappers check slip hash/idempotency/provider transaction evidence against persisted Payment/Transaction records before committing. PostgreSQL is the source of truth; Redis locks only coordinate requests.
+- User.version and HousingApplicationDraft.version provide data OCC where implemented. Bill has no generic version field; billing uses state guards, row locks and unique billingPeriod constraints. Do not invent a Prisma Bill.version query or blindly retry a financial mutation.
+- User.authSessionVersion is independent of data OCC and is checked for REST/Socket auth. Logout/password reset revoke all sessions durably; Redis presence must not authorize a stale JWT.
+- Contract settings updates and application snapshots share PostgreSQL advisory lock 756032; stale conditions return 409 for review, never silently change accepted terms. Academic catalog retains its separate lock 756031.
+- Maintenance upload ownership/TTL is persisted in SystemSetting; consuming an attachment and saving its ticket are atomic. Expiry checks persisted ticket references before deleting a file.
+- Face photo retries reuse metadata by owner + content hash under the owner lock. External forwarding may be retried; five angles are not one atomic transaction.
 
 ---
 

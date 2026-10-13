@@ -61,7 +61,7 @@
 | `ocr/`               | Service Wrapper → ยิงไปที่ External OCR API                |
 | `face-verification/` | Service Wrapper → ยิงไปที่ External Face API               |
 
-### Frontend Modules (`frontend/src/modules/`)
+### Frontend Modules (historical plan; current code is in sibling smart-dormitory-frontend)
 
 | Module               | หน้าที่                                           |
 |----------------------|--------------------------------------------------|

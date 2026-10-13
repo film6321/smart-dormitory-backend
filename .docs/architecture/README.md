@@ -17,3 +17,9 @@ This folder contains early architecture and learning documentation for the Smart
 - [09-face-recognition-service.md](09-face-recognition-service.md)
 - [10-ocr-service.md](10-ocr-service.md)
 - Historical rule references are archived in [`.docs/archive/architecture-v1/`](../archive/architecture-v1/).
+
+## System study and verified results
+
+- [Five-chapter thesis draft](../system/01-introduction.md)
+- [System flow QA](../qa/system-flow-report.md)
+- [Login flow study](login-flow-study.md)

@@ -1,25 +1,56 @@
-# 08. Sequence Diagram
+# 08. Sequence Diagrams
 
-## Login Flow
+## สมัครเข้าพัก
 
-Frontend → Backend → Database → JWT → Frontend
+```mermaid
+sequenceDiagram
+  actor S as Student
+  participant F as Frontend
+  participant B as Backend
+  participant O as OCR API
+  participant P as Payment API
+  participant D as PostgreSQL
+  S->>F: อัปโหลดบัตร (ขั้น 1)
+  F->>B: upload-documents mode=identity
+  B->>O: ตรวจบัตรพร้อม timeout/fallback
+  B->>D: เก็บผลตรวจและเจ้าของ
+  B-->>F: ผล OCR + verificationId
+  S->>F: ตรวจแก้ข้อมูล / เลือกห้อง / ส่งสลิป
+  F->>B: upload-documents mode=payment
+  B->>D: ตรวจเจ้าของผล OCR
+  B->>P: ตรวจธุรกรรมชำระ
+  B->>D: บันทึกผลชำระและตรวจซ้ำ
+  B-->>F: สถานะชำระที่ยืนยันแล้ว
+  S->>F: อ่านสัญญา / ยอมรับ / ส่งใบสมัคร
+  F->>B: POST tenants/apply
+  B->>D: transaction ตรวจห้อง/สถานะ/ข้อมูล
+  B-->>F: ผลใบสมัคร
+```
 
-## Resident Registration Flow
+## ลบข้อมูลผู้พัก
 
-Frontend → Backend → Database → OCR Service → Face Service → Frontend
+```mermaid
+sequenceDiagram
+  actor A as Admin
+  participant B as Backend
+  participant D as PostgreSQL
+  participant W as Cleanup worker
+  participant X as Face API / พื้นที่ไฟล์
+  A->>B: DELETE tenants/:id
+  B->>D: ล็อกบัญชีและผู้พัก / ตรวจสถานะและรายการค้าง
+  alt มีรายการค้าง
+    B-->>A: 409 ไม่ลบข้อมูล
+  else ผ่านเงื่อนไข
+    B->>D: ล้างข้อมูลส่วนบุคคล / เก็บงาน cleanup / commit
+    B-->>A: ผลลบพร้อมสถานะ cleanup
+    W->>D: อ่านงานที่ยังไม่เสร็จ
+    W->>X: revoke และลบตามเจ้าของ
+    alt สำเร็จ
+      W->>D: COMPLETE
+    else บริการขัดข้อง
+      W->>D: เก็บข้อผิดพลาดเพื่อ retry
+    end
+  end
+```
 
-## Face Verification Flow
-
-Frontend → Backend → Face API → Backend → Frontend
-
-## Visitor Flow
-
-Frontend → Backend → Database → Approval Process → Frontend
-
-## Billing Flow
-
-Frontend → Backend → Database → OCR Service → Backend → Frontend
-
-## Maintenance Flow
-
-Frontend → Backend → Database → Maintenance Service → Frontend
+แผนภาพแสดงลำดับเชิงตรรกะจาก Service ไม่ใช่ผลทดสอบทุกสาขา อ่านผลที่ยืนยันแล้วใน [รายงาน QA](../qa/system-flow-report.md)

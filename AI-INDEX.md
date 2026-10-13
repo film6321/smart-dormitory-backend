@@ -100,3 +100,14 @@ _ถ้าโค้ดขัดกับ AGENTS.md → แก้ที่โค�
   archive-sprints/        ← สรุป Sprint history (read-only)
     README.md
 ```
+
+## เอกสารเล่ม 5 บทและผลทดสอบระบบ
+
+- [สารบัญระบบและรายละเอียดบทที่ 4](.docs/system/README.md): เชื่อมบท 1–5 และเอกสาร 11 โมดูล แยกหลักฐาน source/unit/integration/runtime/user acceptance/Out of scope
+- [เริ่มที่บท 1](.docs/system/01-introduction.md): ลิงก์ครบทั้ง 5 บท อิงโค้ดและหลักฐานที่ยืนยัน
+- [System flow QA](.docs/qa/system-flow-report.md): ผล local API, regression และกรณีที่ยังต้องตรวจ
+
+
+## Current flow and scope (2026-10-13)
+
+For current QA and remaining browser acceptance, start at [.docs/qa/system-flow-report.md](.docs/qa/system-flow-report.md), then current [REST contracts](.docs/ai-context/contracts/api-contracts.md) and [consistency rules](.docs/ai-context/spec-consistency.md). Camera/physical door/SMS/actual providers are Out of scope for this QA round; do not remove wrappers or security. Frontend is the sibling smart-dormitory-frontend repository with existing src/modules and src/componants; old frontend/ trees are plans, not a file map. Auth session revocation uses the 20261013000000_auth_session_version migration; Admin must configure real CONTRACT settings before accepting new applications.

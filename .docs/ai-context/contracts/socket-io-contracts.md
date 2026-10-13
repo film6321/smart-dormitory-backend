@@ -55,7 +55,7 @@
 
 ### `billStatusUpdated`
 
-- **Recipients:** `room:{roomNumber}` (เช่น `room:402`)
+- **Recipients:** `admins` สำหรับ alias ของเหตุการณ์งานส่วนกลาง; แจ้งเตือนส่วนบุคคลใช้ `notificationAlert` ส่งตรง `user:{userId}` ไม่ส่งตามห้อง
 
 ```json
 {
@@ -69,7 +69,7 @@
 
 ### `maintenanceStatusUpdated`
 
-- **Recipients:** `room:{roomNumber}`
+- **Recipients:** `admins` สำหรับ alias ของเหตุการณ์งานส่วนกลาง; ไม่ใช้ห้องร่วมเพื่อส่งสถานะส่วนบุคคล
 
 ```json
 {
@@ -83,7 +83,7 @@
 
 ### `notificationAlert`
 
-- **Recipients:** `user:{userId}` when the notification has a user recipient; otherwise `admins`
+- **Recipients:** `user:{userId}` เมื่อมีเจ้าของบัญชี; `admins` เฉพาะเมื่อทั้ง userId และ tenantId ว่าง หาก legacy record มีเพียง tenantId จะไม่ broadcast และให้ REST ตรวจเจ้าของ
 - **Purpose:** แจ้งเตือนในแอปหลังบันทึก Notification ลง PostgreSQL สำเร็จ
 
 ```json

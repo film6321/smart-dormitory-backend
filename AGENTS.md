@@ -46,7 +46,7 @@
 
 - ใช้ **Express.js** ร่วมกับ **TypeScript**
 - ยึดโครงสร้าง **Modular Architecture**: แต่ละโมดูลอยู่ภายใต้ `src/modules/<module-name>/`
-- **Thin Controller Rule:** Controller ทำหน้าที่เป็นเพียง Transport Layer เท่านั้น (ทำหน้าที่ Validate Input ข้อมูล, Authorize ตรวจสอบสิทธิ์ และ Map Payload ล่วงหน้า) **ห้ามเขียน Business Logic, ห้ามเขียนการคำนวณซับซ้อน หรือเรียกใช้งาน Prisma Client ตรง ๆ จาก Controller เด็ดขาด** ให้ส่งต่อไปให้ Service Layer ในโฟลเดอร์ `services/` จัดการเสมอ
+- **Thin Controller Rule:** Controller ทำหน้าที่เป็นเพียง Transport Layer เท่านั้น (ทำหน้าที่ Validate Input ข้อมูล, Authorize ตรวจสอบสิทธิ์ และ Map Payload ล่วงหน้า) **ห้ามเขียน Business Logic, ห้ามเขียนการคำนวณซับซ้อน หรือเรียกใช้งาน Prisma Client ตรง ๆ จาก Controller เด็ดขาด** ให้ส่งต่อไปให้ Service Layer ที่ `src/modules/<module-name>/*.service.ts` จัดการเสมอ (คงโครงสร้างเดิม ไม่สร้างโฟลเดอร์ `services/` เพื่อให้ตรงชื่อเอกสารอย่างเดียว)
 - **Standardized API Response Wrapper:** คืนค่า API REST Response ในรูปแบบเดียวกันโดยใช้ Wrapper โครงสร้าง `ApiResponse<T>` (มี statusCode, success, message, และ data เสมอ ห้ามส่งค่าดิบ/ค่าเปลือย) โดย HTTP Response status code ของ Express จะต้องมีสถานะตรงกับ `statusCode` ในตัว Payload Body นั้นด้วยเสมอ
 - **Validation:** ต้องทำการกรองข้อมูล (Data Validation) ผ่าน `class-validator` และ `class-transformer` ป้องกันบั๊กตั้งแต่ Endpoint ข้อมูล
 
@@ -73,10 +73,10 @@
 ### 4.5 สถาปัตยกรรมหน้าบ้าน (React / Vite / TypeScript)
 
 - ใช้ React (Vite) ร่วมกับ TypeScript
-- คงรูปแบบ **Modular Architecture**: แยกแต่ละโมดูลหน้าจอที่ `frontend/src/modules/<module-name>/`
-- ใช้ Axios สำหรับส่งคำขอ HTTP (ตั้งค่าคอนฟิกกลางที่ `frontend/src/services/`)
+- คงรูปแบบ **Modular Architecture**: โค้ดอยู่ใน repo ข้างเคียง `../smart-dormitory-frontend/`; โมดูลใหม่อยู่ที่ `src/modules/` ส่วน Admin/User เดิมอยู่ใน `src/componants/addminpage/` และ `src/componants/userPage/` ให้แก้ที่ตำแหน่งจริงก่อน ไม่ย้ายทั้งหมดในงานแก้ flow
+- ใช้ Axios สำหรับส่งคำขอ HTTP (ตั้งค่าคอนฟิกกลางที่ `../smart-dormitory-frontend/src/services/`)
 - สกัด Logic ออกจาก View Component ไปอยู่ร่วมกันที่ **Custom Hooks** เสมอ
-- วาง UI components ร่วมกันไว้ที่ `frontend/src/components/` และ Interface ของ TS ไว้ที่ `frontend/src/types/`
+- วาง UI components ร่วมกันไว้ที่ `../smart-dormitory-frontend/src/components/` และ TypeScript types ไว้ในโมดูลที่ใช้งานจริง
 - **UI Memory Leak Prevention:** ในหน้าจอลูกค้า ต้องป้องกันปัญหา Memory Leak เมื่อเชื่อมต่อ Socket.io หรือการรอผลการจองสิทธิ โดยทำการ Unsubscribe / Cleanup ใน `useEffect` เสมอ
 
 ### 4.6 Docker & Containers
@@ -189,3 +189,18 @@
 - เพิ่ม dependency ที่ไม่จำเป็น
 - เพิ่ม docs/spec มากเกินจริงเมื่อ task ยังไม่ต้องการ
 - แยก component ออกมาเกินความจำเป็นจนไม่ช่วยให้โค้ดอ่านง่ายขึ้น
+
+
+## 11. ขอบเขตและ flow ปัจจุบัน (13 ต.ค. 2569)
+
+- In scope: เว็บ Admin/User/Visitor, HTTP endpoints, authorization, validation, PostgreSQL, ไฟล์ที่ระบบเป็นเจ้าของ, draft/credit, idempotency และการกู้/ล้างข้อมูล ใช้ mock สำหรับ integration ภายนอกได้แต่ต้องระบุในผลทดสอบ
+- Out of scope ของรอบนี้: กล้องและอุปกรณ์จริง, ประตู/Edge จริง, SMS จริง และ provider ภายนอกจริง (OCR/Face/payment/notification) การจัดเป็น Out of scope ไม่ใช่การลบ wrapper/fallback/security หรืออ้างว่าทดสอบจริงผ่าน
+- Auth ใช้ HttpOnly cookie `access_token`; login body ไม่มี JWT การตรวจ REST/Socket ต้องตรวจบัญชีปัจจุบันกับ `authSessionVersion` ใน PostgreSQL; logout และเปลี่ยนรหัสผ่านยกเลิก session ทุกเครื่อง ไม่ใช้ `User.version` ของ OCC แทน session version
+- สมัครเข้าพัก 4 ขั้น: ตัวตน/ข้อมูลส่วนตัว → ผู้ติดต่อฉุกเฉิน → ห้อง/ชำระเงิน → สัญญา/ยืนยัน วันเกิด เลขบัตร ที่อยู่ และ consent เป็นข้อมูลจำเป็นที่ API ต้องตรวจ ไม่เปิดช่อง legacy ข้าม validation
+- ข้อมูลผู้ให้เช่า/เงื่อนไขสัญญากำหนดโดย Admin ใน SystemSetting หมวด CONTRACT; ค่าเริ่มต้นว่าง ห้ามนำค่าตัวอย่างมาเป็นข้อมูลจริง ค่าเช่า/มัดจำใช้ราคาห้อง ตรวจ snapshot ที่ server ก่อนบันทึก; สัญญาที่ส่งแล้วไม่เปลี่ยนตาม settings ใหม่
+- การลบผู้พักใช้ guarded purge ข้อมูลที่ผูกผู้พักและไฟล์ทั้งหมด เก็บ User; ห้ามเก็บบิลนิรนามหรือ ARCHIVED แทนการลบตามคำสั่งปัจจุบัน บัญชีไม่ใช้งาน 1 ปีนับจาก login สำเร็จล่าสุด/createdAt เมื่อไม่เคย login; ไม่ส่งแจ้งเตือนล่วงหน้า
+- ผู้มาติดต่อใช้สถานะคำขอแยกจาก visitStage WAITING/ADMITTED/COMPLETED; manual entry เป็นบันทึกเจ้าหน้าที่ ไม่ใช่หลักฐานประตูเปิดจริง อายุคำนวณจากวันเกิด ถ้าไม่มีวันเกิดจึงใช้อายุที่กรอก
+- โหลดหน้าครั้งแรกใช้ Skeleton ตามรูปแบบข้อมูล; action ใช้ spinner แบบหน่วงสั้นและคงข้อความปุ่มเดิม ไม่บังคับข้อความโหลดซ้ำบนทุก action
+- รายงาน QA ต้องแยก source review, unit/mock, HTTP/DB integration, browser acceptance และ Out of scope; จำนวน tests/routes ไม่ใช่หลักฐานว่าทุก end-to-end flow ผ่าน
+
+วันสัญญา (13 ต.ค. 2569): สำหรับใบสมัครใหม่ startDate คือวันปัจจุบันใน Asia/Bangkok และ endDate บวก 5 เดือนปฏิทิน ถ้าวันไม่มีในเดือนปลายทางให้ใช้วันสุดท้ายของเดือน. ไม่ต้องตั้งค่า contractStartDate/contractEndDate ใน Admin; ค่าที่เก็บเดิมไม่ใช้กำหนดวันใบสมัครใหม่. เงื่อนไขส่วนกลางที่ผู้ดูแลต้องกรอกเหลือ 10 ช่อง. สัญญาที่ส่งแล้วคง snapshot เดิม; หากข้ามวันก่อนยืนยันให้โหลด terms ล่าสุดก่อนส่ง.

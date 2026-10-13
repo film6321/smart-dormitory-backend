@@ -1,0 +1,1068 @@
+{
+  "routes": [
+    {
+      "method": "POST",
+      "route": "/api/auth/login",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/register",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/forgot-password",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/verify-reset-otp",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/reset-password",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/heartbeat",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/logout",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/auth/me",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/auth/admin-only",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/identity-card",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/id-card",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/idcard",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/verify-id-card",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/verify",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/verify-id-card/jobs",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/ocr/jobs",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/ocr/jobs/:jobId",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/ocr/verify-id-card/jobs/:jobId",
+      "source": "src/modules/ocr/ocr.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/register",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/verify",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/verify-image",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/embeddings",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/enrollment/pending",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/enrollment/photo/:id",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/enrollment/:studentId/embeddings",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/attendance/scan",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/devices/heartbeat",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/door-command",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/devices/live-frame",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/detections",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/live-stream",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/devices",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/scan-history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/face-verification/scan-history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/scan-history/clear",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/face-verification/history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/face-verification/history/clear",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/events",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/cleanup",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/cleanup/:taskKey",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/:templateId",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PUT",
+      "route": "/api/face-verification/:templateId",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/face-verification/:templateId",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/users",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/users/:id",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/users",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/users/:id",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/users/:id",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/draft",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/tenants/draft",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/draft/payment-qr/:roomNumber",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/tenants/draft/upload-identity",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/tenants/draft/upload-slip",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/payment-qr/:roomNumber",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/me",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/me/documents/:documentType",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/:id/documents/:documentType",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/:id",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/tenants/upload-documents",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/tenants/apply",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/tenants",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/tenants/:id",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/tenants/:id",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/rooms",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/rooms/:id",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/rooms",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/rooms/:id",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/rooms/:id",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/report",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/:id/payment-qr",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/room-info/:roomNumber",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/billing/generate-room-bill",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/billing/:id/upload-slip",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/billing/:id/upload",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/billing/:id/status",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/billing/:id",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/payment-batches",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id/payment-qr",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id/status",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/payment-batches/:id/upload-slip",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/admin/bills/:billId/payment-details",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/admin/bills/:billId/slip",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/maintenance",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/maintenance",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/maintenance/:id/confirm",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/maintenance/:id/status",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/maintenance/:id",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/maintenance/upload",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/maintenance/images/:filename",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/scan-id-card",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/verify-id-card",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/verify",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/register",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor/:id/pass",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor/:id",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/:id/cancel",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/visitor/:id/access",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/visitor/:id/status",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/dead-letters",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/audit-logs",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications/dead-letters/:id/retry",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/notifications/dead-letters/:id",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications/:id/send",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications/webhook/provider",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/preferences",
+      "source": "src/modules/notifications/notification-preferences.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PUT",
+      "route": "/api/notifications/preferences",
+      "source": "src/modules/notifications/notification-preferences.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/audit-logs",
+      "source": "src/modules/audit/audit.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/settings/academics",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "POST",
+      "route": "/api/settings/academics",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/settings",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/api/settings",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/dashboard",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/observability",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/metrics/raw",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true
+    }
+  ],
+  "anonymousGetChecks": [
+    {
+      "method": "GET",
+      "route": "/api/auth/me",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/auth/admin-only",
+      "source": "src/modules/auth/auth.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/embeddings",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/enrollment/pending",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/enrollment/photo/:id",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/devices",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/scan-history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/history",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/events",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/cleanup",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/cleanup/:taskKey",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/face-verification/:templateId",
+      "source": "src/modules/face-verification/face-verification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/users",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/users/:id",
+      "source": "src/modules/users/users.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/draft",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/draft/payment-qr/:roomNumber",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/payment-qr/:roomNumber",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/me",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/me/documents/:documentType",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/:id/documents/:documentType",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/tenants/:id",
+      "source": "src/modules/tenants/tenants.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/rooms",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/rooms/:id",
+      "source": "src/modules/rooms/rooms.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/report",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/:id/payment-qr",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/billing/room-info/:roomNumber",
+      "source": "src/modules/billing/billing.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id/payment-qr",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/:id/status",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/admin/bills/:billId/payment-details",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/payment-batches/admin/bills/:billId/slip",
+      "source": "src/modules/billing/payment-batch.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/maintenance",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/maintenance/images/:filename",
+      "source": "src/modules/maintenance/maintenance.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor/:id/pass",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor/:id",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/visitor",
+      "source": "src/modules/visitor/visitor.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/dead-letters",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/audit-logs",
+      "source": "src/modules/notifications/notification.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/preferences",
+      "source": "src/modules/notifications/notification-preferences.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/audit-logs",
+      "source": "src/modules/audit/audit.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/settings/academics",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/settings",
+      "source": "src/modules/settings/settings.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/dashboard",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/observability",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true,
+      "status": 401
+    },
+    {
+      "method": "GET",
+      "route": "/api/analytics/metrics/raw",
+      "source": "src/modules/analytics/analytics.routes.ts",
+      "protected": true,
+      "status": 401
+    }
+  ]
+}

@@ -237,3 +237,15 @@ sequenceDiagram
 - [สถานะโมเดลจริง/จำลอง](../../../Face_Recognition/app/ai/insightface_loader.py)
 
 ลิงก์ข้าม repo ต้อง checkout repositories ไว้ข้างกัน; หากส่งเล่มให้ใช้ชื่อไฟล์/เวอร์ชันและรายการอ้างอิงแทนพาธเครื่องส่วนตัว ไม่แนบ cookie, API key หรือภาพใบหน้าผู้เข้าร่วมลงเอกสารสาธารณะ
+
+
+### สถานะบันทึกใบหน้าครบและการซ่อนเมนู User — 13 ต.ค. 2569
+
+หลังหน้า UserIdentityFlow ส่งภาพครบ 5 รายการสำเร็จ เรียก POST /api/tenants/me/face-enrollment/complete โดยใช้ User จาก session เท่านั้น ไม่มี userId ใน body บันทึก marker FACE_ENROLLMENT_COMPLETE ใน AccessLog เดิมภายใต้ owner lock เฉพาะผู้พัก active/APPROVED หรือ ACTIVE ที่มีห้อง มีภาพอย่างน้อย 5 และไม่ faceRevokedAt เรียกซ้ำไม่เพิ่ม marker ซ้ำ GET /api/tenants/me คืน faceEnrollmentComplete โดยตรวจ marker ตรง Tenant ปัจจุบันและยังมีภาพครบ ไม่ส่ง accessLogs/_count ภายในออกไปกับ user profile เมนูบันทึกใบหน้าซ่อนเมื่อ true และเปิด URL เดิมจะกลับหน้าหลัก หากส่งภาพหรือบันทึก marker ไม่สำเร็จยังคง retry ได้ สถานะนี้เป็นสถานะ UI ของการบันทึก ไม่ใช้อนุญาตประตูหรือรับรองการทำงานของ provider
+
+การ DELETE ผู้พักผ่าน guarded purge ลบ FaceEmbedding/FaceEnrollmentPhoto และ access logs พร้อม revoke ใบหน้า เก็บ User; งาน cleanup ล้างไฟล์และ provider ภายนอกแบบ retry จึงอาจตอบ PENDING จนล้างสำเร็จ การครบวัน endDate อย่างเดียวปัจจุบันไม่มี scheduler ลบใบหน้าอัตโนมัติ ต้องดำเนินย้ายออกและลบผู้พักตาม flow เดิม บัญชีที่เคย revoke ต้องผ่านการคืนสิทธิ์โดยผู้ดูแลก่อนลงทะเบียนใบหน้าใหม่ ไม่ปลด revoke อัตโนมัติจากการซ่อนเมนู
+
+ตรวจ build/lint Backend และ Frontend ผ่าน Backend unit/mock 180/180 (เพิ่ม 4 กรณี completion/persistence/idempotency/privacy/incomplete/revoked/inactive/old tenant) Frontend 112/112 รอบนี้ไม่ได้ทดสอบกล้อง/ประตู/provider จริง และยังไม่มี browser acceptance ของ flow ใหม่
+
+
+เพิ่มเติม flow สมัครใหม่ (13 ต.ค. 2569): แก้คืนสิทธิ์ใบหน้าเมื่อ Admin อนุมัติ Tenant ใหม่จาก PENDING เท่านั้น โดย cleanup ของ User ต้อง phase DONE และไม่มี photo/embedding เก่า หากยังล้างค้างให้ 409 และ rollback ไม่เปลี่ยนสถานะผู้พักเดิม ACTIVE เพื่อปลด revoke ผ่าน transaction นี้ Integration ใช้ HTTP/PostgreSQL จริงในฐานแยกและ mock เฉพาะการลบ owner ภายนอก ผ่านพร้อม suite 36/36 ไฟล์ fixture ทั้ง 5 ถูกลบจากดิสก์และ marker เก่าถูกลบ เมนูสมัครใหม่จึงต้องบันทึกใบหน้าใหม่ ไม่รับรองผลกล้อง/ประตู/provider จริง
