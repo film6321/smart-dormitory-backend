@@ -1,0 +1,2 @@
+ALTER TABLE "Transaction" ALTER COLUMN "userId" DROP NOT NULL;
+ALTER TABLE "PaymentBatch" ALTER COLUMN "payerUserId" DROP NOT NULL;

@@ -61,6 +61,7 @@ model User {
   passwordResetGrantExpiresAt DateTime?
   role                        Role      @default(STUDENT)
   lastLogin                   DateTime?
+  authSessionVersion          Int       @default(1) // Authentication only; independent of data OCC
   version                     Int       @default(1) // Optimistic Concurrency Control (OCC)
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
@@ -73,6 +74,7 @@ model User {
   idCardVerifications  IdCardVerification[]
   ocrJobs              OcrJob[]
   tenant               Tenant?
+  housingDraft         HousingApplicationDraft?
   faceEmbeddings       FaceEmbedding[]
   faceEnrollmentPhotos FaceEnrollmentPhoto[]
   updatedSettings      SystemSetting[]
@@ -115,8 +117,8 @@ model AccessLog {
  */
 model Transaction {
   id          Int             @id @default(autoincrement())
-  userId      Int
-  user        User            @relation(fields: [userId], references: [id])
+  userId      Int?
+  user        User?           @relation(fields: [userId], references: [id])
   amount      Decimal         @db.Decimal(10, 2)
   type        TransactionType
   description String?
@@ -302,6 +304,7 @@ model Bill {
   dueDate        DateTime
   status         BillStatus @default(UNPAID)
   version        Int        @default(1)
+  billingPeriod  String?    @db.VarChar(7) // Gregorian YYYY-MM; null for legacy bills
   description    String?
   slipHash       String?
   reason         String?
@@ -316,6 +319,7 @@ model Bill {
   @@index([roomId])
   @@index([status])
   @@index([dueDate])
+  @@unique([tenantId, roomId, billingPeriod])
 }
 
 model Payment {
@@ -327,6 +331,9 @@ model Payment {
   housingVerificationId Int?
   housingVerification   IdCardVerification? @relation(fields: [housingVerificationId], references: [id], onDelete: Restrict)
   housingTenantId       Int?
+  housingDraftId        Int?
+  housingDraft          HousingApplicationDraft? @relation(fields: [housingDraftId], references: [id], onDelete: SetNull)
+  housingApprovedAt     DateTime?
   housingTenant         Tenant?         @relation(fields: [housingTenantId], references: [id], onDelete: Restrict)
   payerUserId           Int?
   payerUser             User?           @relation(fields: [payerUserId], references: [id])
@@ -349,15 +356,29 @@ model Payment {
   @@index([housingRoomId])
   @@index([housingVerificationId])
   @@index([housingTenantId])
+  @@index([housingDraftId])
   @@index([payerUserId])
   @@index([status])
   @@index([createdAt])
 }
 
+model HousingApplicationDraft {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomId    Int?
+  data      Json     @default("{}")
+  status    String   @default("OPEN")
+  version   Int      @default(1)
+  payments  Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model PaymentBatch {
   id                    Int                @id @default(autoincrement())
-  payerUserId           Int
-  payerUser             User               @relation(fields: [payerUserId], references: [id])
+  payerUserId           Int?
+  payerUser             User?              @relation(fields: [payerUserId], references: [id])
   amount                Decimal            @db.Decimal(10, 2)
   status                PaymentBatchStatus @default(PENDING)
   provider              PaymentProvider    @default(THUNDER)
@@ -422,6 +443,7 @@ model Visitor {
   roomId            Int?
   room              Room?         @relation(fields: [roomId], references: [id])
   guestName         String
+  requestedTenantName String?
   phone             String?
   citizenId         String?
   citizenIdMasked   String?
