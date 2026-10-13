@@ -14,8 +14,17 @@ export class AuthRepository {
         lastLogin: true,
         updatedAt: true,
         password: true,
+        authSessionVersion: true,
       },
     });
+  }
+
+  static async findSessionUser(id: number, db = prisma) {
+    return db.user.findUnique({ where: { id }, select: { id: true, role: true, authSessionVersion: true } });
+  }
+
+  static async revokeSessions(id: number, db = prisma) {
+    return db.user.updateMany({ where: { id }, data: { authSessionVersion: { increment: 1 } } });
   }
 
   static async findByUsername(username: string, db = prisma) {
@@ -133,6 +142,7 @@ export class AuthRepository {
       where: { id: userId, passwordResetGrantHash: grantHash, passwordResetGrantExpiresAt: { gt: now } },
       data: {
         password: passwordHash,
+        authSessionVersion: { increment: 1 },
         passwordResetOtpHash: null,
         passwordResetOtpExpiresAt: null,
         passwordResetOtpAttempts: 0,

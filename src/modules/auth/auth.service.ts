@@ -1,3 +1,4 @@
+import { disconnectUserSessions } from '../../realtime/notification-gateway';
 import { Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { createHash } from 'node:crypto';
@@ -62,6 +63,29 @@ const normalizeLastLogin = (value: unknown): string => {
 };
 
 export class AuthService {
+  static async authenticateToken(token: string) {
+    let decoded: jwt.JwtPayload;
+    try {
+      const payload = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
+      if (typeof payload === 'string') throw new Error('Invalid payload');
+      decoded = payload;
+    } catch {
+      throw new AppError('ไม่อนุญาตให้เข้าถึง: Token หมดอายุหรือไม่ถูกต้อง', 401);
+    }
+    if (!Number.isInteger(decoded.id) || decoded.id <= 0 || !Number.isInteger(decoded.sessionVersion)) {
+      throw new AppError('กรุณาเข้าสู่ระบบใหม่', 401);
+    }
+    const user = await AuthRepository.findSessionUser(decoded.id);
+    if (!user || user.authSessionVersion !== decoded.sessionVersion || user.role !== decoded.role) {
+      throw new AppError('Session ถูกยกเลิกแล้ว กรุณาเข้าสู่ระบบใหม่', 401);
+    }
+    return { id: user.id, role: user.role };
+  }
+
+  static async logout(userId: number) {
+    await AuthRepository.revokeSessions(userId);
+  }
+
   static async login(email: string, passwordString: string) {
     const user = await AuthRepository.findByEmail(email);
     if (!user) {
@@ -75,7 +99,7 @@ export class AuthService {
 
     const sessionTimeoutMinutes = Number(await getSettingValue('sessionTimeoutMinutes')) || 30;
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, sessionVersion: user.authSessionVersion },
       getJwtSecret(),
       { expiresIn: `${sessionTimeoutMinutes}m` }
     );
@@ -87,7 +111,8 @@ export class AuthService {
       if (getPrismaErrorCode(error) !== 'P2022') {
         throw error;
       }
-      logger.warn({ error, userId: user.id }, 'lastLogin column is not available yet, skipping login timestamp update');
+      logger.error({ error, userId: user.id }, 'Cannot persist successful login timestamp');
+      throw new AppError('ไม่สามารถบันทึกการเข้าสู่ระบบได้ กรุณาลองใหม่', 503);
     }
 
     await markUserOnline(user.id, lastLogin);
@@ -200,5 +225,6 @@ export class AuthService {
     if (updated.count !== 1) {
       throw new AppError('ข้อมูลยืนยันการตั้งรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว', 400);
     }
+    disconnectUserSessions(userId);
   }
 }

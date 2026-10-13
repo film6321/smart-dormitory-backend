@@ -51,6 +51,8 @@ describe('error response integration', () => {
     assert.equal(response.status, 418);
     assert.deepEqual(body, {
       statusCode: 418,
+      success: false,
+      data: null,
       message: 'Known failure',
     });
   });
@@ -62,6 +64,8 @@ describe('error response integration', () => {
     assert.equal(response.status, 500);
     assert.deepEqual(body, {
       statusCode: 500,
+      success: false,
+      data: null,
       message: 'Internal Server Error',
     });
   });

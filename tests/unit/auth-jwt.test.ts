@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { NextFunction, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { AuthRepository } from '../../src/modules/auth/auth.repository';
 import { AuthenticatedRequest, requireRole, verifyToken } from '../../src/middlewares/auth-jwt';
 import { AppError } from '../../src/middlewares/error-handler';
 
@@ -32,8 +33,9 @@ describe('auth-jwt middleware', () => {
     assert.equal((calls[0] as AppError).statusCode, 401);
   });
 
-  it('sets req.user when bearer token is valid', () => {
-    const token = jwt.sign({ id: 7, role: 'ADMIN' }, jwtSecret);
+  it('sets req.user when bearer token is valid', async t => {
+    t.mock.method(AuthRepository, 'findSessionUser', async () => ({ id: 7, role: 'ADMIN', authSessionVersion: 1 }));
+    const token = jwt.sign({ id: 7, role: 'ADMIN', sessionVersion: 1 }, jwtSecret);
     const req = {
       headers: {
         authorization: `Bearer ${token}`,
@@ -41,7 +43,7 @@ describe('auth-jwt middleware', () => {
     } as AuthenticatedRequest;
     const { next, calls } = createNextSpy();
 
-    verifyToken(req, {} as Response, next);
+    await verifyToken(req, {} as Response, next);
 
     assert.equal(req.user?.id, 7);
     assert.equal(req.user?.role, 'ADMIN');

@@ -1,3 +1,5 @@
+import { AppError } from '../middlewares/error-handler';
+import { createResponse } from '../shared/api-response';
 import cors from "cors";
 import express, { Express } from "express";
 import rateLimit from "express-rate-limit";
@@ -54,7 +56,7 @@ export const setupSecurity = (app: Express) => {
           return;
         }
 
-        callback(new Error("Not allowed by CORS policy"));
+        callback(new AppError("Not allowed by CORS policy", 403));
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -77,10 +79,7 @@ export const setupSecurity = (app: Express) => {
     store: createRateLimitStore("rl:general:"),
     windowMs: 15 * 60 * 1000,
     max: process.env.NODE_ENV === "production" ? 200 : 3000,
-    message: {
-      status: 429,
-      message: "Too many requests from this IP, please try again later",
-    },
+    message: createResponse(429, "Too many requests from this IP, please try again later"),
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) =>

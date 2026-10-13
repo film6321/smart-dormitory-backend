@@ -31,7 +31,7 @@ const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 นาที
   max: Number(process.env.LOGIN_RATE_LIMIT_MAX || 5), // จำกัด 5 ครั้งต่อบัญชี
   keyGenerator: getAccountRateLimitKey,
-  message: { status: 429, message: 'บัญชีนี้พยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 5 นาที' },
+  message: createResponse(429, 'บัญชีนี้พยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 5 นาที'),
   skipSuccessfulRequests: true, // ไม่นับ login สำเร็จ
   standardHeaders: true,
   legacyHeaders: false,
@@ -42,7 +42,7 @@ const passwordResetRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
   keyGenerator: getPhoneRateLimitKey,
-  message: { status: 429, message: 'ส่งคำขอได้ไม่เกิน 3 ครั้งต่อชั่วโมง กรุณาลองใหม่ภายหลัง' },
+  message: createResponse(429, 'ส่งคำขอได้ไม่เกิน 3 ครั้งต่อชั่วโมง กรุณาลองใหม่ภายหลัง'),
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -52,7 +52,7 @@ const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   keyGenerator: getPhoneRateLimitKey,
-  message: { status: 429, message: 'มีการลองตั้งรหัสผ่านหลายครั้ง กรุณาลองใหม่ภายหลัง' },
+  message: createResponse(429, 'มีการลองตั้งรหัสผ่านหลายครั้ง กรุณาลองใหม่ภายหลัง'),
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -61,9 +61,9 @@ const passwordResetLimiter = rateLimit({
 const registerLimiter = rateLimit({
   store: createRateLimitStore('rl:auth:register:'),
   windowMs: 60 * 60 * 1000, // 1 ชั่วโมง
-  max: Number(process.env.REGISTER_RATE_LIMIT_MAX || 3), // จำกัด 3 ครั้งต่อ 1 IP
+  max: Number(process.env.REGISTER_RATE_LIMIT_MAX || 10), // จำกัด 10 ครั้งต่อ IP ต่อชั่วโมง รวมการกรอกผิด
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
-  message: { status: 429, message: 'Too many registration attempts, please try again later' },
+  message: createResponse(429, 'Too many registration attempts, please try again later'),
   standardHeaders: true,
   legacyHeaders: false,
 });

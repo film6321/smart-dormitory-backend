@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { AuthService } from '../modules/auth/auth.service';
 import { AppError } from './error-handler';
-import { getJwtSecret } from '../shared/env';
 import { Role } from '@prisma/client';
 
 // ขยาย Interface ของ Request ให้รองรับคีย์ user ที่เราจะยัดตอนถอดรหัส
@@ -13,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // 1. Middleware สำหรับตรวจ Token ว่าส่งมาไหม และเป็นของจริงไหม
-export const verifyToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1]; // รับค่าจาก Header แบบ "Bearer <token>"
 
   const cookieToken = (req.headers.cookie ?? '')
@@ -21,46 +20,39 @@ export const verifyToken = (req: AuthenticatedRequest, res: Response, next: Next
     .map((part) => part.trim())
     .find((part) => part.startsWith('access_token='))
     ?.slice('access_token='.length);
-  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
-  const resolvedToken = token || cookieToken || queryToken;
+  const resolvedToken = token || cookieToken;
 
   if (!resolvedToken) {
     return next(new AppError('ไม่อนุญาตให้เข้าถึง: ไม่พบ Token', 401));
   }
 
   try {
-    const decoded = jwt.verify(
-      resolvedToken,
-      getJwtSecret()
-    ) as { id: number; role: Role };
+    const decoded = await AuthService.authenticateToken(resolvedToken);
 
     // แปะข้อมูล user ลงใน Request เพื่อให้ Controller เอาไปใช้งานต่อได้
     req.user = decoded; 
     next();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof AppError)) return next(error);
     return next(new AppError('ไม่อนุญาตให้เข้าถึง: Token หมดอายุหรือไม่ถูกต้อง', 401));
   }
 };
 
-export const optionalVerifyToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const optionalVerifyToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   const cookieToken = (req.headers.cookie ?? '')
     .split(';')
     .map((part) => part.trim())
     .find((part) => part.startsWith('access_token='))
     ?.slice('access_token='.length);
-  const queryToken = typeof req.query?.token === 'string' ? req.query.token.trim() : undefined;
-  const resolvedToken = token || cookieToken || queryToken;
+  const resolvedToken = token || cookieToken;
 
   if (!resolvedToken) {
     return next();
   }
 
   try {
-    const decoded = jwt.verify(
-      resolvedToken,
-      getJwtSecret()
-    ) as { id: number; role: Role };
+    const decoded = await AuthService.authenticateToken(resolvedToken);
     req.user = decoded;
     next();
   } catch {

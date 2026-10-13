@@ -3,14 +3,16 @@ import { AuthService } from './auth.service';
 import { createResponse } from '../../shared/api-response';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { markUserOnline } from '../../shared/presence';
-import { clearUserPresenceWhenDisconnected, publishUserPresence } from '../../realtime/notification-gateway';
+import { clearUserPresenceWhenDisconnected, disconnectUserSessions, publishUserPresence } from '../../realtime/notification-gateway';
 import { AppError } from '../../middlewares/error-handler';
 import { recordLoginAttempt } from '../../setup/observability-metrics';
 import { plainToInstance } from 'class-transformer';
-import { isString, matches } from 'class-validator';
+import { isEmail, isNotEmpty, isString, matches } from 'class-validator';
 import { PasswordResetOtpService } from './password-reset-otp.service';
 import { normalizeThaiMobilePhone } from './phone-utils';
 
+class LoginRequestDto { email!: string; password!: string; }
+class RegisterRequestDto { email!: string; phone!: string; password!: string; username?: string; }
 class ForgotPasswordRequestDto { phone!: string; }
 class VerifyPasswordResetOtpDto { phone!: string; otp!: string; }
 class ResetPasswordRequestDto { phone!: string; token!: string; password!: string; }
@@ -19,13 +21,16 @@ export class AuthController {
   
   static async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, password } = req.body;
-      
-      if (!email || !password) {
-        return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ครบ'));
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+        return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ถูกต้อง'));
+      }
+      const input = plainToInstance(LoginRequestDto, req.body);
+      if (!isString(input.email) || !isEmail(input.email)
+        || !isString(input.password) || !isNotEmpty(input.password)) {
+        return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมลและรหัสผ่านให้ถูกต้อง'));
       }
 
-      const data = await AuthService.login(email, password);
+      const data = await AuthService.login(input.email, input.password);
       recordLoginAttempt('success');
       publishUserPresence(data.user.id, true);
       res.cookie('access_token', data.token, {
@@ -44,13 +49,17 @@ export class AuthController {
 
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-        const { email, phone, password, username } = req.body;
-
-        if (!email || !password || !isString(phone) || !normalizeThaiMobilePhone(phone)) {
-          return res.status(400).json(createResponse(400, 'กรุณากรอกอีเมล เบอร์โทรศัพท์ และรหัสผ่านให้ถูกต้อง'));
+        if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+          throw new AppError('กรุณากรอกข้อมูลสมัครสมาชิกให้ถูกต้อง', 400);
         }
-
-        const data = await AuthService.register({ email, phone, password, username });
+        const input = plainToInstance(RegisterRequestDto, req.body);
+        if (!isString(input.email) || !isEmail(input.email) || input.email.length > 254
+          || !isString(input.password) || input.password.length < 8 || Buffer.byteLength(input.password, 'utf8') > 72
+          || !isString(input.phone) || !normalizeThaiMobilePhone(input.phone)
+          || (input.username !== undefined && (!isString(input.username) || !input.username.trim() || input.username.length > 100))) {
+          throw new AppError('กรุณากรอกอีเมล เบอร์โทรศัพท์ ชื่อผู้ใช้ และรหัสผ่านให้ถูกต้อง', 400);
+        }
+        const data = await AuthService.register({ email: input.email, phone: input.phone, password: input.password, username: input.username });
         return res.status(201).json(createResponse(201, 'สมัครสมาชิกเรียบร้อย', data));
     } catch (error) {
         next(error);
@@ -130,6 +139,8 @@ export class AuthController {
       const authedReq = req as AuthenticatedRequest;
       const userId = authedReq.user?.id;
       if (userId) {
+        await AuthService.logout(userId);
+        disconnectUserSessions(userId);
         await clearUserPresenceWhenDisconnected(userId);
       }
 
