@@ -1,7 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import type { Server as HttpServer } from 'http';
-import jwt from 'jsonwebtoken';
-import { getJwtSecret } from '../shared/env';
+import { AuthService } from '../modules/auth/auth.service';
 import { logger } from '../logger';
 import { clearUserOnline, listOnlineUserIds, markUserOnline } from '../shared/presence';
 
@@ -38,12 +37,16 @@ const getSocketToken = (socket: Socket) => {
   return typeof authToken === 'string' && authToken ? authToken : getCookieValue(socket.handshake.headers.cookie, 'access_token');
 };
 
+export const disconnectUserSessions = (userId: number) => {
+  realtimeServer?.in(`user:${userId}`).disconnectSockets(true);
+};
+
 export const initializeNotificationGateway = (httpServer: HttpServer, resolveUserRoom?: UserRoomResolver) => {
   realtimeServer = new Server(httpServer, {
     cors: { origin: true, credentials: true },
   });
 
-  realtimeServer.use((socket, next) => {
+  realtimeServer.use(async (socket, next) => {
     const token = getSocketToken(socket);
     if (!token) {
       next(new Error('Authentication required'));
@@ -51,7 +54,7 @@ export const initializeNotificationGateway = (httpServer: HttpServer, resolveUse
     }
 
     try {
-      socket.data.user = jwt.verify(token, getJwtSecret()) as { id: number; role: string };
+      socket.data.user = await AuthService.authenticateToken(token);
       next();
     } catch {
       next(new Error('Invalid authentication token'));
@@ -157,7 +160,11 @@ export const publishNotificationAlert = (notification: RealtimeNotification) => 
     return;
   }
 
-  realtimeServer.to('admins').emit('notificationAlert', {
+  // Personal notifications must never be broadcast to administrators or roommates.
+  // Tenant-only legacy records have no safe socket recipient; REST resolves ownership.
+  if (notification.userId == null && notification.tenantId != null) return;
+  const recipient = notification.userId != null ? `user:${notification.userId}` : 'admins';
+  realtimeServer.to(recipient).emit('notificationAlert', {
     schemaVersion: 1,
     id: notification.id,
     type: notification.type,
@@ -166,6 +173,8 @@ export const publishNotificationAlert = (notification: RealtimeNotification) => 
     payload: notification.payload,
     createdAt: notification.createdAt,
   });
+
+  if (recipient !== 'admins') return;
 
   const upperType = notification.type.toUpperCase();
   if (upperType.includes('BILL')) {

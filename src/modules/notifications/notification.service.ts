@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '../settings/settings.service';
 import { logger } from '../../logger';
 import { prisma, type DbClient } from '../../database/db';
 import { NotificationRepository } from './notification.repository';
@@ -53,8 +54,8 @@ export class NotificationService {
       payload: data.payload,
       recipientPhone,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
-      ...(data.userId ? { user: { connect: { id: data.userId } } } : {}),
-      ...(data.tenantId ? { tenant: { connect: { id: data.tenantId } } } : {}),
+      ...((data.userId ?? tenant?.userId) ? { userId: data.userId ?? tenant?.userId } : {}),
+      ...(data.tenantId ? { tenantId: data.tenantId } : {}),
     };
     const notification = await NotificationRepository.createNotification(payload, this.db);
     publishNotificationAlert(notification);
@@ -140,6 +141,17 @@ export class NotificationService {
     const db = this.db;
     const notif = await db.notification.findUnique({ where: { id: notificationId } });
     if (!notif) throw new Error('Notification not found');
+
+    // Global switches govern delivery, independently of the real provider.
+    const channelSetting = { EMAIL: 'emailNotifications', SMS: 'smsNotifications' } as const;
+    const key = channelSetting[notif.channel as keyof typeof channelSetting];
+    if (key) {
+      const setting = await db.systemSetting?.findUnique({ where: { key } });
+      if ((setting?.value ?? DEFAULT_SETTINGS[key].value) === 'false') {
+        await db.notification.update({ where: { id: notificationId }, data: { status: 'CANCELLED' } });
+        return { cancelled: true };
+      }
+    }
 
     // Check preferences
     if (notif.userId) {

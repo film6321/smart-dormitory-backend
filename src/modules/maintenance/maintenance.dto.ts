@@ -1,4 +1,8 @@
 import { MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
+import { Equals } from 'class-validator';
+
+export class ConfirmMaintenanceDto { confirmed!: boolean; }
+Equals(true)(ConfirmMaintenanceDto.prototype, 'confirmed');
 
 export const createMaintenanceTicketSchema = {
   roomId: (value: unknown) => value === undefined || (typeof value === 'number' && value > 0),

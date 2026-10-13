@@ -1,3 +1,4 @@
+import { AuthRepository } from '../../src/modules/auth/auth.repository';
 import assert from 'node:assert/strict';
 import { describe, it, TestContext } from 'node:test';
 import { MaintenanceCategory, MaintenanceStatus, MaintenanceTicket, Prisma, PrismaClient } from '@prisma/client';
@@ -28,7 +29,7 @@ const quotaFixture = (t: TestContext, recorded: number, existing = 0) => {
   const tickets = { ...client.maintenanceTicket };
   const logs = { ...client.accessLog };
   const tenants = { ...client.tenant };
-  t.mock.method(tenants, 'findUnique', async () => ({ userId: 8 }));
+  const tenantLookup = t.mock.method(tenants, 'findUnique', async () => ({ userId: 8, roomId: 3, status: 'ACTIVE', isActive: true }));
   const countTickets = t.mock.method(tickets, 'count', async () => Math.max(existing - recorded, 0));
   const countLogs = t.mock.method(logs, 'findMany', async () => Array.from({ length: recorded }, (_, index) => ({ path: `/api/maintenance/${index + 1}` })));
   const create = t.mock.method(tickets, 'create', async () => ticket);
@@ -49,15 +50,32 @@ const quotaFixture = (t: TestContext, recorded: number, existing = 0) => {
       return Reflect.get(target, key, receiver);
     },
   });
-  return { db, create, record, lock, countTickets, countLogs };
+  return { db, create, record, lock, countTickets, countLogs, tenantLookup };
 };
 
 describe('Maintenance daily submission quota', () => {
   const input: Prisma.MaintenanceTicketCreateInput = { tenant: { connect: { id: 2 } }, description: ticket.description, category: ticket.category };
+  it('rejects a moved-out tenant before recording a submission', async (t) => {
+    const f = quotaFixture(t, 0);
+    f.tenantLookup.mock.mockImplementation(async () => ({ userId: 8, roomId: 3, status: 'INACTIVE', isActive: false }));
+    await assert.rejects(MaintenanceRepository.createTicketWithinDailyLimit(input, 2, new Date(), f.db), { statusCode: 403 });
+    assert.equal(f.create.mock.callCount(), 0);
+    assert.equal(f.record.mock.callCount(), 0);
+  });
+  it('rejects a room that does not belong to the submitting tenant', async (t) => {
+    const f = quotaFixture(t, 0);
+    await assert.rejects(MaintenanceRepository.createTicketWithinDailyLimit({ ...input, room: { connect: { id: 99 } } }, 2, new Date(), f.db), { statusCode: 403 });
+    assert.equal(f.create.mock.callCount(), 0);
+  });
+  it('binds the ticket to the locked tenant room when no room is supplied', async (t) => {
+    const f = quotaFixture(t, 0);
+    await MaintenanceRepository.createTicketWithinDailyLimit(input, 2, new Date(), f.db);
+    assert.deepEqual(f.create.mock.calls[0].arguments[0]?.data.room, { connect: { id: 3 } });
+  });
   it('allows the third success and records it in the same locked transaction', async (t) => {
     const f = quotaFixture(t, 2, 2);
     assert.equal(await MaintenanceRepository.createTicketWithinDailyLimit(input, 2, new Date('2026-10-04T16:59:59Z'), f.db), ticket);
-    assert.equal(f.lock.mock.callCount(), 1);
+    assert.equal(f.lock.mock.callCount(), 2);
     assert.equal(f.record.mock.callCount(), 1);
     assert.deepEqual(f.countTickets.mock.calls[0].arguments[0]?.where?.id, { notIn: [1, 2] });
     assert.deepEqual(f.countLogs.mock.calls[0].arguments[0]?.where?.createdAt, {
@@ -89,6 +107,10 @@ describe('Maintenance daily submission quota', () => {
 });
 
 it('rate limits creation and upload together before database work', async (t) => {
+  t.mock.method(AuthRepository, 'findSessionUser', async () => ({ id: 876543, role: 'STUDENT', authSessionVersion: 1 }));
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'synthetic-maintenance-unit-secret';
+  t.after(() => { if (originalSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = originalSecret; });
   const app = express();
   app.use(express.json());
   app.use('/api/maintenance', maintenanceRoutes);
@@ -98,7 +120,7 @@ it('rate limits creation and upload together before database work', async (t) =>
   t.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
-  const token = jwt.sign({ id: 876543, role: 'STUDENT' }, getJwtSecret());
+  const token = jwt.sign({ id: 876543, role: 'STUDENT', sessionVersion: 1 }, getJwtSecret());
   const url = `http://127.0.0.1:${address.port}/api/maintenance`;
   const write = t.mock.method(MaintenanceRepository, 'createTicketWithinDailyLimit', async () => ticket);
   for (let index = 0; index < 10; index++) {
@@ -175,9 +197,9 @@ describe('MaintenanceService validation and transitions', () => {
     });
     await MaintenanceRepository.updateTicketStatus(1, { status: MaintenanceStatus.APPROVED }, mockDb);
     await MaintenanceRepository.deleteTicket(1, mockDb);
-    assert.deepEqual(update.mock.calls[0].arguments[0]?.where, { id: 1, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } });
+    assert.deepEqual(update.mock.calls[0].arguments[0]?.where, { id: 1, status: { in: ['PENDING', 'IN_PROGRESS'] } });
     await MaintenanceRepository.updateTicketStatus(1, { status: MaintenanceStatus.CLOSED }, mockDb);
-    assert.deepEqual(update.mock.calls[1].arguments[0]?.where, { id: 1, status: { notIn: ['CLOSED', 'CANCELLED'] } });
+    assert.deepEqual(update.mock.calls[1].arguments[0]?.where, { id: 1, status: { in: ['RESOLVED'] } });
     assert.deepEqual(remove.mock.calls[0].arguments[0]?.where, { id: 1, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } });
   });
 
@@ -279,5 +301,15 @@ describe('MaintenanceService validation and transitions', () => {
     const publish = t.mock.method(gateway, 'publishAdminAlert', () => {});
     await assert.rejects(MaintenanceService.updateTicketStatus(1, 'APPROVED'), databaseError);
     assert.equal(publish.mock.callCount(), 0);
+  });
+});
+
+
+describe('maintenance history visibility', () => {
+  it('does not list archived profiles as current or historical tenant tickets', async () => {
+    const db = { maintenanceTicket: { findMany: async (args: { where?: unknown }) => {
+      assert.deepEqual(args.where, { tenant: { status: { not: 'ARCHIVED' } } }); return [];
+    } } } as unknown as NonNullable<Parameters<typeof MaintenanceRepository.listTickets>[2]>;
+    await MaintenanceRepository.listTickets(undefined, 'ADMIN', db);
   });
 });

@@ -3,6 +3,10 @@ import { createResponse } from '../../shared/api-response';
 import { AppError } from '../../middlewares/error-handler';
 import { canTransitionVisitorStatus } from '../../shared/state-transitions';
 import { VisitorService } from './visitor.service';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import { VisitorAccessDto } from './visitor.dto';
+import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 
 const getUploadedFileFromFields = (files: Request['files']): Express.Multer.File | undefined => {
   if (!files || Array.isArray(files)) {
@@ -13,6 +17,18 @@ const getUploadedFileFromFields = (files: Request['files']): Express.Multer.File
 };
 
 export class VisitorController {
+  static async recordVisitAccess(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) throw new AppError('รหัสผู้มาติดต่อไม่ถูกต้อง', 400);
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new AppError('ข้อมูลไม่ถูกต้อง', 400);
+      const input = plainToInstance(VisitorAccessDto, req.body);
+      const errors = validateSync(input, { whitelist: true, forbidNonWhitelisted: true });
+      if (errors.length) throw new AppError('กรุณายืนยันข้อมูลผู้มาติดต่อและการดำเนินการ', 400, errors);
+      const data = await VisitorService.recordVisitAccess(id, input.action, (req as AuthenticatedRequest).user!.id);
+      return res.status(200).json(createResponse(200, 'บันทึกการเข้าพบสำเร็จ', data));
+    } catch (error) { next(error); }
+  }
   static async scanVisitorIdCard(req: Request, res: Response, next: NextFunction) {
     try {
       const { imageBase64 } = req.body || {};
@@ -46,8 +62,7 @@ export class VisitorController {
         purpose,
         roomId,
         roomNumber,
-        tenantId,
-        tenantName,
+        requestedTenantName,
         idCardVerificationId,
         expectedEntryTime,
         pdpaConsent,
@@ -67,8 +82,7 @@ export class VisitorController {
         purpose,
         roomId: roomId ? Number(roomId) : undefined,
         roomNumber: typeof roomNumber === 'string' ? roomNumber : (typeof roomId === 'string' && isNaN(Number(roomId)) ? roomId : undefined),
-        tenantId: tenantId ? Number(tenantId) : undefined,
-        tenantName: typeof tenantName === 'string' ? tenantName : undefined,
+        requestedTenantName: typeof requestedTenantName === 'string' ? requestedTenantName : '',
         idCardVerificationId: Number(idCardVerificationId),
         expectedEntryTime: expectedEntryTime ? new Date(expectedEntryTime) : undefined,
         pdpaConsent: Boolean(pdpaConsent),
@@ -78,9 +92,12 @@ export class VisitorController {
         id: visitor.id,
         guestName: visitor.guestName,
         roomNumber: visitor.room?.roomNumber,
-        tenantName: visitor.tenant?.fullName,
+        requestedTenantName: visitor.requestedTenantName,
         status: visitor.status,
         expiresAt: visitor.expiresAt,
+        createdAt: visitor.createdAt,
+        expectedEntryTime: visitor.expectedEntryTime,
+        purpose: visitor.purpose,
       }));
     } catch (error) {
       next(error);

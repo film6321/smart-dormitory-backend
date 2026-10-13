@@ -51,6 +51,7 @@ router.post('/register', optionalVerifyToken, validateDto(registerVisitorSchema)
 router.get('/:id/pass', verifyToken, requireRole(['ADMIN']), VisitorController.getVisitorPass);
 router.get('/:id', verifyToken, requireRole(['ADMIN']), VisitorController.getVisitorPass);
 router.post('/:id/cancel', verifyToken, requireRole(['ADMIN']), validateDto(cancelVisitorSchema), VisitorController.cancelVisitor);
+router.post('/:id/access', verifyToken, requireRole(['ADMIN']), VisitorController.recordVisitAccess);
 
 router.get('/', verifyToken, requireRole(['ADMIN']), VisitorController.listVisitors);
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateVisitorStatusSchema), VisitorController.updateVisitorStatus);

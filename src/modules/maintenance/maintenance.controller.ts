@@ -4,8 +4,24 @@ import path from 'path';
 import { createResponse } from '../../shared/api-response';
 import { MaintenanceService } from './maintenance.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import { ConfirmMaintenanceDto } from './maintenance.dto';
 
 export class MaintenanceController {
+  static async confirmTicket(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json(createResponse(400, 'Invalid ticket id'));
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+        || validateSync(plainToInstance(ConfirmMaintenanceDto, req.body), { whitelist: true, forbidNonWhitelisted: true }).length) {
+        return res.status(400).json(createResponse(400, 'Please confirm the completed repair'));
+      }
+      const updated = await MaintenanceService.confirmTicket(id, (req as AuthenticatedRequest).user!.id);
+      return res.status(200).json(createResponse(200, 'Maintenance ticket confirmed', updated));
+    } catch (error) { next(error); }
+  }
+
   static async createTicket(req: Request, res: Response, next: NextFunction) {
     try {
       const authReq = req as AuthenticatedRequest;
@@ -92,18 +108,8 @@ export class MaintenanceController {
         return res.status(400).json(createResponse(400, 'Image file is required'));
       }
 
-      const uploadDir = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/maintenance'));
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      const ext = path.extname(file.originalname) || '.jpg';
-      const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
-      const filepath = path.join(uploadDir, filename);
-
-      await fs.promises.writeFile(filepath, file.buffer);
-
-      return res.status(200).json(createResponse(200, 'Image uploaded successfully', { filename }));
+      const data = await MaintenanceService.uploadImage(file, (req as AuthenticatedRequest).user!.id);
+      return res.status(200).json(createResponse(200, 'Image uploaded successfully', data));
     } catch (error) {
       next(error);
     }

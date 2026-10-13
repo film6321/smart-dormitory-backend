@@ -13,14 +13,14 @@ export class NotificationRepository {
   static async findTenantById(id: number, db: DbClient = prisma) {
     return db.tenant.findUnique({
       where: { id },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, userId: true },
     });
   }
 
   static async findTenantByUserId(userId: number, db: DbClient = prisma) {
     return db.tenant.findUnique({
       where: { userId },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, userId: true },
     });
   }
 
@@ -32,7 +32,13 @@ export class NotificationRepository {
   }
 
   static async listNotifications(userId?: number, db: DbClient = prisma) {
-    return db.notification.findMany({ where: userId ? { userId } : undefined, orderBy: { createdAt: 'desc' }, take: 50 });
+    const tenant = userId !== undefined ? await this.findTenantByUserId(userId, db) : null;
+    return db.notification.findMany({
+      where: userId !== undefined
+        ? { OR: [{ userId }, ...(tenant ? [{ tenantId: tenant.id, userId: null }] : [])] }
+        : { userId: null, tenantId: null },
+      orderBy: { createdAt: 'desc' }, take: 50,
+    });
   }
 
   static async createNotification(data: Prisma.NotificationCreateInput, db: DbClient = prisma) {

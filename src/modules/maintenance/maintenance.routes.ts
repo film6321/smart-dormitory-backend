@@ -34,6 +34,7 @@ const upload = multer({
 
 router.post('/', verifyToken, submissionLimiter, validateDto(createMaintenanceTicketSchema), MaintenanceController.createTicket);
 router.get('/', verifyToken, MaintenanceController.listTickets);
+router.post('/:id/confirm', verifyToken, requireRole(['STUDENT']), MaintenanceController.confirmTicket);
 router.patch('/:id/status', verifyToken, requireRole(['ADMIN']), validateDto(updateMaintenanceStatusSchema), MaintenanceController.updateTicketStatus);
 router.delete('/:id', verifyToken, requireRole(['ADMIN']), MaintenanceController.deleteTicket);
 

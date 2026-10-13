@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import NotificationService from '../notifications/notification.service';
 import { MaintenanceRepository } from './maintenance.repository';
 import { Prisma, MaintenanceCategory, MaintenanceStatus } from '@prisma/client';
@@ -8,6 +11,47 @@ import { logger } from '../../logger';
 import { canTransitionMaintenanceStatus } from '../../shared/state-transitions';
 
 export class MaintenanceService {
+  static async uploadImage(file: Express.Multer.File, userId: number) {
+    const tenant = await this.getTenantByUserId(userId);
+    if (!tenant || !tenant.isActive || !['ACTIVE', 'APPROVED'].includes(tenant.status) || !tenant.roomId) throw new AppError('ต้องเป็นผู้พักที่มีห้องก่อนอัปโหลดภาพแจ้งซ่อม', 403);
+    const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[file.mimetype];
+    if (!ext) throw new AppError('Only JPG, PNG, and WebP images are allowed', 400);
+    const filename = `${randomUUID()}${ext}`;
+    const root = path.resolve(process.env.UPLOAD_ROOT || 'uploads/maintenance');
+    await fs.mkdir(root, { recursive: true });
+    const target = path.join(root, filename);
+    await fs.writeFile(target, file.buffer);
+    try {
+      await prisma.systemSetting.create({ data: { key: `maintenance-upload:${filename}`, category: 'MAINTENANCE_UPLOAD', updatedById: userId,
+        value: JSON.stringify({ expiresAt: new Date(Date.now() + 86400000).toISOString() }) } });
+    } catch (error) { await fs.unlink(target).catch(() => undefined); throw error; }
+    return { filename };
+  }
+
+  static async cleanupExpiredUploads(now = new Date()) {
+    const rows = await prisma.systemSetting.findMany({ where: { category: 'MAINTENANCE_UPLOAD' } });
+    for (const row of rows) {
+      if (new Date(JSON.parse(row.value).expiresAt).getTime() > now.getTime()) continue;
+      await prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM "SystemSetting" WHERE id = ${row.id} FOR UPDATE`;
+        if (!await tx.systemSetting.findUnique({ where: { id: row.id } })) return;
+        const filename = row.key.slice('maintenance-upload:'.length);
+        if (!/^[a-f0-9-]+\.(jpg|png|webp)$/.test(filename)) throw new Error('Invalid staged maintenance filename');
+        const referenced = await tx.maintenanceTicket.count({ where: { description: { startsWith: `[IMAGE:${filename}]` } } });
+        if (!referenced) {
+          const root = path.resolve(process.env.UPLOAD_ROOT || 'uploads/maintenance');
+          const target = path.join(root, filename);
+          try {
+            const actualRoot = await fs.realpath(root); const actual = await fs.realpath(target);
+            if (!actual.startsWith(actualRoot + path.sep) || (await fs.lstat(target)).isSymbolicLink()) throw new Error('Unsafe staged upload path');
+            await fs.unlink(target);
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        }
+        await tx.systemSetting.delete({ where: { id: row.id } });
+      });
+    }
+  }
+
   static async getTenantByUserId(userId: number) {
     return prisma.tenant.findFirst({ where: { userId } });
   }
@@ -36,7 +80,7 @@ export class MaintenanceService {
       await notificationService.scheduleNotification({
         tenantId: ticket.tenantId,
         channel: 'SMS',
-        type: 'MAINTENANCE_COMPLETED',
+        type: 'GENERIC',
         payload: JSON.stringify({ message: `Maintenance ticket ${ticket.id} created`, category: ticket.category }),
       });
     } catch (notifErr) {
@@ -44,6 +88,7 @@ export class MaintenanceService {
       logger.warn({ err: notifErr }, '[MaintenanceService] Notification scheduling failed (non-critical)');
     }
 
+    publishAdminAlert(ticket.id, 'MAINTENANCE_STATUS', `มีแจ้งซ่อมใหม่ #${ticket.id} รอรับงาน`, ticket.status);
     return ticket;
   }
 
@@ -98,5 +143,11 @@ export class MaintenanceService {
       }
       throw error;
     }
+  }
+
+  static async confirmTicket(id: number, userId: number) {
+    const result = await MaintenanceRepository.confirmTicket(id, userId);
+    if (result.changed) publishAdminAlert(result.ticket.id, 'MAINTENANCE_STATUS', `ผู้พักยืนยันปิดงานแจ้งซ่อม #${id}`, 'CLOSED');
+    return result.ticket;
   }
 }

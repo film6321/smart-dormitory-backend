@@ -9,6 +9,44 @@ import { AuthenticatedRequest } from '../../src/middlewares/auth-jwt';
 import { Response } from 'express';
 import { DbClient } from '../../src/database/db';
 import { NotificationChannel, NotificationStatus, NotificationType, Prisma, Role } from '@prisma/client';
+import { NotificationRepository } from '../../src/modules/notifications/notification.repository';
+import { createServer } from 'node:http';
+import { initializeNotificationGateway, closeNotificationGateway, publishNotificationAlert } from '../../src/realtime/notification-gateway';
+
+it('notification queries separate admin operations from resident ownership', async () => {
+  const filters: unknown[] = [];
+  const db = {
+    tenant: { findUnique: async () => ({ id: 9 }) },
+    notification: { findMany: async (args: { where: unknown }) => { filters.push(args.where); return []; } },
+  } as unknown as DbClient;
+  await NotificationRepository.listNotifications(undefined, db);
+  await NotificationRepository.listNotifications(12, db);
+  assert.deepEqual(filters, [
+    { userId: null, tenantId: null },
+    { OR: [{ userId: 12 }, { tenantId: 9, userId: null }] },
+  ]);
+});
+
+it('personal socket alerts target the owner, never admins or room peers', async () => {
+  const server = initializeNotificationGateway(createServer());
+  const events: Array<{ room: unknown; name: string }> = [];
+  const originalTo = server.to;
+  server.to = ((room: unknown) => ({ emit: (name: string) => { events.push({ room, name }); } })) as typeof server.to;
+  try {
+    const record = { id: 1, type: 'MAINTENANCE_COMPLETED', channel: 'IN_APP', status: 'PENDING', createdAt: new Date() };
+    publishNotificationAlert({ ...record, userId: 12, tenantId: 9 });
+    assert.deepEqual(events, [{ room: 'user:12', name: 'notificationAlert' }]);
+    events.length = 0;
+    publishNotificationAlert({ ...record, tenantId: 9 });
+    assert.equal(events.length, 0);
+    publishNotificationAlert(record);
+    assert.equal(events.every(event => event.room === 'admins'), true);
+    assert.equal(events[0].name, 'notificationAlert');
+  } finally {
+    server.to = originalTo;
+    await closeNotificationGateway();
+  }
+});
 
 describe('NotificationService (unit)', () => {
   it('accepts a valid notification payload for SMS delivery', () => {
@@ -224,6 +262,8 @@ describe('NotificationService (unit)', () => {
     await svc.scheduleNotification({ tenantId: 1, channel: 'SMS', type: 'GENERIC', payload: '{}' });
 
     assert.equal(created[0]?.recipientPhone, '+66912345678');
+    assert.equal(created[0]?.tenantId, 1);
+    assert.equal(Object.hasOwn(created[0]!, 'tenant'), false);
   });
 
   it('starts and stops the notification worker to process pending notifications', async () => {
@@ -329,4 +369,15 @@ describe('NotificationService (unit)', () => {
       assert.equal(updateRef.data.attempts, 1);
     }
   });
+});
+
+it('global channel disable cancels delivery before provider work even without a user preference', async () => {
+  let status; let providerReads = 0;
+  const db = {
+    notification: { findUnique: async () => ({ id: 99, channel: 'SMS', userId: null }), update: async ({ data }: { data: { status: string } }) => { status = data.status; } },
+    systemSetting: { findUnique: async () => ({ value: 'false' }) },
+    notificationProvider: { findFirst: async () => { providerReads++; throw Error('Must not call provider'); } },
+  } as unknown as DbClient;
+  assert.deepEqual(await new NotificationService(db).sendNotification(99), { cancelled: true });
+  assert.equal(status, 'CANCELLED'); assert.equal(providerReads, 0);
 });

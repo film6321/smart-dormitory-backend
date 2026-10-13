@@ -70,10 +70,34 @@ export interface DormitoryAnalytics {
 export interface DashboardAnalyticsResponse {
   system: SystemAnalytics;
   dormitory: DormitoryAnalytics;
+  business: Awaited<ReturnType<typeof AnalyticsService.getBusinessAnalytics>>;
+  dailyAccess: Awaited<ReturnType<typeof AnalyticsService.getDailyAccessAnalytics>>;
   timestamp: string;
 }
 
 export class AnalyticsService {
+  static async getDailyAccessAnalytics(db: DbClient = prisma, now = new Date()) {
+    const dayKey = (date: Date) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Bangkok',
+      year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+    const end = new Date(dayKey(now) + 'T00:00:00+07:00');
+    const start = new Date(end.getTime() - 29 * 86400000);
+    const until = new Date(end.getTime() + 86400000);
+    const rows = await db.$queryRaw<Array<{ day: string; entries: number; exits: number }>>`
+      SELECT to_char(a."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS day,
+        count(*) FILTER (WHERE a.path = 'IN')::int AS entries,
+        count(*) FILTER (WHERE a.path = 'OUT')::int AS exits
+      FROM "AccessLog" a JOIN "User" u ON u.id = a."userId"
+      WHERE a.method = 'FACE_GATE' AND a.path IN ('IN', 'OUT') AND u.role = 'STUDENT'
+        AND a."createdAt" >= ${start} AND a."createdAt" < ${until}
+      GROUP BY day ORDER BY day`;
+    const counts = new Map(rows.map(row => [row.day, row]));
+    return Array.from({ length: 30 }, (_, index) => {
+      const date = dayKey(new Date(start.getTime() + index * 86400000));
+      const row = counts.get(date);
+      return { date, entries: row?.entries ?? 0, exits: row?.exits ?? 0 };
+    });
+  }
+
   private static getSystemAnalytics(): SystemAnalytics {
     const mem = process.memoryUsage();
     const system: SystemAnalytics = {
@@ -180,7 +204,108 @@ export class AnalyticsService {
     return {
       system,
       dormitory,
+      business: await this.getBusinessAnalytics(db),
+      dailyAccess: await this.getDailyAccessAnalytics(db),
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  static async getBusinessAnalytics(db: DbClient = prisma) {
+    const now = new Date();
+    const [rooms, bills, deposits, waitingVisitors, applications, moveOuts, repairs] = await Promise.all([
+      db.room.findMany({ select: { id: true, roomNumber: true } }),
+      db.bill.findMany({ where: { status: { in: ['PAID', 'UNPAID', 'OVERDUE', 'VERIFYING'] } },
+        select: { id: true, roomId: true, amount: true, status: true, paidAt: true, dueDate: true,
+          payments: { where: { status: 'PAID' }, orderBy: { verifiedAt: 'desc' }, take: 1, select: { transferAt: true } },
+          batchItems: { where: { batch: { status: 'PAID' } }, orderBy: { createdAt: 'desc' }, take: 1, select: { batch: { select: { transferAt: true } } } },
+        } }),
+      // Bill payments are deliberately excluded: each PAID bill is counted once above,
+      // including bills paid in a batch. A housing deposit is its own payment ledger.
+      db.payment.findMany({ where: { status: 'PAID', billId: null, housingRoomId: { not: null } },
+        select: { id: true, housingDraft: { select: { roomId: true } }, housingRoomId: true, housingTenantId: true, housingApprovedAt: true, payerUserId: true, housingTenant: { select: { status: true } }, payerUser: { select: { username: true } }, amount: true, transferAt: true, verifiedAt: true } }),
+      db.visitor.count({ where: { status: 'REGISTERED', logs: { none: { eventType: 'DOOR_ACCESS_GRANTED' } }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
+      db.tenant.findMany({ where: { status: { not: 'ARCHIVED' } }, orderBy: { createdAt: 'desc' }, take: 12,
+        select: { id: true, createdAt: true, roomId: true, user: { select: { username: true } } } }),
+      db.tenant.findMany({ where: { status: { not: 'ARCHIVED' }, checkOutDate: { not: null } }, orderBy: { checkOutDate: 'desc' }, take: 12,
+        select: { id: true, checkOutDate: true, roomId: true, user: { select: { username: true } } } }),
+      db.maintenanceTicket.findMany({ where: { tenant: { status: { not: 'ARCHIVED' } } }, orderBy: { updatedAt: 'desc' }, take: 24,
+        select: { id: true, createdAt: true, resolvedAt: true, roomId: true } }),
+    ]);
+    type Row = { roomId: number | null; roomNumber: string; billPaid: number; depositPaid: number; outstanding: number; received: number };
+    const rows = new Map<number | null, Row>(rooms.map(r => [r.id, {
+      roomId: r.id, roomNumber: r.roomNumber, billPaid: 0, depositPaid: 0, outstanding: 0, received: 0,
+    }]));
+    const row = (id: number | null) => {
+      if (!rows.has(id)) rows.set(id, { roomId: id, roomNumber: 'ไม่ผูกห้อง', billPaid: 0, depositPaid: 0, outstanding: 0, received: 0 });
+      return rows.get(id)!;
+    };
+    // Sum integer satang, then convert once; do not round each receipt to whole baht.
+    const satang = (value: unknown) => Math.round(Number(value) * 100);
+    const monthKey = (date: Date) => new Intl.DateTimeFormat('sv-SE', { year: 'numeric', month: '2-digit', timeZone: 'Asia/Bangkok' }).format(date);
+    const months = new Map<string, { month: string; billPaid: number; depositPaid: number }>();
+    let undatedReceived = 0;
+    const activity: { id: string; title: string; occurredAt: string; href: string }[] = [];
+    const event = (id: string, title: string, date: Date | null, href: string) => {
+      if (date && Number.isFinite(date.getTime())) activity.push({ id, title, occurredAt: date.toISOString(), href });
+    };
+    const receipt = (amount: number, date: Date | null, kind: 'billPaid' | 'depositPaid') => {
+      if (!date || !Number.isFinite(date.getTime())) { undatedReceived += amount; return; }
+      const key = monthKey(date);
+      const bucket = months.get(key) || { month: key, billPaid: 0, depositPaid: 0 };
+      bucket[kind] += amount; months.set(key, bucket);
+    };
+    let overdueCount = 0;
+    for (const bill of bills) {
+      const amount = satang(bill.amount), target = row(bill.roomId);
+      if (bill.status === 'PAID') {
+        const date = bill.payments?.[0]?.transferAt || bill.batchItems?.[0]?.batch.transferAt || bill.paidAt;
+        target.billPaid += amount; receipt(amount, date, 'billPaid');
+        event('bill-' + bill.id, 'บันทึกชำระบิล #' + bill.id, bill.paidAt, '/income-expenses');
+      } else {
+        target.outstanding += amount;
+        if (bill.status !== 'VERIFYING' && bill.dueDate < now) overdueCount++;
+      }
+    }
+    const housingPayments: { id: number; roomNumber: string; amount: number; state: string; username: string | null }[] = [];
+    for (const deposit of deposits) {
+      const amount = satang(deposit.amount), date = deposit.transferAt || deposit.verifiedAt;
+      const state = deposit.housingApprovedAt ? 'ADMIN_CONFIRMED' : deposit.housingTenantId
+        ? deposit.housingTenant?.status === 'ARCHIVED' ? 'RETAINED_HISTORY' : 'AWAITING_ADMIN_APPROVAL'
+        : deposit.payerUserId && deposit.payerUser ? 'AWAITING_APPLICATION' : 'NEEDS_REVIEW';
+      housingPayments.push({ id: deposit.id, roomNumber: row(deposit.housingDraft?.roomId ?? deposit.housingRoomId).roomNumber,
+        amount: amount / 100, state, username: deposit.payerUser?.username || null });
+      // Verified transfer alone is not counted until the Admin confirms the application.
+      if (!deposit.housingApprovedAt) continue;
+      row(deposit.housingDraft?.roomId ?? deposit.housingRoomId).depositPaid += amount; receipt(amount, date, 'depositPaid');
+      event('deposit-' + deposit.id, 'รับเงินมัดจำห้อง ' + row(deposit.housingDraft?.roomId ?? deposit.housingRoomId).roomNumber, date, '/reports');
+    }
+    for (const tenant of applications) event('application-' + tenant.id,
+      'สมัครเข้าพัก · ' + (tenant.user?.username || 'ผู้สมัคร #' + tenant.id), tenant.createdAt, '/students');
+    for (const tenant of moveOuts) event('moveout-' + tenant.id,
+      'ย้ายออกตามวันที่บันทึก · ' + (tenant.user?.username || 'ผู้พัก #' + tenant.id), tenant.checkOutDate, '/students');
+    for (const repair of repairs) {
+      event('repair-created-' + repair.id, 'แจ้งซ่อม #' + repair.id, repair.createdAt, '/maintenance');
+      event('repair-resolved-' + repair.id, 'บันทึกซ่อมเสร็จ #' + repair.id, repair.resolvedAt, '/maintenance');
+    }
+    const perRoom = [...rows.values()].map(r => ({ ...r, billPaid: r.billPaid / 100,
+      depositPaid: r.depositPaid / 100, outstanding: r.outstanding / 100, received: (r.billPaid + r.depositPaid) / 100 }))
+      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, 'th', { numeric: true }));
+    const total = perRoom.reduce((sum, r) => ({ billPaid: sum.billPaid + satang(r.billPaid),
+      depositPaid: sum.depositPaid + satang(r.depositPaid), outstanding: sum.outstanding + satang(r.outstanding) }),
+      { billPaid: 0, depositPaid: 0, outstanding: 0 });
+    const current = months.get(monthKey(now));
+    const monthlyReceipts = [...months.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-6)
+      .map(m => ({ ...m, billPaid: m.billPaid / 100, depositPaid: m.depositPaid / 100 }));
+    return {
+      totals: { billPaid: total.billPaid / 100, depositPaid: total.depositPaid / 100,
+        received: (total.billPaid + total.depositPaid) / 100, outstanding: total.outstanding / 100,
+        receivedThisMonth: ((current?.billPaid || 0) + (current?.depositPaid || 0)) / 100, undatedReceived: undatedReceived / 100 },
+      perRoom, monthlyReceipts, housingPayments,
+      urgent: { overdueBills: overdueCount, waitingVisitors,
+        paidAwaitingApplication: housingPayments.filter(p => p.state === 'AWAITING_APPLICATION').length,
+        paidAwaitingAdminApproval: housingPayments.filter(p => p.state === 'AWAITING_ADMIN_APPROVAL').length,
+        housingPaymentsNeedReview: housingPayments.filter(p => p.state === 'NEEDS_REVIEW').length },
+      activity: activity.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 12),
     };
   }
 

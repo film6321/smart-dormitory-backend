@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VisitorService } from '../../src/modules/visitor/visitor.service';
@@ -31,6 +32,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
     try {
       const res = await VisitorService.scanVisitorIdCard('data:image/jpeg;base64,fake-data');
+      assert.equal(res.verificationId, 201);
       assert.equal(res.cardDetected, true);
       assert.equal(res.isThaiIdCard, true);
       assert.equal(res.guestName, 'นายสมชาย ใจดี');
@@ -49,6 +51,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       async () => {
         await VisitorService.registerVisitor({
           guestName: 'นายสมชาย ใจดี',
+          requestedTenantName: 'ผู้พักทดสอบ',
           pdpaConsent: false,
         });
       },
@@ -61,6 +64,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       async () => {
         await VisitorService.registerVisitor({
           guestName: ' ',
+          requestedTenantName: 'ผู้พักทดสอบ',
           pdpaConsent: true,
         });
       },
@@ -68,17 +72,18 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     );
   });
 
-  await t.test('4. registerVisitor creates record with 24h expiresAt, QR code, and logs', async () => {
+  await t.test('4. registerVisitor stores a request with 24h expiry and logs without a public QR', async () => {
     const originalTx = prisma.$transaction;
     const originalVerificationFind = prisma.idCardVerification.findUnique;
     const originalRoomFind = prisma.room.findUnique;
     const originalTenantFind = prisma.tenant.findFirst;
     const now = new Date();
-    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23' })) as unknown as typeof prisma.idCardVerification.findUnique;
+    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23', citizenIdHash: createHash('sha256').update('1234567890123').digest('hex'), fullNameTh: 'นายสมชาย ใจดี' })) as unknown as typeof prisma.idCardVerification.findUnique;
     prisma.room.findUnique = (async () => ({ id: 1, roomNumber: '301' })) as unknown as typeof prisma.room.findUnique;
     prisma.tenant.findFirst = (async () => ({ id: 1, fullName: 'Resident Name' })) as unknown as typeof prisma.tenant.findFirst;
     const mockVisitor: VisitorWithRelations = {
       faceRevokedAt: null,
+      requestedTenantName: 'Resident Name',
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -92,8 +97,8 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       purpose: 'มาเยี่ยม',
       roomId: 1,
       room: { roomNumber: '301' },
-      tenantId: 1,
-      tenant: { fullName: 'นายทดสอบ ผู้พัก', studentId: '65001' },
+      tenantId: null,
+      tenant: null,
       status: VisitorStatus.REGISTERED,
       pdpaConsent: true,
       pdpaConsentAt: now,
@@ -112,7 +117,11 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       callback: (tx: Prisma.TransactionClient) => Promise<T>,
     ): Promise<T> => {
       const txMock = {
+        $executeRaw: async () => 1,
+        $queryRaw: async () => [],
+        idCardVerification: { findUnique: prisma.idCardVerification.findUnique },
         visitor: {
+          findFirst: async () => null,
           create: async () => mockVisitor,
         },
         visitorLog: {
@@ -142,8 +151,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
         purpose: 'มาเยี่ยม',
         roomId: 1,
         roomNumber: '301',
-        tenantId: 1,
-        tenantName: 'Resident Name',
+        requestedTenantName: 'Resident Name',
         address: 'Test address',
         idCardImagePath: 'uploads/private/id-cards/visitor-card.jpg',
         idCardVerificationId: 201,
@@ -169,6 +177,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
     const mockRecord: VisitorWithRelations = {
       faceRevokedAt: null,
+      requestedTenantName: 'Resident Name',
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -182,8 +191,8 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
       purpose: 'มาเยี่ยม',
       roomId: 1,
       room: { roomNumber: '301' },
-      tenantId: 1,
-      tenant: { fullName: 'นายทดสอบ ผู้พัก', studentId: '65001' },
+      tenantId: null,
+      tenant: null,
       status: VisitorStatus.REGISTERED,
       pdpaConsent: true,
       pdpaConsentAt: now,
@@ -218,6 +227,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
     const mockCheckedIn: VisitorWithRelations = {
       faceRevokedAt: null,
+      requestedTenantName: 'Resident Name',
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: '0812345678',
@@ -267,6 +277,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
     const mockExpired: VisitorWithRelations = {
       faceRevokedAt: null,
+      requestedTenantName: 'Resident Name',
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: null,
@@ -317,6 +328,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
     const mockRecord: VisitorWithRelations = {
       faceRevokedAt: null,
+      requestedTenantName: 'Resident Name',
       id: 55,
       guestName: 'นายสมชาย ใจดี',
       phone: null,
@@ -357,6 +369,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
           findUnique: async () => ({ ...mockRecord, status: VisitorStatus.CANCELLED, cancelledAt: now }),
         },
         visitorLog: {
+          findFirst: async () => null,
           create: async () => ({
             id: 1,
             visitorId: 55,
@@ -365,6 +378,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
             createdAt: now,
           }),
         },
+        $queryRaw: async () => [],
       } as unknown as Prisma.TransactionClient;
 
       return callback(txMock);
@@ -382,14 +396,14 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     }
   });
 
-  await t.test('9. registerVisitor links only an existing exact room and active resident', async () => {
+  await t.test('9. registerVisitor links an exact existing room and stores requested tenant text without linking a tenant', async () => {
     const originalFindRoom = prisma.room.findUnique;
     const originalVerificationFind = prisma.idCardVerification.findUnique;
     const originalTenantFind = prisma.tenant.findFirst;
     const originalTx = prisma.$transaction;
     const now = new Date();
 
-    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23' })) as unknown as typeof prisma.idCardVerification.findUnique;
+    prisma.idCardVerification.findUnique = (async () => ({ imagePath: 'uploads/private/id-cards/visitor-card.jpg', isThaiIdCard: true, citizenIdMasked: '123********23', citizenIdHash: createHash('sha256').update('1234567890123').digest('hex'), fullNameTh: 'นายทดสอบ ระบบ' })) as unknown as typeof prisma.idCardVerification.findUnique;
     prisma.tenant.findFirst = (async () => ({ id: 2, fullName: 'Resident Name' })) as unknown as typeof prisma.tenant.findFirst;
     prisma.room.findUnique = (async () => ({
       id: 301,
@@ -409,6 +423,7 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     ): Promise<T> => {
       const txMock = {
         visitor: {
+          findFirst: async () => null,
           create: async ({ data }: Prisma.VisitorCreateArgs) => {
             createdInputs.push(data);
             return {
@@ -423,6 +438,9 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
           },
           update: async () => ({ id: 99 }),
         },
+        $executeRaw: async () => 1,
+        $queryRaw: async () => [],
+        idCardVerification: { findUnique: prisma.idCardVerification.findUnique },
         visitorLog: {
           create: async () => ({ id: 1 }),
         },
@@ -436,8 +454,8 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
     try {
       await VisitorService.registerVisitor({
         guestName: 'นายทดสอบ ระบบ',
-        roomNumber: 'ห้อง 301',
-        tenantName: 'Resident Name',
+        roomNumber: '301',
+        requestedTenantName: 'Resident Name',
         citizenId: '1234567890123',
         address: 'Test address',
         idCardImagePath: 'uploads/private/id-cards/visitor-card.jpg',
@@ -447,6 +465,8 @@ test('Visitor Registration Flow & OCR Integration', async (t) => {
 
       assert.equal(createdInputs.length, 1);
       assert.equal(createdInputs[0]?.room?.connect?.id, 301);
+      assert.equal(createdInputs[0]?.requestedTenantName, 'Resident Name');
+      assert.equal(createdInputs[0]?.tenant, undefined);
     } finally {
       prisma.room.findUnique = originalFindRoom;
       prisma.idCardVerification.findUnique = originalVerificationFind;
