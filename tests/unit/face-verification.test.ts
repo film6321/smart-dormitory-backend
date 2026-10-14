@@ -1,3 +1,4 @@
+import { PrivacyConsentService } from '../../src/modules/users/privacy-consent.service';
 import assert from 'node:assert/strict';
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import { readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
@@ -19,6 +20,7 @@ describe('FaceVerificationService (unit)', () => {
     return replacement;
   }
   beforeEach(() => {
+    stub(PrivacyConsentService, 'require', async () => undefined);
     stub(prisma.faceEnrollmentPhoto, 'findFirst', async () => null);
     const apiKey = process.env.FACE_API_KEY; process.env.FACE_API_KEY = 'synthetic-test-key';
     restorers.push(() => { if (apiKey === undefined) delete process.env.FACE_API_KEY; else process.env.FACE_API_KEY = apiKey; });

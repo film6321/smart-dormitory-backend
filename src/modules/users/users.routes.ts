@@ -4,6 +4,9 @@ import { UsersController } from './users.controller';
 
 const router = Router();
 
+router.get('/me/privacy-consent/:purpose', verifyToken, requireRole(['STUDENT']), UsersController.getPrivacyConsent);
+router.post('/me/privacy-consent', verifyToken, requireRole(['STUDENT']), UsersController.acceptPrivacyConsent);
+
 router.get('/', verifyToken, requireRole(['ADMIN']), UsersController.listUsers);
 router.get('/:id', verifyToken, requireRole(['ADMIN']), UsersController.getUserById);
 router.post('/', verifyToken, requireRole(['ADMIN']), UsersController.createUser);

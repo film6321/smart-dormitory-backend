@@ -1,3 +1,4 @@
+import { PrivacyConsentService } from '../users/privacy-consent.service';
 /// <reference lib="dom" />
 import { createHash } from 'node:crypto';
 import { FaceCleanupService, faceApiVerifyUrl } from './face-cleanup.service';
@@ -276,6 +277,7 @@ export class FaceVerificationService {
     }
     const visitorId = userId > 1000000 ? userId - 1000000 : null;
     const actualUserId = visitorId === null ? userId : null;
+    if (actualUserId !== null) await PrivacyConsentService.require(actualUserId, 'FACE_ENROLLMENT');
     const owner = visitorId !== null
       ? await db.visitor.findUnique({ where: { id: visitorId } })
       : await db.user.findUnique({ where: { id: userId } });

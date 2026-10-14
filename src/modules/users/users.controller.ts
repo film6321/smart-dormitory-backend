@@ -1,8 +1,24 @@
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { UsersService } from './users.service';
+import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
+import { PrivacyConsentService } from './privacy-consent.service';
 
 export class UsersController {
+  static async getPrivacyConsent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const purpose = PrivacyConsentService.purpose(req.params.purpose);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json(createResponse(200, 'Privacy notice fetched',
+        await PrivacyConsentService.get((req as AuthenticatedRequest).user!.id, purpose)));
+    } catch (error) { next(error); }
+  }
+  static async acceptPrivacyConsent(req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json(createResponse(200, 'Privacy consent recorded',
+        await PrivacyConsentService.accept((req as AuthenticatedRequest).user!.id, req.body)));
+    } catch (error) { next(error); }
+  }
   static async listUsers(req: Request, res: Response, next: NextFunction) {
     try {
       const users = await UsersService.listUsers();

@@ -1,3 +1,4 @@
+import { requirePrivacyConsent } from '../../middlewares/privacy-consent';
 import { Router } from 'express';
 import multer from 'multer';
 import { requireRole, verifyToken } from '../../middlewares/auth-jwt';
@@ -27,20 +28,20 @@ const uploadFields = upload.fields([
 ]);
 
 router.get('/draft', verifyToken, TenantsController.getDraft);
-router.patch('/draft', verifyToken, TenantsController.saveDraft);
-router.get('/draft/payment-qr/:roomNumber', verifyToken, TenantsController.generateDraftQr);
-router.post('/draft/upload-identity', verifyToken, uploadFields, TenantsController.uploadDocuments);
-router.post('/draft/upload-slip', verifyToken, uploadFields, TenantsController.uploadDocuments);
+router.patch('/draft', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.saveDraft);
+router.get('/draft/payment-qr/:roomNumber', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.generateDraftQr);
+router.post('/draft/upload-identity', verifyToken, requirePrivacyConsent('HOUSING'), uploadFields, TenantsController.uploadDocuments);
+router.post('/draft/upload-slip', verifyToken, requirePrivacyConsent('HOUSING'), uploadFields, TenantsController.uploadDocuments);
 
 router.get('/', verifyToken, requireRole(['ADMIN']), TenantsController.listTenants);
-router.get('/payment-qr/:roomNumber', verifyToken, TenantsController.generatePaymentQr);
-router.post('/me/face-enrollment/complete', verifyToken, requireRole(['STUDENT']), TenantsController.completeFaceEnrollment);
+router.get('/payment-qr/:roomNumber', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.generatePaymentQr);
+router.post('/me/face-enrollment/complete', verifyToken, requireRole(['STUDENT']), requirePrivacyConsent('FACE_ENROLLMENT'), TenantsController.completeFaceEnrollment);
 router.get('/me', verifyToken, TenantsController.getMyTenant);
 router.get('/me/documents/:documentType', verifyToken, TenantsController.getMyDocument);
 router.get('/:id/documents/:documentType', verifyToken, requireRole(['ADMIN']), TenantsController.getTenantDocumentById);
 router.get('/:id', verifyToken, requireRole(['ADMIN']), TenantsController.getTenantById);
-router.post('/upload-documents', verifyToken, uploadFields, TenantsController.uploadDocuments);
-router.post('/apply', verifyToken, TenantsController.submitApplication);
+router.post('/upload-documents', verifyToken, requirePrivacyConsent('HOUSING'), uploadFields, TenantsController.uploadDocuments);
+router.post('/apply', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.submitApplication);
 router.post('/', verifyToken, requireRole(['ADMIN']), TenantsController.createTenant);
 router.patch('/:id', verifyToken, requireRole(['ADMIN']), TenantsController.updateTenant);
 router.delete('/:id', verifyToken, requireRole(['ADMIN']), TenantsController.deleteTenant);

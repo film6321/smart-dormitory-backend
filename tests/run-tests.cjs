@@ -14,6 +14,7 @@ const files = [
   "unit/api-response.test.ts",
   "unit/auth-jwt.test.ts",
   "unit/auth-contract.test.ts",
+  "unit/privacy-consent.test.ts",
   "unit/date-utils.test.ts",
   "unit/notification.test.ts",
   "unit/setup-security.test.ts",
