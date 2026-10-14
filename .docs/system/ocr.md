@@ -60,3 +60,7 @@ wrapper กำหนด timeout และรักษา fallback ที่ม�
 
 - [OCR service](../../src/modules/ocr/ocr.service.ts), [Routes](../../src/modules/ocr/ocr.routes.ts)
 - [Housing OCR tests](../../tests/unit/housing-ocr-flow.test.ts), [QA](../qa/system-flow-report.md)
+
+## จุดยินยอมก่อนเอกสาร (14 ต.ค. 2569)
+
+หน้าสมัครต้องผ่านคำชี้แจง HOUSING ก่อนโหลดฟอร์มและอัปโหลดบัตร API upload ตรวจหลักฐานของบัญชีปัจจุบันก่อนรับประมวลผล ส่วนผู้มาติดต่อยังใช้จุดยินยอมของ Visitor ก่อน OCR ตาม flow เดิม การยินยอมใบหน้าไม่ถูกรวมกับการอ่านบัตร ดู [ผู้พัก](users-and-tenants.md) สำหรับหลักฐานและการคืนสถานะหลังรีเฟรช

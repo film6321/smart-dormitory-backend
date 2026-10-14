@@ -22,3 +22,7 @@ REST JSON ใช้ `{ statusCode, success, message, data }` และ HTTP stat
 Login ส่ง token ผ่าน HttpOnly cookie และส่งข้อมูลผู้ใช้ใน body ฝั่งเว็บใช้ Axios พร้อม credentials ไม่ต้องรับ token จาก body หรือเก็บใน localStorage
 
 `400` ข้อมูลไม่ถูกต้อง, `401` ไม่มี session ที่ใช้ได้, `403` ไม่มีสิทธิ์, `409` ขัดสถานะ/รายการค้าง, `429` เกินโควตา ควรทดสอบทั้งค่าที่สำเร็จและถูกปฏิเสธ อ้างอิงสัญญาปัจจุบันที่ [API contracts](../ai-context/contracts/api-contracts.md)
+
+## Privacy endpoints (14 ต.ค. 2569)
+
+GET /api/users/me/privacy-consent/:purpose ส่งคำชี้แจงและ acceptedAt ของบัญชีปัจจุบัน; POST /api/users/me/privacy-consent รับ purpose, version และ accepted:true เฉพาะ STUDENT Purpose แยก HOUSING/FACE_ENROLLMENT ไม่ใช้ userId จาก payload เป็นเจ้าของหลักฐาน รายละเอียด validation และ guard ดู [API contract](../ai-context/contracts/api-contracts.md)

@@ -141,3 +141,7 @@ Python owner-cleanup validation: one SQLite in-memory integration test passed, v
 ### แยก identity OCR และเบอร์บัญชีใน flow สมัครเข้าพัก
 
 verifyIdentity ตรวจบัญชีมีอยู่จริง ชนิด/ขนาดภาพ และผล OCR บัตร ไม่บังคับ phone ก่อนส่ง OCR; registeredPhone คงเป็น string เพื่อรองรับผู้ใช้เดิม แต่คืนค่าว่างได้เมื่อบัญชีไม่มีเบอร์ ข้อมูลบัตรและ ownership verification ใช้การตรวจเดิม เบอร์บัญชีไม่ใช่ข้อมูล OCR และไม่สร้างเบอร์จำลอง verifyHousingPayment และ submitApplication ยังตรวจเบอร์ที่ลงทะเบียนตามเดิม
+
+## Privacy consent evidence (2026-10-14)
+
+PrivacyConsentService persists purpose/version/time against the current authenticated STUDENT in AccessLog (method CONSENT), with a User row lock for repeat acceptance. Housing write/QR/upload/apply guards require HOUSING. User face registration/update and enrollment completion require FACE_ENROLLMENT; an Admin upload is not consent on behalf of that User. No schema migration or inferred legacy consent. Read the active API contract for endpoints. Withdrawal is administrator-assisted in this scope.

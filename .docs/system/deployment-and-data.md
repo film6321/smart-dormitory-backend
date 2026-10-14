@@ -54,6 +54,8 @@ Admin ดูแลราคา/ห้อง คณะ และเงื่อ�
 
 ## 4. ความปลอดภัยที่ตรวจได้
 
+ความยินยอม HOUSING/FACE_ENROLLMENT เก็บใน AccessLog พร้อม purpose/version/เวลา server ไม่ต้องเพิ่ม schema เมื่อ deploy ต้องอัปเดตทั้งหน้าจอและ API ให้ตรงกัน ผู้พักเก่าไม่มีหลักฐานจะต้องอ่านและยินยอมก่อนเก็บข้อมูลใหม่
+
 Session ผ่าน HttpOnly cookie และตรวจ role/owner ที่ API; Socket ตรวจ session version; DTO ตรวจ input; payment มี idempotency/hash/transaction checks; upload จำกัดประเภท/ขนาด; deletion ป้องกัน path traversal/reference ที่ยังใช้; error response ใช้ wrapper ตาม flow
 
 ผลเหล่านี้ไม่ใช่ penetration test ครบทุก attack surface ไม่มีหลักฐานว่าปลอดภัยทุกกรณี ต้องทบทวน dependency, TLS, secret, public port และ backup/restore ตาม environment ก่อน production ปัจจุบัน compose มี published ports ของบางบริการ จึงไม่สรุปว่าปิดจากภายนอกทั้งหมด
@@ -76,7 +78,7 @@ RPS = จำนวน request/เวลาทดลอง (วินาที); 
 
 ## 6. ผลตรวจและวิธีรัน
 
-ผลล่าสุดที่บันทึก: การทดสอบกฎธุรกิจ/API unit/mock 182/182 และ logic/สถานะหน้าจอ 115/115, isolated maintenance-flow 38/38, Build/TypeScript/lint ผ่าน และ การ deploy บริการผ่าน Docker ผ่าน ไม่ได้นำเลขชุดอื่นมาบวกเป็นการรันพร้อมกันรอบเดียว
+ผลล่าสุดที่บันทึก: การทดสอบกฎธุรกิจ/API unit/mock 185/185 และ logic/สถานะหน้าจอ 119/119 (14 ต.ค. 2569); isolated maintenance-flow 38/38 เป็นผลก่อนหน้า, Build/TypeScript/lint ผ่าน และ การ deploy บริการผ่าน Docker ผ่าน ไม่ได้นำเลขชุดอื่นมาบวกเป็นการรันพร้อมกันรอบเดียว
 
 ```powershell
 # รันจาก repository ปัจจุบัน

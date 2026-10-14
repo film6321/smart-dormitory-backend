@@ -2,17 +2,7 @@
 
 Backend API สำหรับ Smart Dormitory Management System
 
-```text
-┌────────────────────────────────────────────────────────┐
-│  ⭐ สถานะปัจจุบันหลังปรับแต่ง (Production-Ready)           │
-│                                                        │
-│  - Throughput: ~345 Requests/วินาที                    │
-│  - ความจุจริง: รองรับคนสมัครได้ 20,000+ คน/นาที          │
-│  - Latency P95: 282ms (ตอบสนองเร็วมาก)                 │
-│  - ความปลอดภัย: รหัสผ่านใช้ Bcrypt 10 rounds เต็มร้อย    │
-│  - สถาปัตยกรรม: กระชับ ไม่ซับซ้อน ไม่บวม (Anti-Bloat)  │
-└────────────────────────────────────────────────────────┘
-```
+เนื้อหาระบบ บทที่ 1–5 และรายละเอียดโมดูลอยู่ที่ [สารบัญระบบ](.docs/system/README.md) ผลทดสอบล่าสุด 14 ต.ค. 2569: regression กฎธุรกิจ/API 185/185 และ logic/สถานะหน้าจอ 119/119 ตัวเลขนี้ไม่ใช่ผลรับรองทุก browser flow หรือความพร้อม production ดู [QA](.docs/qa/system-flow-report.md) และ [ข้อจำกัดผลโหลด](.docs/system/deployment-and-data.md)
 
 ## Overview
 
@@ -20,7 +10,7 @@ Backend API สำหรับ Smart Dormitory Management System
 - PgBouncer Connection Pooler กับ PostgreSQL 16
 - Redis สำหรับ Rate Limit และ Cache
 - Libuv Threadpool: `UV_THREADPOOL_SIZE=64` สำหรับ Bcrypt Hashing
-- JWT Bearer authentication & Role-Based Access Control
+- HttpOnly access_token cookie สำหรับเว็บ พร้อม Role-Based Access Control; REST/Socket ตรวจ authSessionVersion ของบัญชีปัจจุบัน
 - Modular architecture โดยแยกเป็นโมดูลใน `src/modules/`
 - Security middleware: Helmet, CORS, distributed rate limiting
 
@@ -162,3 +152,7 @@ npm run test
 npx prisma validate
 npx prisma generate
 ```
+
+## Privacy consent
+
+สมัครเข้าพักต้องยินยอม HOUSING ก่อนเริ่มฟอร์ม/อัปโหลดเอกสาร ส่วนบันทึกใบหน้าต้องยินยอม FACE_ENROLLMENT แยกก่อนเปิดกล้อง/ส่งภาพ หลักฐานผูกบัญชีและรุ่นข้อความใน PostgreSQL ผ่าน AccessLog เดิม ไม่ใช้ browser state แทนหลักฐาน และไม่สร้างความยินยอมย้อนหลัง การถอนให้ติดต่อผู้ดูแล รายละเอียดและข้อจำกัดดู [ผู้พักและสัญญา](.docs/system/users-and-tenants.md) และ [ใบหน้า](.docs/system/face-verification.md)

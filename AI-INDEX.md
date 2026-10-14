@@ -111,3 +111,7 @@ _ถ้าโค้ดขัดกับ AGENTS.md → แก้ที่โค�
 ## Current flow and scope (2026-10-13)
 
 For current QA and remaining browser acceptance, start at [.docs/qa/system-flow-report.md](.docs/qa/system-flow-report.md), then current [REST contracts](.docs/ai-context/contracts/api-contracts.md) and [consistency rules](.docs/ai-context/spec-consistency.md). Camera/physical door/SMS/actual providers are Out of scope for this QA round; do not remove wrappers or security. Frontend is the sibling smart-dormitory-frontend repository with existing src/modules and src/componants; old frontend/ trees are plans, not a file map. Auth session revocation uses the 20261013000000_auth_session_version migration; Admin must configure real CONTRACT settings before accepting new applications.
+
+## Privacy consent update (2026-10-14)
+
+Read [.docs/system/users-and-tenants.md](.docs/system/users-and-tenants.md) and [.docs/system/face-verification.md](.docs/system/face-verification.md) for HOUSING/FACE_ENROLLMENT gates, [API contracts](.docs/ai-context/contracts/api-contracts.md) for consent endpoints, and [QA](.docs/qa/system-flow-report.md) for 185/119 regression and runtime smoke. Source: src/modules/users/privacy-consent.service.ts; no schema migration.

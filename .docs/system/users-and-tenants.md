@@ -74,3 +74,13 @@ purge ปัจจุบันลบบิล/ยอดการเงินท�
 - [Tenant service](../../src/modules/tenants/tenants.service.ts), [DTO](../../src/modules/tenants/tenants.dto.ts), [Repository](../../src/modules/tenants/tenants.repository.ts)
 - [Purge/retention](../../src/modules/users/account-retention.service.ts), [Integration](../../tests/integration/maintenance-flow.test.ts)
 - [QA หลัก](../qa/system-flow-report.md), [การชำระ](billing-and-payments.md), [ใบหน้า](face-verification.md)
+
+## การยืนยันข้อมูลส่วนบุคคลก่อนเริ่มสมัคร (14 ต.ค. 2569)
+
+ก่อนโหลดฟอร์มและส่งบัตร OCR ผู้ใช้ต้องอ่านคำชี้แจงและกดยินยอม HOUSING ช่องเลือกเริ่มต้นไม่ถูกเลือก การยินยอมนี้แยกจากการยอมรับสัญญาในขั้นสุดท้าย และไม่ครอบคลุมการบันทึกใบหน้า
+
+คำชี้แจงระบุข้อมูลที่ใช้ วัตถุประสงค์การสมัคร/สัญญา การส่งเอกสารไปบริการที่จำเป็น ผู้มีสิทธิ์เข้าถึง แนวทางล้างข้อมูล และการติดต่อผู้ดูแล ผู้สมัครต้องแจ้งผู้ติดต่อฉุกเฉินก่อนให้ข้อมูลของเขา
+
+หลักฐานเก็บใน AccessLog เดิม โดย method=CONSENT, path=privacy-consent/HOUSING/2026-10-14.v1 ผูก User และ createdAt จาก server ไม่ใช้เพียง localStorage การรีเฟรชอ่านหลักฐานเดิมได้ การกดซ้ำใช้ล็อกบัญชีใน transaction และไม่สร้างรายการซ้ำ เมื่อ purge ผู้พัก หลักฐานที่ผูก User ถูกล้างพร้อม AccessLog ทำให้สมัครใหม่ต้องยินยอมใหม่
+
+API บันทึกฉบับร่าง สร้าง QR อัปโหลดบัตร/สลิป และยื่นใบสมัครตรวจหลักฐานก่อนทำงาน แม้เรียกตรงโดยไม่ผ่านหน้าจอก็ไม่ได้สิทธิ์จากการส่ง pdpaConsent=true เอง ความยินยอมที่บันทึกผูกเฉพาะบัญชีปัจจุบัน Admin ยินยอมแทนเจ้าของผ่าน endpoint นี้ไม่ได้

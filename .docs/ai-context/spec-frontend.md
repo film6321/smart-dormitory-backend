@@ -68,3 +68,7 @@ Admin ใช้ ProtectedRoute และตรวจสิทธิ์ซ้ำ�
 - ไม่รองรับ 2FA/Push delivery ใน settings ปัจจุบัน; ห้ามแสดงว่าเปิดใช้งานแล้วจาก toggle ที่ไม่มี flow รองรับ
 - การลองส่งใบหน้าเก็บ progress ของภาพที่สำเร็จในหน้าเดิม ข้ามภาพที่ส่งแล้ว; server ใช้ owner + hash ของไฟล์กัน metadata ซ้ำ ต้องระบุว่าไม่ได้ rollback ภาพก่อนหน้า และไม่ได้รับรองการ resume ครบ 5 มุมหลัง reload
 - browser acceptance ยังต้องตรวจแยกจาก hook/unit tests โดยใช้บัญชี ACTIVE; กล้อง ประตู SMS และ provider จริงเป็น Out of scope รอบนี้
+
+## Privacy gates (2026-10-14)
+
+Resident application and identity enrollment use PrivacyConsentGate/usePrivacyConsent. Fetch the server notice and current evidence before mounting the form/camera content. Require an unchecked-by-default explicit checkbox, separate HOUSING from FACE_ENROLLMENT and contract acceptance. Persist via the current STUDENT session; never infer consent from an old contract or a browser flag. Initial loading uses skeleton; actions keep the label with a spinner. Abort requests on unmount and isolate state by account/purpose. Refresh reuses current server evidence. Withdrawal is through the administrator in this scope.

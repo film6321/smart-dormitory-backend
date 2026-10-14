@@ -73,3 +73,7 @@ server ตรวจราคาห้องและสัญญาส่วน�
 
 - [Billing service](../../src/modules/billing/billing.service.ts), [Batch service](../../src/modules/billing/payment-batch.service.ts), [Housing payment](../../src/modules/tenants/housing-payment.service.ts)
 - [Housing payment integration](../../tests/integration/housing-payment.test.ts), [Maintenance integration](../../tests/integration/maintenance-flow.test.ts), [QA](../qa/system-flow-report.md)
+
+## เงื่อนไขความยินยอมสำหรับการสมัคร (14 ต.ค. 2569)
+
+API สร้าง QR มัดจำและอัปโหลดสลิปของใบสมัครต้องมี HOUSING consent ของบัญชีปัจจุบันเพิ่มเติมจาก guard เดิม ไม่ใช้เป็นการยืนยันยอดเงินหรือแทนการยอมรับสัญญา หากต้องอ่านคำชี้แจงใหม่ เครดิต/ยอดที่จ่ายแล้วในฉบับร่างยังคงอยู่ ไม่สร้างรายการจ่ายซ้ำ การชำระบิลของผู้พักเดิมไม่ได้เพิ่ม checkbox ใบหน้า ดู [ผู้พักและสัญญา](users-and-tenants.md)

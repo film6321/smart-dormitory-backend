@@ -347,3 +347,10 @@ New application face access (2026-10-13): Admin approval of a new PENDING tenant
 ### Unused QR placeholder during resident purge (13 Oct 2026)
 
 Guarded tenant purge may remove an unused PENDING payment batch as part of the existing atomic purge only when its payer is the same retained User, it has at least one item, all items belong to that tenant and all bills are PAID, and every transfer/slip/provider evidence field is null. This does not count as a completed payment or bypass shared-batch/foreign-payer checks. VERIFYING, MANUAL_REVIEW, unpaid bills and any transfer evidence still block purge. No automatic cancellation or financial status rewrite is performed.
+
+### Privacy consent before housing and face enrollment (2026-10-14)
+
+- GET /api/users/me/privacy-consent/:purpose and POST /api/users/me/privacy-consent require the current STUDENT session. Purpose is HOUSING or FACE_ENROLLMENT. GET returns version, title, paragraphs, checkboxLabel and acceptedAt (null until accepted); do not cache.
+- POST body: {purpose, version, accepted: true}. Only the displayed current version and strict boolean true are accepted. The server uses the authenticated User, ignores caller-supplied userId, records server time in AccessLog with method CONSENT and a versioned purpose path, and serializes repeat acceptance under a User row lock.
+- Housing draft writes, QR generation, document uploads and apply require HOUSING evidence. Face register/update for a User requires that target User's FACE_ENROLLMENT evidence before files/provider calls; completion also checks it. Existing role/owner/active-tenant checks remain. Consent for one purpose/account never grants another. No inferred consent for legacy records.
+- Resident pages gate child mounting, including camera initialization, until current server evidence exists. Withdrawal is through the administrator in this scope; there is no automated withdrawal endpoint. No schema migration added; tenant purge removes the User-owned AccessLog evidence under the existing cleanup rules.

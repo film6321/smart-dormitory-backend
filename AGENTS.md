@@ -204,3 +204,5 @@
 - รายงาน QA ต้องแยก source review, unit/mock, HTTP/DB integration, browser acceptance และ Out of scope; จำนวน tests/routes ไม่ใช่หลักฐานว่าทุก end-to-end flow ผ่าน
 
 วันสัญญา (13 ต.ค. 2569): สำหรับใบสมัครใหม่ startDate คือวันปัจจุบันใน Asia/Bangkok และ endDate บวก 5 เดือนปฏิทิน ถ้าวันไม่มีในเดือนปลายทางให้ใช้วันสุดท้ายของเดือน. ไม่ต้องตั้งค่า contractStartDate/contractEndDate ใน Admin; ค่าที่เก็บเดิมไม่ใช้กำหนดวันใบสมัครใหม่. เงื่อนไขส่วนกลางที่ผู้ดูแลต้องกรอกเหลือ 10 ช่อง. สัญญาที่ส่งแล้วคง snapshot เดิม; หากข้ามวันก่อนยืนยันให้โหลด terms ล่าสุดก่อนส่ง.
+
+ความยินยอม (14 ต.ค. 2569): HOUSING ต้องมาก่อนฟอร์มสมัคร/OCR และ FACE_ENROLLMENT ต้องมาก่อนเปิดกล้อง/เก็บภาพ แยกจากการยอมรับสัญญา ไม่สร้างความยินยอมย้อนหลัง ใช้หลักฐาน AccessLog method=CONSENT ผูก User/purpose/version/เวลา server ตรวจที่ API และ service; Admin ยินยอมแทนเจ้าของผ่าน endpoint ของผู้ใช้ไม่ได้ การถอนผ่านผู้ดูแล ยังไม่มี endpoint ถอนอัตโนมัติ

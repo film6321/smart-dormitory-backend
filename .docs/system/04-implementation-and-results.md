@@ -1,6 +1,6 @@
 # บทที่ 4 การพัฒนาและผลการทดสอบ
 
-ฉบับอ้างอิง 13 ตุลาคม 2569 เอกสารนี้สรุปภาพรวม ส่วนรายละเอียดหน้าจอ flow ข้อมูล API และกรณีทดสอบแยกตามโมดูลใน .docs/system/
+ฉบับอ้างอิงล่าสุด 14 ตุลาคม 2569 (ผล runtime เดิมระบุแยกตามวันที่ทดสอบ) เอกสารนี้สรุปภาพรวม ส่วนรายละเอียดหน้าจอ flow ข้อมูล API และกรณีทดสอบแยกตามโมดูลใน .docs/system/
 
 ## 4.1 วิธีจัดผลและสภาพแวดล้อม
 
@@ -28,14 +28,14 @@
 
 | ชุด | ผลที่บันทึก | การตีความ |
 |---|---|---|
-| กฎธุรกิจและ API regression | 182/182 | UT/mock และ route checks ตาม runner |
-| Logic และสถานะหน้าจอ regression | 115/115 | logic/UI state ผ่าน VM/mock ไม่ใช่ browser ทุกหน้า |
+| กฎธุรกิจและ API regression 14 ต.ค. 2569 | 185/185 | UT/mock และ route checks; รวมความยินยอมใหม่ 3 กรณี |
+| Logic และสถานะหน้าจอ regression 14 ต.ค. 2569 | 119/119 | VM/mock รวมความยินยอมใหม่ 4 กรณี ไม่ใช่ browser ทุกหน้า |
 | maintenance_flow_test ล่าสุด | 38/38 | HTTP/PostgreSQL/files แยกฐาน; provider mock |
 | housing-payment ก่อนหน้า | 27/27 | integration ตามรายงาน ไม่ได้รันใหม่พร้อมชุดล่าสุด |
 | visitor-registration ก่อนหน้า | 29/29 | integration ตามรายงาน ไม่ใช่ประตูจริง |
 | Build/typecheck/lint | ผ่านรอบ implementation ล่าสุด | ไม่ใช่ผลประเมินความพึงพอใจ |
 
-จำนวน tests เป็นกรณีที่เลือก ไม่ใช่ accuracy/coverage หรือจำนวน end-to-end routes ทั้งหมด รอบสร้างเอกสารนี้ตรวจเนื้อหาและลิงก์ ไม่ได้รันธุรกรรมหรือ load test ใหม่
+จำนวน tests เป็นกรณีที่เลือก ไม่ใช่ accuracy/coverage หรือจำนวน end-to-end routes ทั้งหมด รอบ 14 ต.ค. รัน regression หลังเพิ่มความยินยอมและตรวจ HTTP หลัง deploy ส่วน integration ฐานข้อมูลแยกและ load test ใช้ผลเดิม ไม่ได้รันใหม่
 
 ## 4.14 ผล flow จริงที่ตรวจได้
 
@@ -79,3 +79,18 @@
 กล้อง ประตู/Edge SMS และ provider จริงเป็น OS; User 781 ไม่มีภาพหน้าก่อน purge จึงไม่อ้างผลลบใบหน้าจริงจากรอบนั้น Annual retention มี implementation/tests แต่ไม่อ้างว่าเปิดลบบัญชีจริงครบปีแล้ว Browser acceptance ของผู้ใช้แยกจากผลเครื่องมือเสมอ
 
 แหล่งหลักฐาน: [QA ระบบ](../qa/system-flow-report.md), [QA ใบหน้า](../qa/face-scan-report.md), [QA OTP](../qa/password-reset-otp-report.md), [สารบัญรายละเอียด](README.md)
+
+## 4.18 ผลเพิ่มคำชี้แจงและความยินยอม — 14 ต.ค. 2569
+
+แยก HOUSING ก่อนฟอร์มสมัคร และ FACE_ENROLLMENT ก่อนกล้อง/ส่งภาพ จากการยอมรับสัญญา ใช้ตาราง AccessLog เดิมโดยไม่เพิ่ม migration
+
+| กรณี | Expected และผลที่ตรวจ | หลักฐาน |
+|---|---|---|
+| ยังไม่ยินยอม เรียก API สมัคร/อัปโหลดตรง | 403 แม้ส่ง pdpaConsent=true | HTTP routes + Prisma mock |
+| รุ่นเก่า ยินยอม false หรือ string | ไม่สร้างหลักฐาน | unit/HTTP mock |
+| ส่ง userId อื่น หรือ Admin กดยินยอม | ใช้ session ตนเอง; Admin ถูกปฏิเสธ | HTTP mock |
+| ยินยอมสมัครแล้วส่งใบหน้า | ยังถูกปฏิเสธจนยินยอม FACE_ENROLLMENT | service mock |
+| รีเฟรช/กดซ้ำ/ออกจากหน้า | อ่านหลักฐานเดิม; ไม่ส่งซ้ำ; abort และไม่รับผลล่าช้า | unit/VM mock |
+| Runtime หลังอัปเดต Docker | health 200; คำชี้แจงทั้งสอง purpose ที่ไม่มี session 401 | local HTTP smoke |
+
+ยังไม่ได้บันทึกความยินยอมของผู้ใช้จริง ไม่ได้เปิดกล้องหรือเรียก provider จริง การถอนเป็นช่องทางติดต่อผู้ดูแล และยังรอ browser acceptance ของหน้าที่เพิ่ม แหล่งรายละเอียด: [ผู้พัก](users-and-tenants.md), [ใบหน้า](face-verification.md), [QA](../qa/system-flow-report.md)
