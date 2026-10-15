@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>แผนภาพระบบฉบับลงเล่ม — MEEDEE Dormitory</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #111; font: 16px/1.7 Tahoma, Arial, sans-serif; }
+    main { max-width: 1200px; margin: auto; padding: 32px 24px; }
+    h1 { font-size: 26px; margin: 12px 0; }
+    h2 { font-size: 20px; margin: 0 0 8px; }
+    a { color: #111; text-underline-offset: 3px; }
+    a:focus-visible { outline: 2px solid #111; outline-offset: 4px; }
+    article { border-top: 1px solid #bbb; margin-top: 32px; padding-top: 24px; }
+    figure { margin: 16px 0; }
+    img { display: block; width: 100%; height: auto; }
+    figcaption { margin-top: 12px; text-align: center; }
+    nav { display: flex; flex-wrap: wrap; gap: 20px; }
+    .note, footer { font-size: 14px; color: #444; }
+    footer { margin-top: 32px; }
+    @media print { main { padding: 0; } header, nav, .note, footer { display: none; } article { border: 0; break-before: page; padding: 0; } article:first-of-type { break-before: auto; } h2 { display: none; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <a href="../index.html">กลับไปภาพสำหรับนำเสนอ</a>
+    <h1>แผนภาพระบบฉบับลงเล่ม</h1>
+    <p>พื้นขาว เส้นขาวดำ และรูปแบบตัวอักษรเดียวกันทั้ง 4 ภาพ ดาวน์โหลด SVG เพื่อขยายในเอกสาร หรือ PNG ความกว้าง 4,000 พิกเซลเพื่อแทรกเป็นรูปภาพ</p>
+    <p class="note">ในเล่มให้ใส่เลขภาพและคำบรรยายตามบท รูปไม่มีหัวเรื่องฝังอยู่ในภาพ ตัวอย่างคำบรรยายด้านล่างปรับใช้ได้ตามลำดับจริง</p>
+  </header>
+  <article>
+    <h2>1. ภาพรวมระบบ</h2>
+    <nav aria-label="ดาวน์โหลดภาพรวมระบบ"><a href="system-overview.svg" download>ดาวน์โหลด SVG</a><a href="system-overview.png" download>ดาวน์โหลด PNG</a></nav>
+    <figure><a href="system-overview.svg"><img src="system-overview.png" alt="ภาพรวมผู้ใช้งาน เว็บ งานบริหารหอพัก ฐานข้อมูล แคช ไฟล์ และบริการประมวลผล"></a><figcaption>ภาพที่ 3.x ภาพรวมระบบบริหารจัดการหอพัก</figcaption></figure>
+  </article>
+  <article>
+    <h2>2. ขั้นตอนสมัครเข้าพักถึงย้ายออก</h2>
+    <nav aria-label="ดาวน์โหลดขั้นตอนสมัครถึงย้ายออก"><a href="housing-lifecycle.svg" download>ดาวน์โหลด SVG</a><a href="housing-lifecycle.png" download>ดาวน์โหลด PNG</a></nav>
+    <figure><a href="housing-lifecycle.svg"><img src="housing-lifecycle.png" alt="ขั้นตอนยินยอม สมัคร ชำระเงิน ยอมรับสัญญา อนุมัติ เข้าพัก ย้ายออก และล้างข้อมูล"></a><figcaption>ภาพที่ 3.x ขั้นตอนการสมัครเข้าพักจนสิ้นสุดการเข้าพัก</figcaption></figure>
+  </article>
+  <article>
+    <h2>3. ความสัมพันธ์ตารางหลัก</h2>
+    <p class="note">แสดง 10 ตาราง 161 คอลัมน์ และ 17 ความสัมพันธ์ FK ควรใช้หน้ากระดาษแนวนอนหรือหน้าขนาดใหญ่เพื่อให้อ่านชื่อฟิลด์ได้ รายละเอียดครบทุกตารางอยู่ใน <a href="../../database-tables.md">พจนานุกรมข้อมูล</a> เครื่องหมาย UK ของ Bill เป็นข้อกำหนดร่วมสามฟิลด์ tenantId, roomId และ billingPeriod ไม่ใช่ unique แยกแต่ละฟิลด์</p>
+    <nav aria-label="ดาวน์โหลดความสัมพันธ์ตารางหลัก"><a href="core-database.svg" download>ดาวน์โหลด SVG</a><a href="core-database.png" download>ดาวน์โหลด PNG</a></nav>
+    <figure><a href="core-database.svg"><img src="core-database.png" alt="แผนภาพความสัมพันธ์ตารางบัญชี ห้อง ผู้พัก ใบสมัคร บิล การชำระเงิน งานซ่อม และผู้มาติดต่อ" loading="lazy"></a><figcaption>ภาพที่ 3.x ความสัมพันธ์ของตารางหลักในระบบ</figcaption></figure>
+  </article>
+  <article>
+    <h2>4. สถาปัตยกรรมระบบ</h2>
+    <nav aria-label="ดาวน์โหลดสถาปัตยกรรมระบบ"><a href="system-architecture.svg" download>ดาวน์โหลด SVG</a><a href="system-architecture.png" download>ดาวน์โหลด PNG</a></nav>
+    <figure><a href="system-architecture.svg"><img src="system-architecture.png" alt="สถาปัตยกรรมเว็บ Nginx Express PgBouncer PostgreSQL Redis ที่เก็บไฟล์ และ API ประมวลผล" loading="lazy"></a><figcaption>ภาพที่ 3.x สถาปัตยกรรมระบบบริหารจัดการหอพัก</figcaption></figure>
+  </article>
+  <footer>ปรับรูปแบบจาก SVG ของ Archify โดยคงโหนดและความสัมพันธ์เดิม ภาพแสดงการออกแบบและจุดเชื่อมต่อ ไม่ใช่หลักฐานว่าทดสอบอุปกรณ์หรือ provider จริงแล้ว · <a href="../ARCHIFY-LICENSE.txt">ใบอนุญาต Archify</a> · <a href="report-exports.json">ข้อมูลไฟล์และแหล่งที่มา</a></footer>
+</main>
+</body>
+</html>

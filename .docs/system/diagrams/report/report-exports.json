@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-16",
+  "variant": "monochrome academic",
+  "font": "Tahoma, Arial, sans-serif",
+  "note": "Presentation variants from Archify SVG; source artifacts/provenance unchanged. Not a new Archify finalization.",
+  "diagrams": [
+    {
+      "diagram": "system-overview",
+      "source": "01-system-overview/system-overview.svg",
+      "sourceSha256": "e807102db99fae99d4bce2835fb57581a0d2e0b9c4d5b373f9189c46fbca21a4",
+      "nodes": 7,
+      "topology": {
+        "nodes": 7,
+        "edges": 6,
+        "tables": 0
+      },
+      "width": 4000,
+      "height": 2047,
+      "svgSha256": "87f8506b0810295b9d764c7e1d5d13b288ccb42fe541c935a50026adff244b55",
+      "pngSha256": "b938d524c3445413704824d8d3e14dcccd143e2e4017d5206d5619b274325fad"
+    },
+    {
+      "diagram": "housing-lifecycle",
+      "source": "02-housing-lifecycle/housing-lifecycle.svg",
+      "sourceSha256": "a2a16599229708fd9bf6710682a3eae945a2f95c25fb696fb79b482be1e0323d",
+      "nodes": 18,
+      "topology": {
+        "nodes": 18,
+        "edges": 17,
+        "tables": 0
+      },
+      "width": 4000,
+      "height": 2245,
+      "svgSha256": "07a904269783cf117e9c05de8dc4241b6b979fe863646894539c52db905b1ecb",
+      "pngSha256": "6d5e3627dc6909d4e94f1bfd0a86d22211b0b7f9b91ea151617fb8c25373c6e9"
+    },
+    {
+      "diagram": "core-database",
+      "source": "03-core-database/core-database.svg",
+      "sourceSha256": "4e18242ccf51aa84a072c90d2175f2c773a7a87f901faa60e4cd22c39baf60ec",
+      "nodes": 10,
+      "topology": {
+        "nodes": 10,
+        "edges": 17,
+        "tables": 0
+      },
+      "width": 4000,
+      "height": 3302,
+      "svgSha256": "b87c017c1e12daf59a0bd03f9b05af8120dfe8361512c3198e75d85fa1550e1c",
+      "pngSha256": "1732b2fc0d7f985f42b07db7c0bf4f5303cdd3b08a7dc84fc69ae7936b9b784f"
+    },
+    {
+      "diagram": "system-architecture",
+      "source": "04-system-architecture/system-architecture.svg",
+      "sourceSha256": "7e567b0a54deba6c28c41351111195654accc5affe23cc6dc0230789446d80f2",
+      "nodes": 10,
+      "topology": {
+        "nodes": 10,
+        "edges": 9,
+        "tables": 0
+      },
+      "width": 4000,
+      "height": 1638,
+      "svgSha256": "fdc1c7120e04b0010b6db83807af22adc8cf651d96781b3a9742ca56c2256050",
+      "pngSha256": "55ad0f1d148b667daae4de9b5d839d0cc64951c9d581c971ff12aa5d2acc0a7b"
+    }
+  ]
+}
