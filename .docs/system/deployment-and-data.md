@@ -6,21 +6,25 @@
 
 ตารางนี้เลือกเฉพาะส่วนหลักที่มีหน้าที่ในระบบจริง ไม่ใช่รายการ dependency ทั้งหมด คำว่า Technology stack หมายถึงภาพรวมของเทคโนโลยีหลายประเภทที่ใช้ร่วมกัน ไม่ใช่ประเภทเดียวกับ Framework หรือเครื่องมือ
 
-| ประเภท | ส่วนหลักที่ใช้ | หน้าที่ในโครงการ |
-|---|---|---|
-| ภาษา | TypeScript | เขียนโปรแกรมของระบบพร้อมตรวจชนิดข้อมูล |
-| Runtime | Node.js | รันบริการของระบบ |
-| Web framework | Express.js | จัดการ HTTP API, routes และ middleware |
-| UI library | React | สร้างหน้าจอ Admin, User และ Visitor |
-| เครื่องมือพัฒนาและ build เว็บ | Vite | รันเว็บระหว่างพัฒนาและสร้างไฟล์เว็บสำหรับติดตั้ง |
-| ฐานข้อมูลหลัก | PostgreSQL 16 | เก็บข้อมูลผู้ใช้ ผู้พัก บิล งานซ่อม และผู้มาติดต่อ |
-| ORM | Prisma | เชื่อมต่อฐานข้อมูล จัดการ query และ schema/migration |
-| ระบบเก็บข้อมูลชั่วคราว | Redis | Cache, rate limit และ lock; ไม่แทนฐานข้อมูลหลัก |
-| Library การสื่อสาร | Axios, Socket.IO | ส่งคำขอ HTTP จากเว็บ และอัปเดตข้อมูลแบบ real-time |
-| Library กราฟ | Recharts | แสดงกราฟ Dashboard และรายงาน |
-| เครื่องมือติดตั้งระบบ | Docker และ Docker Compose | จัดสภาพแวดล้อมและบริการตาม Compose ของโครงการ |
+| ประเภท | เทคโนโลยี | ใช้ทำอะไร | ส่วนที่ใช้ในระบบ |
+|---|---|---|---|
+| ภาษา | TypeScript | เขียนโปรแกรมและตรวจชนิดข้อมูลระหว่างพัฒนา | หน้าจอ, API, DTO และกฎธุรกิจ |
+| Runtime | Node.js | รันโปรแกรม JavaScript ที่ build จาก TypeScript | บริการ API, Socket.IO และงานเบื้องหลัง |
+| Web framework | Express.js | กำหนดเส้นทางคำขอ ตรวจสิทธิ์ และจัดการผลตอบกลับ | API สมัครเข้าพัก, บิล, งานซ่อม และผู้มาติดต่อ |
+| UI library | React | สร้างหน้าจอและจัดการสถานะการโต้ตอบ | หน้าจอ Admin, User และ Visitor |
+| เครื่องมือพัฒนาและ build เว็บ | Vite | เปิดเว็บระหว่างพัฒนาและสร้างไฟล์สำหรับติดตั้ง | คำสั่ง dev/build และไฟล์เว็บใน dist |
+| ฐานข้อมูลหลัก | PostgreSQL 16 | เก็บข้อมูลถาวรและความสัมพันธ์ระหว่างรายการ | บัญชี, ผู้พัก, ห้อง, บิล, การชำระเงิน, งานซ่อม และผู้มาติดต่อ |
+| ORM | Prisma | อ่าน/เขียนข้อมูลผ่าน model และจัดการ schema/migration | Service ที่ใช้ฐานข้อมูลและ transaction |
+| ระบบเก็บข้อมูลชั่วคราว | Redis | เก็บ cache, rate limit และ lock ที่มีอายุ | ลดการอ่านซ้ำและช่วยป้องกันคำขอซ้อนในจุดที่รองรับ |
+| HTTP client library | Axios | ส่งคำขอและจัดการผลตอบกลับ HTTP | โหลดข้อมูลและส่งฟอร์มจากหน้าจอไป API |
+| Library สื่อสารแบบ real-time | Socket.IO | ส่งเหตุการณ์ระหว่างระบบกับหน้าจอ | แจ้งเตือนและกระตุ้นให้อัปเดตข้อมูลเมื่อสถานะเปลี่ยน |
+| Library กราฟ | Recharts | วาดกราฟจากข้อมูลสรุป | กราฟวงกลมและกราฟแท่งบน Dashboard |
+| Web server / reverse proxy | Nginx | ให้บริการไฟล์เว็บและส่งคำขอไปบริการที่เกี่ยวข้อง | ทางเข้าเว็บ, /api และการเชื่อมต่อ WebSocket |
+| เครื่องมือติดตั้งระบบ | Docker และ Docker Compose | จัดบริการใน container พร้อมเครือข่ายและ volume | การรันบริการระบบ, ฐานข้อมูล, Redis และ Nginx |
 
 React จัดเป็น UI library และ Vite เป็นเครื่องมือพัฒนา/build จึงไม่เรียกรวมทั้งหมดว่า Framework รายละเอียด package ย่อยให้ดูในโค้ดเมื่อเกี่ยวข้องกับโมดูลนั้น เช่น validation และการอัปโหลด ไม่แยกเอกสารสำหรับทุก package ส่วน OCR/Face/Payment เป็นบริการที่ระบบเชื่อมต่อผ่าน wrapper ไม่ใช่ engine ที่ระบบหอพักพัฒนาขึ้นเอง
+
+คำอธิบายความหมายและเหตุผลที่ใช้แต่ละกลุ่มอยู่ใน [บทที่ 2 หัวข้อ 2.8](02-background-and-methods.md#28-เทคโนโลยีหลักและการนำมาใช้ในระบบ) Redis ไม่แทนฐานข้อมูลหลัก และการแจ้งเหตุการณ์ผ่าน Socket.IO ไม่แทนการบันทึกข้อมูลลง PostgreSQL
 
 หลักฐานการใช้งาน: [รายการ package](../../package.json), [Express app](../../src/app.ts), [Prisma client](../../src/database/db.ts), [Redis client](../../src/shared/redis.ts) และ [Compose](../../docker-compose.yml) ฝั่งเว็บตรวจจาก `../smart-dormitory-frontend/package.json`, `src/services/api.ts`, `src/services/realtime.ts` และ component กราฟของเว็บ
 
