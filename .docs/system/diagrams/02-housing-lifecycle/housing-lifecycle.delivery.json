@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "a973cd09-6dc7-408d-9b22-b34ead340175",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\02-housing-lifecycle\\candidate.json",
+  "output": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\02-housing-lifecycle\\housing-lifecycle.html",
+  "specification": {
+    "sha256": "d6e4b53bf73a4056a8bddda19d28498d166c3f90b48ba0a8c72f8563831a9ee2",
+    "bytes": 13279
+  },
+  "artifact": {
+    "sha256": "85213b4d798f3b7b0f807e354c39ec3411a68326df69184bddd75e164e534cfa",
+    "bytes": 850116
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "a39d6813-3ccf-4ae5-a0bc-59090368d859",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\04-system-architecture\\candidate.json",
+  "output": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\04-system-architecture\\system-architecture.html",
+  "specification": {
+    "sha256": "a1d37912f043692a48523b0ca700319a337d1ab49e2b6fd64a63d670fbff56a1",
+    "bytes": 9072
+  },
+  "artifact": {
+    "sha256": "d19f85d59fae32c0ef6a9ec5502a8cdbc31a3adc0b2ddf591655d0de275260f9",
+    "bytes": 827312
+  }
+}

@@ -1054,3 +1054,9 @@ HTTP/PostgreSQL isolated maintenance_flow_test 38/38 ผ่าน เพิ่�
 Build/TypeScript และ lint ของไฟล์ที่เกี่ยวข้องผ่าน อัปเดตบริการ backend ใน Docker แล้ว Runtime smoke: GET /api/health = 200; GET /api/users/me/privacy-consent/HOUSING และ /FACE_ENROLLMENT โดยไม่มี session = 401 ไม่ได้บันทึก consent แทนผู้ใช้หรือเรียกกล้อง/provider จริงในรอบนี้
 
 อัปเดตชุดเอกสารหลังเพิ่ม PDPA: README/สารบัญ บท 1–5 โมดูลผู้พัก ใบหน้า OCR การชำระเงิน สเปก/API และกฎ UI รวมเอกสารที่แก้ทั้งสอง repository 24 ไฟล์ ตรวจลิงก์ภายใน 163 จุดไม่พบลิงก์เสีย รอบจัดเอกสารอ้างผล regression 185/119 ที่รันหลัง implementation ในวันเดียวกัน ไม่ได้อ้างว่ารัน browser/provider/load ใหม่
+
+### แผนภาพ Archify ประกอบเล่ม — 16 ต.ค. 2569
+
+สร้างภาพรวมระบบ, flow สมัครถึงย้ายออก, ERD หลัก 10 ตาราง/161 คอลัมน์/17 FK และ System Architecture พร้อม HTML interactive และ canonical PNG/SVG จากเมนูส่งออกของ Archify อ้าง source ที่ commit c6897b6a50e7f7074b6d3321691788d92afda1ba ไม่ใช้เอกสารที่ยังไม่ commit เป็น source evidence
+
+ทั้ง 4 ภาพผ่าน validate/deliver/strict check/browser-check ของเครื่องมือ เก็บ candidate และ receipts ใน .docs/system/diagrams/ มีหน้ารวม index.html และ exports.json สำหรับตรวจ hash ภาพ ERD มีบางเส้นอ้อมเพื่อหลบตาราง จึงควรซูมหรือใช้ SVG ข้อความภาพเป็นภาษาไทย ส่วน fixed Viewer UI และ HTML lang ยังใช้ English fallback การตรวจภาพไม่ใช่ผลทดสอบ flow ระบบหรือ provider จริง และ Docker daemon ไม่ทำงานในรอบสำรวจฐานข้อมูลก่อนสร้างภาพ

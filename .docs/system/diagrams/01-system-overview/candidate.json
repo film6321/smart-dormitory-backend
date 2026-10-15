@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MEEDEE Dormitory · ภาพรวมระบบ",
+    "output": ".docs/system/diagrams/01-system-overview/system-overview.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/film6321/smart-dormitory-backend.git",
+      "revision": "c6897b6a50e7f7074b6d3321691788d92afda1ba",
+      "link_mode": "local-only"
+    },
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "หน้าจอผู้ใช้"
+        },
+        "backend": {
+          "label": "งานประมวลผล"
+        },
+        "database": {
+          "label": "ข้อมูลและไฟล์"
+        },
+        "cloud": {
+          "label": "บริการเชื่อมต่อ"
+        },
+        "security": {
+          "label": "จุดตรวจเงื่อนไข"
+        },
+        "external": {
+          "label": "ผู้ใช้และผลลัพธ์"
+        },
+        "messagebus": {
+          "label": "งานเบื้องหลัง"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "people",
+      "type": "external",
+      "label": "ผู้ใช้งาน",
+      "sublabel": "Admin · ผู้พัก · ผู้มาติดต่อ",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/middlewares/auth-jwt.ts",
+          "line": 57,
+          "end_line": 74
+        },
+        {
+          "path": "src/modules/visitor/visitor.routes.ts",
+          "line": 1,
+          "end_line": 20
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "เว็บ MEEDEE",
+      "sublabel": "สมัคร · จ่ายบิล · ติดตามงาน",
+      "pos": [
+        320,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker/nginx/nginx.conf",
+          "line": 70,
+          "end_line": 79
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "type": "backend",
+      "label": "งานบริหารหอพัก",
+      "sublabel": "ห้อง · บิล · ซ่อม · ผู้มาติดต่อ",
+      "pos": [
+        630,
+        250
+      ],
+      "size": [
+        240,
+        94
+      ],
+      "sources": [
+        {
+          "path": "src/app.ts",
+          "line": 47,
+          "end_line": 67
+        },
+        {
+          "path": "src/modules/tenants/tenants.routes.ts",
+          "line": 30,
+          "end_line": 47
+        },
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 239,
+          "end_line": 265
+        }
+      ],
+      "tag": "ตรวจสิทธิ์และเจ้าของข้อมูล"
+    },
+    {
+      "id": "data",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "บัญชี · ผู้พัก · บิล · สถานะ",
+      "pos": [
+        980,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 1,
+          "end_line": 8
+        },
+        {
+          "path": "src/database/db.ts",
+          "line": 1,
+          "end_line": 15
+        },
+        {
+          "path": "src/modules/tenants/housing-draft.service.ts",
+          "line": 24,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "cache · lock · rate limit",
+      "pos": [
+        660,
+        40
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/shared/redis.ts",
+          "line": 15,
+          "end_line": 35
+        },
+        {
+          "path": "src/shared/redis.ts",
+          "line": 49,
+          "end_line": 68
+        },
+        {
+          "path": "src/shared/rate-limit-store.ts",
+          "line": 11,
+          "end_line": 27
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "type": "database",
+      "label": "ไฟล์ส่วนตัว",
+      "sublabel": "บัตร · สลิป · ภาพใบหน้า",
+      "pos": [
+        660,
+        470
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/modules/face-verification/face-verification.service.ts",
+          "line": 295,
+          "end_line": 303
+        },
+        {
+          "path": "src/modules/users/account-retention.service.ts",
+          "line": 225,
+          "end_line": 246
+        }
+      ]
+    },
+    {
+      "id": "providers",
+      "type": "cloud",
+      "label": "บริการประมวลผล",
+      "sublabel": "OCR · Face · Payment",
+      "pos": [
+        980,
+        470
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/modules/ocr/ocr.service.ts",
+          "line": 95,
+          "end_line": 106
+        },
+        {
+          "path": "src/modules/face-verification/face-verification.service.ts",
+          "line": 368,
+          "end_line": 379
+        },
+        {
+          "path": "src/modules/billing/payment.provider.ts",
+          "line": 40,
+          "end_line": 60
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-web",
+      "from": "people",
+      "to": "web",
+      "label": "ใช้งาน",
+      "variant": "default"
+    },
+    {
+      "id": "web-system",
+      "from": "web",
+      "to": "system",
+      "label": "HTTP / Socket.IO",
+      "variant": "default"
+    },
+    {
+      "id": "system-data",
+      "from": "system",
+      "to": "data",
+      "label": "บันทึกข้อมูลหลัก",
+      "variant": "emphasis"
+    },
+    {
+      "id": "system-cache",
+      "from": "system",
+      "to": "cache",
+      "label": "สถานะชั่วคราว",
+      "variant": "default"
+    },
+    {
+      "id": "system-files",
+      "from": "system",
+      "to": "files",
+      "label": "เก็บ / ล้างภาพ",
+      "variant": "default"
+    },
+    {
+      "id": "system-providers",
+      "from": "system",
+      "to": "providers",
+      "label": "ตรวจผ่าน wrapper",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "งานหลักในระบบเดียว",
+      "items": [
+        "สมัคร 4 ขั้น → สัญญา → ผู้ดูแลอนุมัติ",
+        "จัดห้อง บิล ซ่อม ผู้มาติดต่อ และรายงานอยู่บนข้อมูลร่วมกัน"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "ข้อมูลและสิทธิ์",
+      "items": [
+        "PostgreSQL เป็นข้อมูลหลัก Redis ไม่แทนประวัติถาวร",
+        "HOUSING และ FACE_ENROLLMENT ยินยอมแยกกัน"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "ขอบเขตภาพ",
+      "items": [
+        "จัดกลุ่มตามหน้าที่ ไม่ได้แปลว่าแต่ละกล่องเป็น microservice",
+        "กล้อง ประตู SMS และ provider จริงยังไม่ใช่ผล QA ที่รับรอง"
+      ]
+    }
+  ]
+}

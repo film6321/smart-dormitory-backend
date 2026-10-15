@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "2c80f771-b28d-4e4b-9fcd-2b1ead679495",
+  "status": "current",
+  "command": "deliver",
+  "type": "erd",
+  "input": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\03-core-database\\candidate.json",
+  "output": "C:\\Users\\raphi\\Documents\\smart-dormitory-backend\\.docs\\system\\diagrams\\03-core-database\\core-database.html",
+  "specification": {
+    "sha256": "311c9de1461dc40e9302ec471a84ec152f62da1d9ee14043e37813fc4f4ef1b2",
+    "bytes": 25798
+  },
+  "artifact": {
+    "sha256": "457a71a141f994298b21d4d9327eb00bf23256daf51ec260de1e0a14d295faa4",
+    "bytes": 922848
+  }
+}

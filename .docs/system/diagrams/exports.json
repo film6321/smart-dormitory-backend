@@ -1,0 +1,75 @@
+{
+  "created": "2026-10-16",
+  "tool": "Archify 3.1.0",
+  "sourceRevision": "c6897b6a50e7f7074b6d3321691788d92afda1ba",
+  "files": [
+    {
+      "path": "01-system-overview/system-overview.html",
+      "sha256": "295b11f955b8f158863302b2be70ba15a81691f948a41aef65c8ac3ae9ebd670",
+      "bytes": 821747
+    },
+    {
+      "path": "01-system-overview/system-overview.svg",
+      "sha256": "e807102db99fae99d4bce2835fb57581a0d2e0b9c4d5b373f9189c46fbca21a4",
+      "bytes": 168466
+    },
+    {
+      "path": "01-system-overview/system-overview.png",
+      "sha256": "d6054fdbcbed2ec4d29d39ebab9e5b5872dbeb518a910e6847fbb7563e6f4cbf",
+      "bytes": 735698,
+      "width": 5216,
+      "height": 3072
+    },
+    {
+      "path": "02-housing-lifecycle/housing-lifecycle.html",
+      "sha256": "85213b4d798f3b7b0f807e354c39ec3411a68326df69184bddd75e164e534cfa",
+      "bytes": 850116
+    },
+    {
+      "path": "02-housing-lifecycle/housing-lifecycle.svg",
+      "sha256": "a2a16599229708fd9bf6710682a3eae945a2f95c25fb696fb79b482be1e0323d",
+      "bytes": 206616
+    },
+    {
+      "path": "02-housing-lifecycle/housing-lifecycle.png",
+      "sha256": "7bf931034e4eafe2e3d4ea1e430d6c05769539dbbf4f4b398c42cd048a229ae2",
+      "bytes": 1161986,
+      "width": 5064,
+      "height": 3224
+    },
+    {
+      "path": "03-core-database/core-database.html",
+      "sha256": "457a71a141f994298b21d4d9327eb00bf23256daf51ec260de1e0a14d295faa4",
+      "bytes": 922848
+    },
+    {
+      "path": "03-core-database/core-database.svg",
+      "sha256": "4e18242ccf51aa84a072c90d2175f2c773a7a87f901faa60e4cd22c39baf60ec",
+      "bytes": 268871
+    },
+    {
+      "path": "03-core-database/core-database.png",
+      "sha256": "4f4b543ebecfc499b9be06197616cda6847be725518166de672cb5567fd386d1",
+      "bytes": 1571746,
+      "width": 4100,
+      "height": 3520
+    },
+    {
+      "path": "04-system-architecture/system-architecture.html",
+      "sha256": "d19f85d59fae32c0ef6a9ec5502a8cdbc31a3adc0b2ddf591655d0de275260f9",
+      "bytes": 827312
+    },
+    {
+      "path": "04-system-architecture/system-architecture.svg",
+      "sha256": "7e567b0a54deba6c28c41351111195654accc5affe23cc6dc0230789446d80f2",
+      "bytes": 176978
+    },
+    {
+      "path": "04-system-architecture/system-architecture.png",
+      "sha256": "280842e760573c24c95e119f9cf7d7492c71da9c5697bd5ea73da60c5e1cedcc",
+      "bytes": 610448,
+      "width": 4812,
+      "height": 2304
+    }
+  ]
+}

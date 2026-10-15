@@ -1,0 +1,497 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MEEDEE Dormitory · สมัครเข้าพักถึงย้ายออก",
+    "output": ".docs/system/diagrams/02-housing-lifecycle/housing-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/film6321/smart-dormitory-backend.git",
+      "revision": "c6897b6a50e7f7074b6d3321691788d92afda1ba",
+      "link_mode": "local-only"
+    },
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "หน้าจอผู้ใช้"
+        },
+        "backend": {
+          "label": "งานประมวลผล"
+        },
+        "database": {
+          "label": "ข้อมูลและไฟล์"
+        },
+        "cloud": {
+          "label": "บริการเชื่อมต่อ"
+        },
+        "security": {
+          "label": "จุดตรวจเงื่อนไข"
+        },
+        "external": {
+          "label": "ผู้ใช้และผลลัพธ์"
+        },
+        "messagebus": {
+          "label": "งานเบื้องหลัง"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "accounts",
+      "label": "บัญชีและการอนุมัติ"
+    },
+    {
+      "id": "access",
+      "label": "ความยินยอมและการเข้าพัก"
+    },
+    {
+      "id": "evidence",
+      "label": "เอกสารและการจัดการข้อมูล"
+    },
+    {
+      "id": "results",
+      "label": "ข้อมูลการสมัครและผลดำเนินการ"
+    }
+  ],
+  "mainPath": [
+    "login",
+    "consent",
+    "identity",
+    "emergency",
+    "room",
+    "pay",
+    "contract",
+    "submit",
+    "approve",
+    "resident",
+    "moveout",
+    "guard",
+    "purge",
+    "cleanup",
+    "account"
+  ],
+  "nodes": [
+    {
+      "id": "login",
+      "lane": "accounts",
+      "col": 0,
+      "type": "external",
+      "label": "เข้าสู่ระบบ",
+      "sublabel": "บัญชี User ของผู้สมัคร",
+      "sources": [
+        {
+          "path": "src/modules/auth/auth.controller.ts",
+          "line": 1,
+          "end_line": 70
+        }
+      ]
+    },
+    {
+      "id": "consent",
+      "lane": "access",
+      "col": 0,
+      "type": "security",
+      "label": "ยินยอม HOUSING",
+      "sublabel": "ก่อนฟอร์มและภาพบัตร",
+      "sources": [
+        {
+          "path": "src/modules/users/privacy-consent.service.ts",
+          "line": 6,
+          "end_line": 68
+        }
+      ]
+    },
+    {
+      "id": "identity",
+      "lane": "evidence",
+      "col": 0,
+      "type": "frontend",
+      "label": "1 · ตัวตน / OCR",
+      "sublabel": "ตรวจแก้ข้อมูลส่วนตัว",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 165,
+          "end_line": 230
+        }
+      ]
+    },
+    {
+      "id": "emergency",
+      "lane": "results",
+      "col": 0,
+      "type": "frontend",
+      "label": "2 · ผู้ติดต่อฉุกเฉิน",
+      "sublabel": "กรอกข้อมูลการเข้าพัก",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.dto.ts",
+          "line": 43,
+          "end_line": 69
+        }
+      ]
+    },
+    {
+      "id": "room",
+      "lane": "results",
+      "col": 1,
+      "type": "frontend",
+      "label": "3 · เลือกห้อง",
+      "sublabel": "Admin ตั้งเงื่อนไขครบ",
+      "sources": [
+        {
+          "path": "src/modules/tenants/housing-draft.service.ts",
+          "line": 67,
+          "end_line": 92
+        }
+      ]
+    },
+    {
+      "id": "pay",
+      "lane": "evidence",
+      "col": 1,
+      "type": "backend",
+      "label": "ตรวจยอด / สลิป",
+      "sublabel": "เครดิตเดิมอยู่ · ห้ามจ่ายซ้ำเมื่อรอ",
+      "sources": [
+        {
+          "path": "src/modules/tenants/housing-payment.service.ts",
+          "line": 56,
+          "end_line": 75
+        }
+      ]
+    },
+    {
+      "id": "contract",
+      "lane": "access",
+      "col": 1,
+      "type": "security",
+      "label": "4 · ตรวจสัญญา",
+      "sublabel": "ยอมรับ snapshot ล่าสุด",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 239,
+          "end_line": 265
+        }
+      ]
+    },
+    {
+      "id": "submit",
+      "lane": "accounts",
+      "col": 1,
+      "type": "backend",
+      "label": "ยื่นใบสมัคร",
+      "sublabel": "บันทึกสถานะ PENDING",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 345,
+          "end_line": 375
+        }
+      ]
+    },
+    {
+      "id": "approve",
+      "lane": "accounts",
+      "col": 2,
+      "type": "security",
+      "label": "Admin ตรวจใบสมัคร",
+      "sublabel": "อนุมัติและยืนยันมัดจำ",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 411,
+          "end_line": 511
+        }
+      ]
+    },
+    {
+      "id": "rejected",
+      "lane": "accounts",
+      "col": 3,
+      "type": "security",
+      "label": "ไม่อนุมัติ",
+      "sublabel": "ตรวจแก้หรือติดต่อผู้ดูแล",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 411,
+          "end_line": 511
+        }
+      ]
+    },
+    {
+      "id": "resident",
+      "lane": "access",
+      "col": 2,
+      "type": "frontend",
+      "label": "เข้าพัก APPROVED/ACTIVE",
+      "sublabel": "บิล · ซ่อม · เอกสาร · แจ้งเตือน",
+      "sources": [
+        {
+          "path": "src/app.ts",
+          "line": 56,
+          "end_line": 67
+        }
+      ]
+    },
+    {
+      "id": "face",
+      "lane": "evidence",
+      "col": 2,
+      "type": "security",
+      "label": "บันทึกใบหน้าแยก",
+      "sublabel": "ต้องยินยอม FACE_ENROLLMENT",
+      "sources": [
+        {
+          "path": "src/modules/users/privacy-consent.service.ts",
+          "line": 18,
+          "end_line": 28
+        }
+      ]
+    },
+    {
+      "id": "moveout",
+      "lane": "access",
+      "col": 3,
+      "type": "backend",
+      "label": "Admin บันทึกย้ายออก",
+      "sublabel": "บิลต้องจัดการครบ · คืนห้อง",
+      "sources": [
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 429,
+          "end_line": 457
+        }
+      ]
+    },
+    {
+      "id": "guard",
+      "lane": "evidence",
+      "col": 3,
+      "type": "security",
+      "label": "ตรวจเงื่อนไขก่อนลบ",
+      "sublabel": "บิล / ซ่อม / ธุรกรรม / ผู้ติดต่อ",
+      "sources": [
+        {
+          "path": "src/modules/users/account-retention.service.ts",
+          "line": 43,
+          "end_line": 84
+        }
+      ]
+    },
+    {
+      "id": "blocked",
+      "lane": "results",
+      "col": 3,
+      "type": "security",
+      "label": "ยังลบไม่ได้",
+      "sublabel": "จัดการรายการค้างก่อน",
+      "sources": [
+        {
+          "path": "src/modules/users/account-retention.service.ts",
+          "line": 43,
+          "end_line": 84
+        }
+      ]
+    },
+    {
+      "id": "purge",
+      "lane": "evidence",
+      "col": 4,
+      "type": "database",
+      "label": "Purge ผู้พัก",
+      "sublabel": "ลบข้อมูลที่ผูกใน transaction",
+      "sources": [
+        {
+          "path": "src/modules/users/account-retention.service.ts",
+          "line": 86,
+          "end_line": 115
+        }
+      ]
+    },
+    {
+      "id": "cleanup",
+      "lane": "results",
+      "col": 4,
+      "type": "backend",
+      "label": "Cleanup ไฟล์ / ใบหน้า",
+      "sublabel": "มีคิว retry จนเสร็จ",
+      "sources": [
+        {
+          "path": "src/modules/face-verification/face-cleanup.service.ts",
+          "line": 98,
+          "end_line": 145
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "lane": "results",
+      "col": 5,
+      "type": "external",
+      "label": "เหลือ User",
+      "sublabel": "สมัครใหม่ได้เมื่อพร้อม",
+      "sources": [
+        {
+          "path": "src/modules/users/account-retention.service.ts",
+          "line": 98,
+          "end_line": 119
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-consent",
+      "from": "login",
+      "to": "consent",
+      "label": "เริ่มสมัคร",
+      "variant": "default"
+    },
+    {
+      "id": "consent-identity",
+      "from": "consent",
+      "to": "identity",
+      "label": "ยินยอม",
+      "variant": "default"
+    },
+    {
+      "id": "identity-emergency",
+      "from": "identity",
+      "to": "emergency",
+      "label": "ข้อมูลผ่าน",
+      "variant": "default"
+    },
+    {
+      "id": "emergency-room",
+      "from": "emergency",
+      "to": "room",
+      "label": "ถัดไป",
+      "variant": "default"
+    },
+    {
+      "id": "room-pay",
+      "from": "room",
+      "to": "pay",
+      "label": "บันทึก draft",
+      "variant": "default"
+    },
+    {
+      "id": "pay-contract",
+      "from": "pay",
+      "to": "contract",
+      "label": "PAID ครบยอดเท่านั้น",
+      "variant": "security"
+    },
+    {
+      "id": "contract-submit",
+      "from": "contract",
+      "to": "submit",
+      "label": "ยอมรับสัญญา",
+      "variant": "default"
+    },
+    {
+      "id": "submit-approve",
+      "from": "submit",
+      "to": "approve",
+      "label": "รอตรวจ",
+      "variant": "default"
+    },
+    {
+      "id": "approve-stay",
+      "from": "approve",
+      "to": "resident",
+      "label": "อนุมัติ",
+      "variant": "emphasis"
+    },
+    {
+      "id": "reject",
+      "from": "approve",
+      "to": "rejected",
+      "label": "ไม่อนุมัติ",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "face-optional",
+      "from": "resident",
+      "to": "face",
+      "label": "เลือกใช้งาน",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "stay-moveout",
+      "from": "resident",
+      "to": "moveout",
+      "label": "แจ้งย้ายออก",
+      "variant": "default"
+    },
+    {
+      "id": "moveout-guard",
+      "from": "moveout",
+      "to": "guard",
+      "label": "ผู้ดูแลสั่งลบ",
+      "variant": "default"
+    },
+    {
+      "id": "guard-purge",
+      "from": "guard",
+      "to": "purge",
+      "label": "ผ่าน guard",
+      "variant": "security"
+    },
+    {
+      "id": "guard-blocked",
+      "from": "guard",
+      "to": "blocked",
+      "label": "ยังมีรายการค้าง",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "purge-cleanup",
+      "from": "purge",
+      "to": "cleanup",
+      "label": "202 / ติดตามคิว",
+      "variant": "dashed"
+    },
+    {
+      "id": "cleanup-finish",
+      "from": "cleanup",
+      "to": "account",
+      "label": "COMPLETE",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "การกู้ข้อมูลและการชำระ",
+      "items": [
+        "Draft และเครดิตที่ตรวจผ่านอยู่กับบัญชีหลังรีเฟรช",
+        "เปลี่ยนห้องคำนวณยอดขาด; รอตรวจไม่โอนซ้ำ"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "เงื่อนไขก่อนจบ",
+      "items": [
+        "ข้อมูลตัวตนส่งต่อถึงสัญญา ไม่กรอกใหม่ทุกหน้า",
+        "ย้ายออกไม่ใช่ลบทันที; ต้องผ่าน guard และ cleanup"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "ขอบเขต",
+      "items": [
+        "หมดสัญญาอย่างเดียวไม่ล้างใบหน้าอัตโนมัติ",
+        "Face ต้องยินยอมแยก ไม่เป็นเงื่อนไขยอมรับสัญญา",
+        "Provider/อุปกรณ์จริงยังอยู่นอกผล QA ที่รับรอง"
+      ]
+    }
+  ]
+}

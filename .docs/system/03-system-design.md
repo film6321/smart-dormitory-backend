@@ -14,11 +14,17 @@
 
 ## 3.2 สถาปัตยกรรม
 
+รูปประกอบ: [ภาพรวมระบบ](diagrams/01-system-overview/system-overview.html) และ [System Architecture](diagrams/04-system-architecture/system-architecture.html) แสดงตาม source/config ไม่ใช่ภาพวัด runtime มีไฟล์ PNG/SVG ใน [หน้ารวมภาพ](diagrams/index.html)
+
 ระบบใช้ TypeScript เป็นภาษาหลัก React สร้างหน้าจอ Vite สนับสนุนการพัฒนา/build Axios ส่งคำขอ HTTP และ Express จัดการ API โดยแบ่งโมดูลตามหน้าที่ Prisma/PostgreSQL 16 เก็บข้อมูลถาวร Redis ใช้ cache, lock, rate limit และ presence บริการ OCR/Face/payment ติดต่อผ่าน wrapper องค์ประกอบเหล่านี้ร่วมกันรองรับ flow ของระบบเดียว
 
 Compose ปัจจุบันจัดบริการ API ฐานข้อมูล cache PgBouncer Nginx และบริการ/profile ที่ระบุจริง ส่วนเว็บใช้ Vite/ไฟล์ build และยังไม่มี service ใน Compose นี้ รายละเอียดการติดตั้งองค์ประกอบร่วมกันอยู่ใน [Deployment and data](deployment-and-data.md)
 
 ## 3.3 แบบจำลองข้อมูล
+
+รูปประกอบ: [ERD ตารางหลัก 10 ตาราง](diagrams/03-core-database/core-database.html) แสดงครบ 161 คอลัมน์ของตารางที่เลือกและ 17 FK ไม่รวมทุกตารางไว้ในภาพเดียว
+
+รายละเอียดทุกตารางและทุกคอลัมน์อยู่ใน [พจนานุกรมฐานข้อมูล](database-tables.md) ตรวจจาก schema และ source วันที่ 16 ต.ค. 2569 โดยแยก FK ที่ประกาศจริงจากการอ้างอิงที่ service ดูแล ไม่เพิ่มตารางจากชื่อที่แสดงบนหน้าจอ
 
 | Model | หน้าที่และความสัมพันธ์ |
 |---|---|
@@ -40,6 +46,8 @@ Compose ปัจจุบันจัดบริการ API ฐานข้�
 รูปจริงเก็บในพื้นที่ไฟล์และอ้าง path ไม่ใช่ binary ทุกภาพในฐานข้อมูล การออกแบบการสำรอง/ลบต้องตรวจทั้ง reference และไฟล์ Schema อ้าง [prisma/schema.prisma](../../prisma/schema.prisma) ไม่สร้าง ER ที่มี Building/Course table สมมติโดยไม่ตรวจ schema
 
 ## 3.4 กระบวนการสมัครและสัญญา
+
+รูปประกอบ: [flow สมัครจนย้ายออกและล้างข้อมูล](diagrams/02-housing-lifecycle/housing-lifecycle.html) แยกจุดยินยอม เงื่อนไขชำระ การอนุมัติ และ cleanup ก่อนสมัครใหม่
 
 ก่อนเริ่มมีจุดอ่านคำชี้แจง HOUSING และกดยินยอม แล้วจึงเข้าสมัคร 4 ขั้น: ตัวตน/OCR/ข้อมูลส่วนตัว → ผู้ติดต่อฉุกเฉิน → ห้อง/ชำระเงิน → สัญญา/ยืนยัน ชื่อ วันเกิด เลขบัตรและที่อยู่ดึงจากข้อมูลที่ตรวจแก้แล้ว ไม่กรอกใหม่บนสัญญา เบอร์ติดต่อใช้บัญชี คณะเลือกจากคำแนะนำขณะพิมพ์ ไม่มีช่องหลักสูตรในฟอร์มปัจจุบัน
 

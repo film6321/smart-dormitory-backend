@@ -1,0 +1,403 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MEEDEE Dormitory · System Architecture",
+    "output": ".docs/system/diagrams/04-system-architecture/system-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/film6321/smart-dormitory-backend.git",
+      "revision": "c6897b6a50e7f7074b6d3321691788d92afda1ba",
+      "link_mode": "local-only"
+    },
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "หน้าจอผู้ใช้"
+        },
+        "backend": {
+          "label": "งานประมวลผล"
+        },
+        "database": {
+          "label": "ข้อมูลและไฟล์"
+        },
+        "cloud": {
+          "label": "บริการเชื่อมต่อ"
+        },
+        "security": {
+          "label": "จุดตรวจเงื่อนไข"
+        },
+        "external": {
+          "label": "ผู้ใช้และผลลัพธ์"
+        },
+        "messagebus": {
+          "label": "งานเบื้องหลัง"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "เว็บผู้ใช้งาน",
+      "sublabel": "React · Vite · TypeScript",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker/nginx/nginx.conf",
+          "line": 70,
+          "end_line": 79
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 154,
+          "end_line": 154
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "Nginx",
+      "sublabel": "ไฟล์เว็บ · API · WebSocket",
+      "pos": [
+        325,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker/nginx/nginx.conf",
+          "line": 13,
+          "end_line": 28
+        },
+        {
+          "path": "docker/nginx/nginx.conf",
+          "line": 54,
+          "end_line": 79
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Express / Node.js",
+      "sublabel": "modules · workers · Socket.IO",
+      "pos": [
+        640,
+        250
+      ],
+      "size": [
+        210,
+        86
+      ],
+      "sources": [
+        {
+          "path": "src/app.ts",
+          "line": 47,
+          "end_line": 67
+        },
+        {
+          "path": "src/index.ts",
+          "line": 1,
+          "end_line": 32
+        },
+        {
+          "path": "src/modules/tenants/tenants.service.ts",
+          "line": 239,
+          "end_line": 265
+        }
+      ]
+    },
+    {
+      "id": "pool",
+      "type": "backend",
+      "label": "PgBouncer",
+      "sublabel": "Prisma ส่ง query ผ่าน pool",
+      "pos": [
+        980,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/database/db.ts",
+          "line": 1,
+          "end_line": 15
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 76,
+          "end_line": 81
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL 16",
+      "sublabel": "ข้อมูลถาวรของระบบหอพัก",
+      "pos": [
+        1280,
+        250
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 1,
+          "end_line": 8
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 1,
+          "end_line": 21
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": "cache / lock / rate limit",
+      "pos": [
+        655,
+        40
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/shared/redis.ts",
+          "line": 15,
+          "end_line": 35
+        },
+        {
+          "path": "src/shared/redis.ts",
+          "line": 49,
+          "end_line": 68
+        },
+        {
+          "path": "docker-compose.yml",
+          "line": 77,
+          "end_line": 78
+        }
+      ]
+    },
+    {
+      "id": "ocr",
+      "type": "cloud",
+      "label": "OCR API",
+      "sublabel": "นอก Compose นี้ · host:8000",
+      "pos": [
+        980,
+        40
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 80,
+          "end_line": 83
+        },
+        {
+          "path": "src/modules/ocr/ocr.service.ts",
+          "line": 95,
+          "end_line": 106
+        }
+      ]
+    },
+    {
+      "id": "face",
+      "type": "cloud",
+      "label": "Face API",
+      "sublabel": "บริการแยก · SQLite ตาม config",
+      "pos": [
+        1280,
+        40
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 123,
+          "end_line": 150
+        },
+        {
+          "path": "src/modules/face-verification/face-verification.service.ts",
+          "line": 368,
+          "end_line": 379
+        }
+      ]
+    },
+    {
+      "id": "uploads",
+      "type": "database",
+      "label": "uploads volume",
+      "sublabel": "ไฟล์ส่วนตัว / reference ใน DB",
+      "pos": [
+        655,
+        470
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 79,
+          "end_line": 81
+        },
+        {
+          "path": "src/modules/face-verification/face-verification.service.ts",
+          "line": 295,
+          "end_line": 303
+        }
+      ]
+    },
+    {
+      "id": "payment",
+      "type": "cloud",
+      "label": "Payment API",
+      "sublabel": "บริการแยก · HTTP :8002",
+      "pos": [
+        980,
+        470
+      ],
+      "size": [
+        180,
+        76
+      ],
+      "sources": [
+        {
+          "path": "docker-compose.yml",
+          "line": 78,
+          "end_line": 80
+        },
+        {
+          "path": "src/modules/billing/payment.provider.ts",
+          "line": 40,
+          "end_line": 60
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-gateway",
+      "from": "browser",
+      "to": "gateway",
+      "label": "HTTP",
+      "variant": "default"
+    },
+    {
+      "id": "gateway-runtime",
+      "from": "gateway",
+      "to": "runtime",
+      "label": "/api · /socket.io",
+      "variant": "default"
+    },
+    {
+      "id": "runtime-pool",
+      "from": "runtime",
+      "to": "pool",
+      "label": "Prisma / SQL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pool-postgres",
+      "from": "pool",
+      "to": "postgres",
+      "label": "SQL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime-redis",
+      "from": "runtime",
+      "to": "redis",
+      "label": "TTL / lock",
+      "variant": "default"
+    },
+    {
+      "id": "runtime-uploads",
+      "from": "runtime",
+      "to": "uploads",
+      "label": "อ่าน / เขียนไฟล์",
+      "variant": "default"
+    },
+    {
+      "id": "runtime-ocr",
+      "from": "runtime",
+      "to": "ocr",
+      "label": "HTTP wrapper",
+      "variant": "default"
+    },
+    {
+      "id": "runtime-face",
+      "from": "runtime",
+      "to": "face",
+      "label": "HTTP wrapper",
+      "variant": "default"
+    },
+    {
+      "id": "runtime-payment",
+      "from": "runtime",
+      "to": "payment",
+      "label": "HTTP wrapper",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "การติดตั้งตาม source",
+      "items": [
+        "เว็บ build ถูก mount ให้ Nginx; ไม่มี frontend service แยก",
+        "Express modules และ workers เริ่มจากโปรเซส Node.js เดียว"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "การสื่อสารและข้อมูล",
+      "items": [
+        "Nginx ส่ง API และ Socket.IO ไปบริการ runtime",
+        "Face มี SQLite ตาม config แยกจาก PostgreSQL ของหอพัก"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "ข้อจำกัดการอ่านภาพ",
+      "items": [
+        "เป็น configuration ที่ตรวจจากโค้ด ไม่ใช่ภาพวัด runtime",
+        "monitoring/tunnel เป็น profile เพิ่มเติม; OCR อยู่นอก Compose นี้",
+        "ภาพไม่อ้างว่าปิด public ports หรือทดสอบ provider จริงครบแล้ว"
+      ]
+    }
+  ]
+}

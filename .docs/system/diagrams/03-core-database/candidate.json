@@ -1,0 +1,1114 @@
+{
+  "schema_version": 1,
+  "diagram_type": "erd",
+  "meta": {
+    "title": "MEEDEE Dormitory · ความสัมพันธ์ข้อมูลหลัก",
+    "output": ".docs/system/diagrams/03-core-database/core-database.html",
+    "quality_profile": "standard",
+    "repository": {
+      "url": "https://github.com/film6321/smart-dormitory-backend.git",
+      "revision": "c6897b6a50e7f7074b6d3321691788d92afda1ba",
+      "link_mode": "local-only"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "gapX": 110,
+    "gapY": 60,
+    "entityW": 380,
+    "rowH": 20
+  },
+  "entities": [
+    {
+      "id": "User",
+      "label": "User",
+      "tag": "บัญชีและเอกสาร",
+      "row": 0,
+      "col": 0,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "faceRevokedAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "username",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "email",
+          "type": "TEXT NOT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "phone",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "password",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "passwordResetOtpHash",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "passwordResetOtpExpiresAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "passwordResetOtpAttempts",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "passwordResetGrantHash",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "passwordResetGrantExpiresAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "role",
+          "type": "Role NOT NULL"
+        },
+        {
+          "name": "lastLogin",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "authSessionVersion",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 50,
+          "end_line": 81
+        }
+      ]
+    },
+    {
+      "id": "IdCardVerification",
+      "label": "IdCardVerification",
+      "tag": "บัญชีและเอกสาร",
+      "row": 1,
+      "col": 0,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "userId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "User.id"
+        },
+        {
+          "name": "imagePath",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "isThaiIdCard",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "citizenIdMasked",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "citizenIdHash",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "fullNameTh",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "birthDateTh",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "issueDate",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "expiryDate",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "idDetected",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "idPresent",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "idChecksumValid",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "reason",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "ocrJobId",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "processingTimeMs",
+          "type": "INTEGER NULL"
+        },
+        {
+          "name": "verifiedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 135,
+          "end_line": 161
+        }
+      ]
+    },
+    {
+      "id": "HousingApplicationDraft",
+      "label": "HousingApplicationDraft",
+      "tag": "บัญชีและเอกสาร",
+      "row": 2,
+      "col": 0,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "userId",
+          "type": "INTEGER NOT NULL",
+          "key": [
+            "uk",
+            "fk"
+          ],
+          "references": "User.id"
+        },
+        {
+          "name": "roomId",
+          "type": "INTEGER NULL"
+        },
+        {
+          "name": "data",
+          "type": "JSONB NOT NULL"
+        },
+        {
+          "name": "status",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 365,
+          "end_line": 376
+        }
+      ]
+    },
+    {
+      "id": "Room",
+      "label": "Room",
+      "tag": "การเข้าพัก",
+      "row": 0,
+      "col": 1,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "roomNumber",
+          "type": "TEXT NOT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "floor",
+          "type": "INTEGER NULL"
+        },
+        {
+          "name": "status",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "capacity",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "monthlyRent",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "description",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 232,
+          "end_line": 251
+        }
+      ]
+    },
+    {
+      "id": "Tenant",
+      "label": "Tenant",
+      "tag": "การเข้าพัก",
+      "row": 1,
+      "col": 1,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "userId",
+          "type": "INTEGER NULL",
+          "key": [
+            "uk",
+            "fk"
+          ],
+          "references": "User.id"
+        },
+        {
+          "name": "roomId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Room.id"
+        },
+        {
+          "name": "fullName",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "phone",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "email",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "studentId",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "course",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "yearLevel",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "citizenId",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "address",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "birthDate",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "emergencyContact",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "emergencyName",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "emergencyRelation",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "preferredRoomType",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "notes",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "contractData",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "idCardImagePath",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "paymentSlipPath",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "status",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "checkInDate",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "checkOutDate",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "isActive",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 253,
+          "end_line": 291
+        }
+      ]
+    },
+    {
+      "id": "MaintenanceTicket",
+      "label": "MaintenanceTicket",
+      "tag": "การเข้าพัก",
+      "row": 2,
+      "col": 1,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "tenantId",
+          "type": "INTEGER NOT NULL",
+          "key": "fk",
+          "references": "Tenant.id"
+        },
+        {
+          "name": "roomId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Room.id"
+        },
+        {
+          "name": "category",
+          "type": "MaintenanceCategory NOT NULL"
+        },
+        {
+          "name": "description",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "contactTime",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "status",
+          "type": "MaintenanceStatus NOT NULL"
+        },
+        {
+          "name": "assignedTechnicianId",
+          "type": "INTEGER NULL"
+        },
+        {
+          "name": "note",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "resolvedAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 416,
+          "end_line": 436
+        }
+      ]
+    },
+    {
+      "id": "Bill",
+      "label": "Bill",
+      "tag": "การเงิน",
+      "row": 0,
+      "col": 2,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "tenantId",
+          "type": "INTEGER NOT NULL",
+          "key": [
+            "fk",
+            "uk"
+          ],
+          "references": "Tenant.id"
+        },
+        {
+          "name": "roomId",
+          "type": "INTEGER NULL",
+          "key": [
+            "fk",
+            "uk"
+          ],
+          "references": "Room.id"
+        },
+        {
+          "name": "amount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "rentAmount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "electricAmount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "waterAmount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "penaltyAmount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "dueDate",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "status",
+          "type": "BillStatus NOT NULL"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER NOT NULL"
+        },
+        {
+          "name": "billingPeriod",
+          "type": "VARCHAR(7) NULL",
+          "key": [
+            "uk"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "slipHash",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "reason",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "paidAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 293,
+          "end_line": 323
+        }
+      ]
+    },
+    {
+      "id": "Payment",
+      "label": "Payment",
+      "tag": "การเงิน",
+      "row": 1,
+      "col": 2,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "billId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Bill.id"
+        },
+        {
+          "name": "housingRoomId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Room.id"
+        },
+        {
+          "name": "housingVerificationId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "IdCardVerification.id"
+        },
+        {
+          "name": "housingTenantId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Tenant.id"
+        },
+        {
+          "name": "housingDraftId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "HousingApplicationDraft.id"
+        },
+        {
+          "name": "housingApprovedAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "payerUserId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "User.id"
+        },
+        {
+          "name": "amount",
+          "type": "DECIMAL(10, 2) NOT NULL"
+        },
+        {
+          "name": "status",
+          "type": "PaymentStatus NOT NULL"
+        },
+        {
+          "name": "provider",
+          "type": "PaymentProvider NOT NULL"
+        },
+        {
+          "name": "providerTransactionId",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "idempotencyKey",
+          "type": "TEXT NOT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "slipHash",
+          "type": "TEXT NULL",
+          "key": "uk"
+        },
+        {
+          "name": "slipPath",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "slipAmount",
+          "type": "DECIMAL(10, 2) NULL"
+        },
+        {
+          "name": "transferAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "providerResponse",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "failureReason",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "verifiedAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 325,
+          "end_line": 363
+        }
+      ]
+    },
+    {
+      "id": "Visitor",
+      "label": "Visitor",
+      "tag": "ผู้มาติดต่อ",
+      "row": 0,
+      "col": 3,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "faceRevokedAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "tenantId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Tenant.id"
+        },
+        {
+          "name": "roomId",
+          "type": "INTEGER NULL",
+          "key": "fk",
+          "references": "Room.id"
+        },
+        {
+          "name": "guestName",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "requestedTenantName",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "phone",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "citizenId",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "citizenIdMasked",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "relationship",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "age",
+          "type": "INTEGER NULL"
+        },
+        {
+          "name": "birthDate",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "address",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "idCardImagePath",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "purpose",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "expectedEntryTime",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "status",
+          "type": "VisitorStatus NOT NULL"
+        },
+        {
+          "name": "pdpaConsent",
+          "type": "BOOLEAN NOT NULL"
+        },
+        {
+          "name": "pdpaConsentAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "expiresAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "cancelledAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "qrCodeData",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "checkedInAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "checkedOutAt",
+          "type": "TIMESTAMP(3) NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 438,
+          "end_line": 477
+        }
+      ]
+    },
+    {
+      "id": "VisitorLog",
+      "label": "VisitorLog",
+      "tag": "ผู้มาติดต่อ",
+      "row": 1,
+      "col": 3,
+      "width": 380,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "INTEGER NOT NULL",
+          "key": "pk"
+        },
+        {
+          "name": "visitorId",
+          "type": "INTEGER NOT NULL",
+          "key": "fk",
+          "references": "Visitor.id"
+        },
+        {
+          "name": "eventType",
+          "type": "TEXT NOT NULL"
+        },
+        {
+          "name": "note",
+          "type": "TEXT NULL"
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP(3) NOT NULL"
+        }
+      ],
+      "sources": [
+        {
+          "path": "prisma/schema.prisma",
+          "line": 479,
+          "end_line": 489
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "IdCardVerification-userId",
+      "from": "IdCardVerification",
+      "to": "User",
+      "label": "userId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "HousingApplicationDraft-userId",
+      "from": "HousingApplicationDraft",
+      "to": "User",
+      "label": "userId",
+      "fromCardinality": "one",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": false
+    },
+    {
+      "id": "Tenant-userId",
+      "from": "Tenant",
+      "to": "User",
+      "label": "userId",
+      "fromCardinality": "one",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Tenant-roomId",
+      "from": "Tenant",
+      "to": "Room",
+      "label": "roomId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "MaintenanceTicket-tenantId",
+      "from": "MaintenanceTicket",
+      "to": "Tenant",
+      "label": "tenantId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": false
+    },
+    {
+      "id": "MaintenanceTicket-roomId",
+      "from": "MaintenanceTicket",
+      "to": "Room",
+      "label": "roomId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Bill-tenantId",
+      "from": "Bill",
+      "to": "Tenant",
+      "label": "tenantId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": false
+    },
+    {
+      "id": "Bill-roomId",
+      "from": "Bill",
+      "to": "Room",
+      "label": "roomId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-billId",
+      "from": "Payment",
+      "to": "Bill",
+      "label": "billId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-housingRoomId",
+      "from": "Payment",
+      "to": "Room",
+      "label": "housingRoomId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-housingVerificationId",
+      "from": "Payment",
+      "to": "IdCardVerification",
+      "label": "housingVerificationId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-housingDraftId",
+      "from": "Payment",
+      "to": "HousingApplicationDraft",
+      "label": "housingDraftId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-housingTenantId",
+      "from": "Payment",
+      "to": "Tenant",
+      "label": "housingTenantId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Payment-payerUserId",
+      "from": "Payment",
+      "to": "User",
+      "label": "payerUserId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Visitor-tenantId",
+      "from": "Visitor",
+      "to": "Tenant",
+      "label": "tenantId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "Visitor-roomId",
+      "from": "Visitor",
+      "to": "Room",
+      "label": "roomId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true
+    },
+    {
+      "id": "VisitorLog-visitorId",
+      "from": "VisitorLog",
+      "to": "Visitor",
+      "label": "visitorId",
+      "fromCardinality": "many",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": false
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "ขอบเขต ERD หลัก",
+      "items": [
+        "10 ตารางหลัก แสดงครบทุกคอลัมน์ของตารางที่เลือก",
+        "23 ตารางมีโค้ดใช้งาน; Transaction พบเฉพาะ cleanup",
+        "อีก 14 ตารางดูพจนานุกรมฐานข้อมูลฉบับเต็ม"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "คีย์และความสัมพันธ์",
+      "items": [
+        "Tenant.userId และ HousingApplicationDraft.userId มี unique",
+        "Bill: UK ของ tenantId + roomId + billingPeriod ใช้ร่วมกัน ไม่ได้ unique แยกคอลัมน์",
+        "HousingApplicationDraft.roomId เป็น logical reference ไม่ใช่ FK"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "กฎข้อมูล",
+      "items": [
+        "ภาพและสลิปเก็บเป็นไฟล์; ตารางอ้าง path",
+        "User แยกจาก Tenant จึงเก็บบัญชีไว้หลัง purge ได้",
+        "สถานะและ guard ของ service เพิ่มเติมจากข้อจำกัด schema"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "หมายเหตุจาก schema",
+      "items": [
+        "authSessionVersion ใช้ session; User.version ใช้ OCC",
+        "contractData เป็นข้อความ JSON; billingPeriod เป็น YYYY-MM ค.ศ. และอาจว่างในข้อมูลเก่า"
+      ]
+    }
+  ]
+}

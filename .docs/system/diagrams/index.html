@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MEEDEE Dormitory — แผนภาพระบบ</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.7 system-ui, sans-serif; color: #1e293b; background: #f4f7fb; }
+    main { max-width: 1180px; margin: auto; padding: 40px 24px; }
+    h1 { margin: 4px 0 10px; font-size: clamp(26px, 4vw, 38px); color: #0f172a; }
+    .eyebrow { color: #167e85; font-weight: 700; letter-spacing: .08em; }
+    .intro { max-width: 900px; color: #475569; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 32px 0; }
+    article { overflow: hidden; border: 1px solid #dce4ee; border-radius: 14px; background: white; }
+    .preview { display: block; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    img { width: 100%; height: 285px; object-fit: contain; display: block; }
+    .content { padding: 22px; }
+    h2 { font-size: 21px; margin: 0 0 10px; }
+    article p { margin: 0 0 20px; color: #475569; }
+    nav { display: flex; flex-wrap: wrap; gap: 10px; }
+    a { color: #146d7b; text-underline-offset: 3px; }
+    nav a { display: inline-block; padding: 7px 14px; border: 1px solid #cadce1; border-radius: 8px; text-decoration: none; }
+    nav a:first-child { background: #126f7b; border-color: #126f7b; color: white; }
+    a:focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
+    .notes { padding: 24px; border-radius: 12px; background: #eaf2f7; }
+    .notes h2 { margin-top: 0; }
+    .notes li { margin: 8px 0; }
+    footer { margin-top: 24px; color: #64748b; font-size: 14px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } main { padding: 24px 16px; } }
+    @media print { body { background: white; } .grid { display: block; } article { break-inside: avoid; margin-bottom: 20px; } nav { display: none; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">MEEDEE DORMITORY · SYSTEM DIAGRAMS</div>
+    <h1>แผนภาพระบบสำหรับรายงานและนำเสนอ</h1>
+    <p class="intro">4 มุมมองจากโค้ดและ schema ของระบบเดียวกัน สร้างด้วย Archify วันที่ 16 ตุลาคม 2569 เปิด HTML เพื่อซูมและดูข้อมูลประกอบ ใช้ PNG สำหรับสไลด์ หรือ SVG สำหรับขยายและพิมพ์</p>
+  </header>
+  <section class="grid" aria-label="แผนภาพทั้งสี่แบบ">
+    <article>
+      <a class="preview" href="01-system-overview/system-overview.html"><img src="01-system-overview/system-overview.png" alt="ภาพรวมผู้ใช้งาน งานหอพัก ข้อมูล ไฟล์และบริการประมวลผล"></a>
+      <div class="content"><h2>01 · ภาพรวมระบบ</h2><p>ผู้ดูแล ผู้พัก และผู้มาติดต่อ ใช้งานโมดูลหอพักบนข้อมูลร่วมกัน แยกข้อมูลหลัก ไฟล์ และงานชั่วคราว</p>
+        <nav aria-label="ไฟล์ภาพรวมระบบ"><a href="01-system-overview/system-overview.html">เปิดภาพ</a><a href="01-system-overview/system-overview.png" download>PNG</a><a href="01-system-overview/system-overview.svg" download>SVG</a><a href="01-system-overview/candidate.json">ต้นฉบับ</a></nav>
+      </div>
+    </article>
+    <article>
+      <a class="preview" href="02-housing-lifecycle/housing-lifecycle.html"><img src="02-housing-lifecycle/housing-lifecycle.png" alt="กระบวนการสมัคร 4 ขั้น อนุมัติ เข้าพัก ย้ายออก และล้างข้อมูล"></a>
+      <div class="content"><h2>02 · สมัครเข้าพักถึงย้ายออก</h2><p>ความยินยอม สมัคร ชำระ ตรวจสัญญา อนุมัติ และ guard ก่อนล้างข้อมูลจนเหลือบัญชี User</p>
+        <nav aria-label="ไฟล์กระบวนการเข้าพัก"><a href="02-housing-lifecycle/housing-lifecycle.html">เปิดภาพ</a><a href="02-housing-lifecycle/housing-lifecycle.png" download>PNG</a><a href="02-housing-lifecycle/housing-lifecycle.svg" download>SVG</a><a href="02-housing-lifecycle/candidate.json">ต้นฉบับ</a></nav>
+      </div>
+    </article>
+    <article>
+      <a class="preview" href="03-core-database/core-database.html"><img src="03-core-database/core-database.png" alt="ERD ของ 10 ตารางหลัก แสดงคอลัมน์และความสัมพันธ์ตาม schema"></a>
+      <div class="content"><h2>03 · ความสัมพันธ์ตารางหลัก</h2><p>10 ตาราง 161 คอลัมน์ และ 17 FK ในขอบเขตภาพนี้ เหมาะเปิดซูมหรือใช้ SVG ส่วนครบ 24 ตารางอยู่ในพจนานุกรมข้อมูล</p>
+        <nav aria-label="ไฟล์ ERD"><a href="03-core-database/core-database.html">เปิดภาพ</a><a href="03-core-database/core-database.png" download>PNG</a><a href="03-core-database/core-database.svg" download>SVG</a><a href="03-core-database/candidate.json">ต้นฉบับ</a></nav>
+      </div>
+    </article>
+    <article>
+      <a class="preview" href="04-system-architecture/system-architecture.html"><img src="04-system-architecture/system-architecture.png" alt="สถาปัตยกรรมการเชื่อมต่อ Nginx Node.js PgBouncer PostgreSQL Redis ไฟล์ และ API ภายนอก"></a>
+      <div class="content"><h2>04 · System Architecture</h2><p>เส้นทางเว็บผ่าน Nginx ไปยัง Express, workers และ Socket.IO รวมฐานข้อมูล cache ไฟล์ และ API ที่เชื่อมต่อ</p>
+        <nav aria-label="ไฟล์สถาปัตยกรรมระบบ"><a href="04-system-architecture/system-architecture.html">เปิดภาพ</a><a href="04-system-architecture/system-architecture.png" download>PNG</a><a href="04-system-architecture/system-architecture.svg" download>SVG</a><a href="04-system-architecture/candidate.json">ต้นฉบับ</a></nav>
+      </div>
+    </article>
+  </section>
+  <section class="notes" aria-labelledby="reading-notes">
+    <h2 id="reading-notes">ข้อควรทราบในการใช้ภาพ</h2>
+    <ul>
+      <li>รูปแสดงหน้าที่และ configuration ที่ตรวจจาก source ไม่ใช่ผลรับรองว่าอุปกรณ์หรือ provider จริงผ่านการทดสอบแล้ว กล้อง ประตู SMS และ provider จริงยังเป็น Out of scope ของรอบ QA</li>
+      <li>ภาพรวมจัดกลุ่มตามงาน ไม่ได้หมายความว่าทุกกล่องเป็น microservice; ภาพสถาปัตยกรรมแสดงโมดูลและ workers ในโปรเซสหลักเดียว</li>
+      <li>ERD แสดงเฉพาะตารางหลัก แต่ครบทุกคอลัมน์ของตารางที่เลือก UK ของ Bill เป็นคีย์ร่วม tenantId + roomId + billingPeriod ไม่ได้ unique แยกคอลัมน์ และ HousingApplicationDraft.roomId ไม่ใช่ FK ใน schema</li>
+      <li>ภาพ ERD มีเส้นอ้อมบางจุดเพื่อหลบตาราง ควรเปิด HTML หรือ SVG เพื่ออ่านชื่อฟิลด์ ไม่ย่อทั้งภาพลงสไลด์เดียวจนตัวหนังสือเล็ก</li>
+      <li>คำอธิบายภาพเป็นภาษาไทย ส่วนปุ่มเครื่องมือของ Archify และภาษาที่ประกาศใน HTML ภาพยังใช้ English fallback ใช้เมนู Export ในภาพเพื่อส่งออกใหม่ได้</li>
+      <li>อ้างอิง source ที่ commit c6897b6a50e7f7074b6d3321691788d92afda1ba; เอกสารฐานข้อมูลและไฟล์ภาพที่เพิ่มในงานนี้ยังไม่ได้ commit และไม่ใช้เป็นหลักฐานแทน source ที่ตรึงไว้</li>
+    </ul>
+  </section>
+  <footer><a href="../README.md">สารบัญระบบ</a> · <a href="../03-system-design.md">บทที่ 3</a> · <a href="../database-tables.md">พจนานุกรมฐานข้อมูล</a> · <a href="ARCHIFY-LICENSE.txt">Archify MIT License</a></footer>
+</main>
+</body>
+</html>
