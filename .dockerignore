@@ -11,3 +11,4 @@ coverage
 .docs
 tests
 tmp
+.face-evaluation

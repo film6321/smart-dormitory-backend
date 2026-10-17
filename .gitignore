@@ -51,3 +51,6 @@ temp/
 
 # Private uploaded files
 uploads/
+
+# Private volunteer images, consent references, model evidence and face evaluation results
+.face-evaluation/
