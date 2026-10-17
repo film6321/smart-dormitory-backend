@@ -406,6 +406,7 @@ export class FaceVerificationService {
       matched: false,
       user_id: null,
       similarity: 0,
+      score_available: false,
       verification_available: false,
       reason: 'UNAVAILABLE',
       processing_time_ms: 50,
@@ -465,12 +466,22 @@ export class FaceVerificationService {
       }
 
       const rawMatched = result.matched === true;
-      const similarity = Number(result.similarity ?? 0);
-      const faceRejected = result.reason === 'NO_FACE_DETECTED' || result.reason === 'MULTIPLE_FACES_DETECTED';
+      const providerMessage = typeof result.message === 'string' ? result.message : '';
+      const noFace = result.reason === 'NO_FACE_DETECTED' || result.face_count === 0
+        || /no face detected/i.test(providerMessage);
+      const multipleFaces = result.reason === 'MULTIPLE_FACES_DETECTED'
+        || (typeof result.face_count === 'number' && result.face_count > 1)
+        || /multiple faces detected/i.test(providerMessage);
+      const faceRejected = noFace || multipleFaces;
+      const rawSimilarity = result.similarity;
+      const scoreAvailable = typeof rawSimilarity === 'number' && Number.isFinite(rawSimilarity)
+        && rawSimilarity >= -1 && rawSimilarity <= 1 && !faceRejected;
+      // Keep the numeric field for existing clients; explicitly flag unmeasured scores.
+      const similarity = scoreAvailable ? rawSimilarity : 0;
 
       // Strict Threshold Guardrail:
       // Even if external API returns matched, ensure similarity meets the effective threshold to prevent false positives
-      const matched = rawMatched && !faceRejected && Number.isFinite(similarity) && similarity <= 1 && similarity >= effectiveThreshold
+      const matched = rawMatched && scoreAvailable && similarity >= effectiveThreshold
         && Number.isSafeInteger(result.user_id) && result.user_id > 0 && result.user_id !== 1000000;
       const matchedUserId = matched && result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
       let userName = matched ? result.message : undefined;
@@ -485,8 +496,9 @@ export class FaceVerificationService {
 
       return {
         matched,
-        reason: result.reason === 'NO_FACE_DETECTED' ? 'NO_FACE_DETECTED'
-          : result.reason === 'MULTIPLE_FACES_DETECTED' ? 'MULTIPLE_FACES_DETECTED'
+        score_available: scoreAvailable,
+        reason: noFace ? 'NO_FACE_DETECTED'
+          : multipleFaces ? 'MULTIPLE_FACES_DETECTED'
           : matched ? 'MATCHED' : 'NOT_MATCHED',
         user_id: matchedUserId,
         similarity,

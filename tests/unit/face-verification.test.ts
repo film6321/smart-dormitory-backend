@@ -795,6 +795,26 @@ describe('FaceVerificationService (unit)', () => {
       assert.equal(result.matched, false);
       assert.equal(result.user_id, null);
       assert.equal(result.reason, reason);
+      assert.equal(result.score_available, false);
+    }
+  });
+
+  it('distinguishes legacy no-face, absent scores, measured zero and genuine below-threshold scores', async () => {
+    const samples = [
+      { payload: { matched: false, similarity: 0, bbox: null, message: 'No face detected in the image' }, available: false, reason: 'NO_FACE_DETECTED', score: 0 },
+      { payload: { matched: false }, available: false, reason: 'NOT_MATCHED', score: 0 },
+      { payload: { matched: false, similarity: null }, available: false, reason: 'NOT_MATCHED', score: 0 },
+      { payload: { matched: false, similarity: 0 }, available: true, reason: 'NOT_MATCHED', score: 0 },
+      { payload: { matched: false, similarity: 0.2624 }, available: true, reason: 'NOT_MATCHED', score: 0.2624 },
+      { payload: { matched: true, user_id: 99, similarity: 0.95, face_count: 2 }, available: false, reason: 'MULTIPLE_FACES_DETECTED', score: 0 },
+    ];
+    for (const sample of samples) {
+      stub(globalThis, 'fetch', async () => new Response(JSON.stringify(sample.payload), { status: 200 }));
+      const result = await FaceVerificationService.verifyFace(Buffer.from('synthetic'), 'image/jpeg', 'capture.jpg');
+      assert.equal(result.matched, false);
+      assert.equal(result.score_available, sample.available);
+      assert.equal(result.reason, sample.reason);
+      assert.equal(result.similarity, sample.score);
     }
   });
 });

@@ -16,6 +16,7 @@ export interface FaceVerifyResponse {
   matched: boolean;
   user_id: number | null;
   similarity: number;
+  score_available?: boolean;
   processing_time_ms: number;
   message?: string;
   verification_available?: boolean;
