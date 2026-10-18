@@ -55,7 +55,7 @@ test('housing QR combines database rent and security deposit and rejects unavail
   t.mock.method(settings, 'getSettingValue', async () => '4');
   let configured = true;
   t.mock.method(settings, 'getContractTerms', async (candidateRoom?: { monthlyRent: unknown }) => ({
-    landlordName: configured ? 'QA landlord' : '', depositAmount: String(candidateRoom?.monthlyRent ?? ''),
+    landlordName: configured ? 'QA landlord' : '', depositAmount: String(candidateRoom?.monthlyRent ?? ''), keycardDeposit: '0',
   }));
   let image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const amounts: number[] = [];

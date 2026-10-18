@@ -76,6 +76,7 @@ export interface SubmitApplicationInput {
   paymentSlipPath?: string;
   paymentId?: number;
   contractAccepted?: boolean;
+  excessAccepted?: boolean;
   contractData?: Record<string, unknown>;
   userId?: number;
 }
@@ -264,8 +265,14 @@ export class TenantsService {
       const payment = await HousingPaymentService.requireVerifiedPayment(client, {
         paymentId: data.paymentId!, userId: userId!, roomNumber: roomPreference.roomNumber!.trim(),
         verificationId: ocrData!.verificationId!, slipPath: paymentSlipPath!,
-        monthlyRent: validatedContract.monthlyRent, depositAmount: validatedContract.depositAmount,
+        monthlyRent: validatedContract.monthlyRent, depositAmount: validatedContract.depositAmount, keycardDeposit: validatedContract.keycardDeposit,
+        excessAccepted: data.excessAccepted === true,
       });
+      if (payment.housingDraftId && payment.housingExcessAmount > 0) {
+        validatedContract.paymentExcessAccepted = 'true';
+        validatedContract.paymentExcessAcceptedAt = new Date().toISOString();
+        validatedContract.paymentExcessAmount = (payment.housingExcessAmount / 100).toFixed(2);
+      }
       if (payment.housingTenantId) {
         const existing = await client.tenant.findUnique({ where: { id: payment.housingTenantId } });
         if (existing && existing.userId === userId) return existing;

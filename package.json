@@ -16,7 +16,7 @@
     "build": "tsc",
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "load:k6": "k6 run tests/load/k6-smoke.js",
-    "docker:up": "docker compose -f ../Backend_smart-ocr/docker-compose.yml up -d && docker compose --profile monitoring --profile tunnel up -d",
+    "docker:up": "npm --prefix ../smart-dormitory-frontend run build && docker compose -f ../Backend_smart-ocr/docker-compose.yml up -d --build && docker compose --profile monitoring --profile tunnel up -d --build",
     "docker:stop": "docker compose --profile monitoring --profile tunnel stop && docker compose -f ../Backend_smart-ocr/docker-compose.yml stop",
     "tunnel:logs": "docker logs -f smart-dormitory-ngrok",
     "tunnel:restart": "docker compose restart ngrok"

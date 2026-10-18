@@ -4,8 +4,8 @@ export const validateNotificationPayload = (value: unknown): boolean => {
   }
 
   const body = value as Record<string, unknown>;
-  const validChannels = ['SMS', 'EMAIL'];
-  const validTypes = ['RENT_DUE', 'RENT_OVERDUE', 'MAINTENANCE_COMPLETED', 'VISITOR_ARRIVAL', 'GENERIC'];
+  const validChannels = ['SMS', 'EMAIL', 'IN_APP'];
+  const validTypes = ['RENT_DUE', 'RENT_OVERDUE', 'MAINTENANCE_COMPLETED', 'VISITOR_ARRIVAL', 'GENERIC', 'HOUSING_REFUND'];
 
   if (typeof body.channel !== 'string' || !validChannels.includes(body.channel)) {
     return false;
@@ -31,8 +31,8 @@ export const validateNotificationPayload = (value: unknown): boolean => {
 };
 
 export const createNotificationSchema = {
-  channel: (value: unknown) => typeof value === 'string' && ['SMS', 'EMAIL'].includes(value),
-  type: (value: unknown) => typeof value === 'string' && ['RENT_DUE', 'RENT_OVERDUE', 'MAINTENANCE_COMPLETED', 'VISITOR_ARRIVAL', 'GENERIC'].includes(value),
+  channel: (value: unknown) => typeof value === 'string' && ['SMS', 'EMAIL', 'IN_APP'].includes(value),
+  type: (value: unknown) => typeof value === 'string' && ['RENT_DUE', 'RENT_OVERDUE', 'MAINTENANCE_COMPLETED', 'VISITOR_ARRIVAL', 'GENERIC', 'HOUSING_REFUND'].includes(value),
   recipientPhone: (value: unknown) => value === undefined || (typeof value === 'string' && value.trim().length >= 4),
   tenantId: (value: unknown) => value === undefined || (typeof value === 'number' && value > 0),
   payload: (value: unknown) => value === undefined || (typeof value === 'object' && value !== null && !Array.isArray(value)),

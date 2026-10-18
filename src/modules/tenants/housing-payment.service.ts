@@ -44,7 +44,7 @@ export class HousingPaymentService {
     const room = await this.getAvailableRoom(roomNumber);
     const terms = await getContractTerms(room);
     if (Object.values(terms).some(value => !value.trim())) throw new AppError('ผู้ดูแลยังตั้งค่าเงื่อนไขสัญญาไม่ครบ กรุณาติดต่อผู้ดูแลก่อนชำระเงิน', 409);
-    const amount = Number(room.monthlyRent) + Number(terms.depositAmount);
+    const amount = Number(room.monthlyRent) + Number(terms.depositAmount) + Number(terms.keycardDeposit);
     if (!Number.isFinite(amount) || amount <= 0) throw new AppError('ห้องที่เลือกยังไม่มีราคามัดจำที่ถูกต้อง', 422);
     const image = await PaymentProviderClient.generateQr(amount);
     if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
@@ -70,7 +70,8 @@ export class HousingPaymentService {
     // A genuine transfer must still be recorded when a temporary room hold expired.
     const room = draftId !== undefined ? await prisma.room.findUnique({ where: { roomNumber } }) : await this.getAvailableRoom(roomNumber);
     if (!room) throw new AppError('ไม่พบห้อง กรุณาติดต่อผู้ดูแลเพื่อตรวจยอดเดิม อย่าโอนซ้ำ', 409);
-    let amount = Number(room.monthlyRent) + Number((await getContractTerms(room)).depositAmount);
+    const roomTerms = await getContractTerms(room);
+    let amount = Number(room.monthlyRent) + Number(roomTerms.depositAmount) + Number(roomTerms.keycardDeposit);
     if (!Number.isFinite(amount) || amount <= 0) throw new AppError('ห้องที่เลือกยังไม่มีราคามัดจำที่ถูกต้อง', 422);
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
       throw new AppError('สลิปต้องเป็นรูป JPG, PNG หรือ WEBP', 400);
@@ -94,7 +95,7 @@ export class HousingPaymentService {
         await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${room.id} FOR UPDATE`;
         const currentRoom = await tx.room.findUnique({ where: { id: room.id } });
         const currentTerms = currentRoom ? await getContractTerms(currentRoom, tx) : null;
-        if (!currentRoom || !currentTerms || Math.round((Number(currentRoom.monthlyRent) + Number(currentTerms.depositAmount)) * 100) / 100 !== amount) throw new AppError('ราคาและเงินประกันเปลี่ยนแล้ว กรุณาโหลดข้อมูลก่อนตรวจสลิป', 409);
+        if (!currentRoom || !currentTerms || Math.round((Number(currentRoom.monthlyRent) + Number(currentTerms.depositAmount) + Number(currentTerms.keycardDeposit)) * 100) / 100 !== amount) throw new AppError('ราคาและเงินประกันเปลี่ยนแล้ว กรุณาโหลดข้อมูลก่อนตรวจสลิป', 409);
       }
       const previous = await tx.payment.findUnique({ where: { idempotencyKey } });
       if (previous) {
@@ -164,7 +165,7 @@ export class HousingPaymentService {
       : !result.recipientMatched && result.transactionId ? (result.message || 'บัญชีผู้รับไม่ตรงกับบัญชีหอพัก')
       : !result.success ? 'ไม่สามารถยืนยันธุรกรรมจากภาพนี้ได้ กรุณาใช้สลิปโอนเงินจริงที่อ่านได้ชัดเจน'
       : !result.recipientMatched ? 'บัญชีผู้รับเงินไม่ตรงกับบัญชีหอพัก'
-      : result.amount !== amount ? `ยอดในสลิปไม่ตรงกับมัดจำห้องที่เลือก (${amount} บาท)`
+      : result.amount !== amount ? `ยอดในสลิปไม่ตรงกับค่าเช่าและเงินประกันที่กำหนด (${amount} บาท)`
       : !result.transactionId ? 'ผลตรวจไม่มีเลขอ้างอิงธุรกรรม จึงยังยืนยันการชำระเงินไม่ได้'
       : null;
     try {
@@ -196,7 +197,7 @@ export class HousingPaymentService {
 
   static async requireVerifiedPayment(db: Prisma.TransactionClient, input: {
     paymentId: number; userId: number; roomNumber: string; verificationId: number; slipPath: string;
-    monthlyRent: string; depositAmount: string;
+    monthlyRent: string; depositAmount: string; keycardDeposit: string; excessAccepted?: boolean;
   }) {
     await db.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.paymentId} FOR UPDATE`;
     const payment = await db.payment.findUnique({ where: { id: input.paymentId } });
@@ -211,17 +212,18 @@ export class HousingPaymentService {
       const rentDue = selected ? Math.round(Number(selected.monthlyRent) * 100) : 0;
       const terms = selected ? await getContractTerms(selected, db) : null;
       const depositDue = terms ? Math.round(Number(terms.depositAmount) * 100) : 0;
-      const due = rentDue + depositDue;
+      const keycardDepositDue = terms ? Math.round(Number(terms.keycardDeposit) * 100) : 0;
+      const due = rentDue + depositDue + keycardDepositDue;
       const pending = await db.payment.count({ where: { housingDraftId: draft.id, OR: [{ status: { in: ['PENDING', 'VERIFYING', 'MANUAL_REVIEW'] } }, { status: 'FAILED', failureReason: 'PROVIDER_PENDING' }] } });
       const parse = (v: string) => Math.round(Number(v.replace(/,/g, '')) * 100);
-      if (!selected || selected.roomNumber !== input.roomNumber || !due || total !== due || pending
-        || parse(input.monthlyRent) !== rentDue || parse(input.depositAmount) !== depositDue || payment.slipPath !== input.slipPath
+      if (!selected || selected.roomNumber !== input.roomNumber || !due || total < due || (total > due && input.excessAccepted !== true) || pending
+        || parse(input.monthlyRent) !== rentDue || parse(input.depositAmount) !== depositDue || parse(input.keycardDeposit) !== keycardDepositDue || payment.slipPath !== input.slipPath
         || payment.billId !== null || payment.housingVerificationId !== input.verificationId
         || payment.status !== 'PAID' || payment.payerUserId !== input.userId || !payment.providerTransactionId
         || !transfers.length || transfers.some(p => !p.providerTransactionId || p.housingTenantId !== payment.housingTenantId)) {
-        throw new AppError('ยอดชำระรวมยังไม่ตรงกับห้อง หรือมีรายการรอตรวจสอบ/ยอดส่วนเกิน กรุณาตรวจรายการเดิม อย่าโอนซ้ำ', 409);
+        throw new AppError('ยอดชำระรวมยังไม่ตรงกับห้อง หรือมีรายการรอตรวจสอบ/ยังไม่ได้ยอมรับยอดส่วนเกิน กรุณาตรวจรายการเดิม อย่าโอนซ้ำ', 409);
       }
-      return { ...payment, housingRoomId: selected.id };
+      return { ...payment, housingRoomId: selected.id, housingExcessAmount: total - due };
     }
     // submitApplication already locks the old and selected rooms in ID order.
     // Do not acquire another room lock here after the payment lock.
@@ -236,9 +238,11 @@ export class HousingPaymentService {
     const terms = await getContractTerms(room, db);
     const rentDue = Math.round(Number(room.monthlyRent) * 100) / 100;
     const depositDue = Math.round(Number(terms.depositAmount) * 100) / 100;
-    if (amount !== rentDue + depositDue || parseMoney(input.monthlyRent) !== rentDue || parseMoney(input.depositAmount) !== depositDue) {
+    const keycardDepositDue = Math.round(Number(terms.keycardDeposit) * 100) / 100;
+    if (amount !== rentDue + depositDue + keycardDepositDue || parseMoney(input.monthlyRent) !== rentDue
+      || parseMoney(input.depositAmount) !== depositDue || parseMoney(input.keycardDeposit) !== keycardDepositDue) {
       throw new AppError('ราคาห้องหรือยอดในสัญญาเปลี่ยนจากรายการชำระ กรุณาติดต่อเจ้าหน้าที่ก่อนดำเนินการต่อ', 409);
     }
-    return payment;
+    return { ...payment, housingExcessAmount: 0 };
   }
 }

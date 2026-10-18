@@ -404,6 +404,8 @@ model HousingRefundRequest {
   draft        HousingApplicationDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   amount       Decimal                 @db.Decimal(10, 2)
   reason       String?                 @db.VarChar(500)
+  accountName  String?                 @db.VarChar(160)
+  accountNumber String?                @db.VarChar(20)
   status       String                  @default("PENDING")
   adminNote    String?                 @db.VarChar(500)
   resolvedById Int?
@@ -534,6 +536,7 @@ model VisitorLog {
 enum NotificationChannel {
   SMS
   EMAIL
+  IN_APP
 }
 
 enum NotificationType {
@@ -542,6 +545,7 @@ enum NotificationType {
   MAINTENANCE_COMPLETED
   VISITOR_ARRIVAL
   GENERIC
+  HOUSING_REFUND
 }
 
 enum NotificationStatus {

@@ -7,23 +7,23 @@ export interface VerifyIdCardOptions {
 }
 
 export interface OcrIdCardData {
-  citizen_id?: string;
-  id_number?: string;
-  th_name?: string;
-  bp_full_name_th?: string;
-  th_dob?: string;
-  dob_th?: string;
-  address?: string;
-  address_th?: string;
-  th_address?: string;
-  issue_date?: string;
-  expiry_date?: string;
+  citizen_id?: string | null;
+  id_number?: string | null;
+  th_name?: string | null;
+  bp_full_name_th?: string | null;
+  th_dob?: string | null;
+  dob_th?: string | null;
+  address?: string | null;
+  address_th?: string | null;
+  th_address?: string | null;
+  issue_date?: string | null;
+  expiry_date?: string | null;
 }
 
 export interface OcrIdCardResponse {
   success?: boolean;
-  message?: string;
-  error?: string;
+  message?: string | null;
+  error?: string | null;
   id_detected?: boolean;
   data?: OcrIdCardData;
   validation?: {
@@ -31,15 +31,15 @@ export interface OcrIdCardResponse {
     id_checksum_valid?: boolean;
   };
   processing_time_ms?: number;
-  job_id?: string;
-  citizen_id?: string;
-  id_number?: string;
-  birth_date?: string;
-  birthDate?: string;
-  date_of_birth?: string;
-  address?: string;
-  address_th?: string;
-  th_address?: string;
+  job_id?: string | null;
+  citizen_id?: string | null;
+  id_number?: string | null;
+  birth_date?: string | null;
+  birthDate?: string | null;
+  date_of_birth?: string | null;
+  address?: string | null;
+  address_th?: string | null;
+  th_address?: string | null;
 }
 
 export interface VerifyIdCardResult {

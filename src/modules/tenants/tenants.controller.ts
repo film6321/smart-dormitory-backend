@@ -19,7 +19,12 @@ export class TenantsController {
     try {
       const body = requestBody(req.body);
       if (body.reason !== undefined && (typeof body.reason !== 'string' || body.reason.length > 500)) throw new AppError('เหตุผลคำขอไม่ถูกต้อง', 400);
-      const result = await HousingRefundService.request((req as AuthenticatedRequest).user!.id, typeof body.reason === 'string' ? body.reason : undefined);
+      if (typeof body.accountName !== 'string' || !body.accountName.trim() || body.accountName.trim().length > 160
+        || typeof body.accountNumber !== 'string' || !/^\d{6,20}$/.test(body.accountNumber)) {
+        throw new AppError('กรุณาระบุชื่อบัญชีและเลขบัญชีให้ถูกต้อง', 400);
+      }
+      const result = await HousingRefundService.request((req as AuthenticatedRequest).user!.id,
+        body.accountName.trim(), body.accountNumber, typeof body.reason === 'string' ? body.reason : undefined);
       return res.status(200).json(createResponse(200, 'รับคำขอคืนเงินแล้ว', result));
     } catch (error) { next(error); }
   }

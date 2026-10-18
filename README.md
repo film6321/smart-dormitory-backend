@@ -139,8 +139,16 @@ npm run dev
 
 ## Docker
 
+Run from the backend repository root. This builds the frontend, starts the OCR service, and starts all Compose services including Nginx, Prometheus, Grafana, and the ngrok tunnel:
+
 ```bash
-docker compose up -d --build
+npm run docker:up
+```
+
+Stop those containers without deleting database or service volumes:
+
+```bash
+npm run docker:stop
 ```
 
 ## Useful Commands

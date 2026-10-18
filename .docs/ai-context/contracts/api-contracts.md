@@ -105,8 +105,8 @@ For valid bill, visitor, and maintenance state changes, use `state-machine.md`. 
 
 `GET /api/tenants/payment-qr/:roomNumber` requires authentication. The server checks
 availability and capacity, reads `Room.monthlyRent`, and generates one combined
-charge for monthly rent plus the configured room deposit. If no deposit amount is
-configured, the deposit defaults to one month's rent. Response data:
+charge for monthly rent, the configured room deposit, and the configured keycard
+deposit. If no room-deposit amount is configured, it defaults to one month's rent. Response data:
 `{ roomNumber, amount, qrImage }`, where
 `qrImage` is a PNG data URL. This endpoint does not create a payment or reserve a room.
 The client must discard stale QR responses after room changes and refuse an amount
@@ -122,9 +122,10 @@ that differs from its displayed room price. Upload and verify the bank slip on t
   Returns document paths, registered phone and the verified payment.
 The legacy combined card/slip/room request remains supported. A successful response includes
 `paymentVerification: { id, status: "PAID", amount }` alongside document paths and OCR data.
-The server obtains rent from `Room.monthlyRent` and the deposit from the optional
-`contractDepositAmount` setting (falling back to one month's rent), verifies their
-combined amount through the existing Payment API, and persists one combined payment in `Payment` with
+The server obtains rent from `Room.monthlyRent`, room deposit from the optional
+`contractDepositAmount` setting (falling back to one month's rent), and keycard
+deposit from `contractKeycardDeposit`. It verifies their combined amount through
+the existing Payment API and persists one combined payment in `Payment` with
 `housingRoomId` and `housingVerificationId` (no bill yet).
 
 The application UI has three steps: identity/personal/student data; emergency contact
@@ -263,11 +264,11 @@ Dashboard business ownership additions (2026-10-09):
 
 - `GET /api/tenants/draft`: authenticated owner only, `Cache-Control: no-store`; returns persisted form, selected room, version, verified payment totals, remaining/excess amounts, identity reference and pending state. Recovers unconsumed legacy housing payments for the same owner. PostgreSQL is authoritative.
 - `PATCH /api/tenants/draft`: `{version, roomNumber?, data}`; data permits personalInformation, emergencyContact, roomPreference, contractData and activeStep (0–3). Validate nested field types and sizes; reject stale version with 409. Client-supplied totals do not determine credit. Saving a room does not reserve capacity.
-- `GET /api/tenants/draft/payment-qr/:roomNumber`: server calculates the remaining amount from room price minus PAID transfers. No new QR for a pending verification or a nonpositive balance. Before calling the provider, acquire a PostgreSQL-backed 10-minute room hold under User -> Room locks. Capacity includes reserving tenants and other OPEN draft holds whose expiry is still in the future. At expiry the hold stops consuming room capacity regardless of payment evidence; PAID transfers remain credit on the owner’s draft, and late slip verification may record credit without reclaiming a full room. Response adds reservationExpiresAt and serverTime; repeated QR requests reuse the active expiry. The legacy HTTP QR endpoint uses this same owner-scoped draft flow.
+- `GET /api/tenants/draft/payment-qr/:roomNumber`: server calculates the remaining amount from monthly room rent plus configured room and keycard deposits minus PAID transfers. No new QR for a pending verification or a nonpositive balance. Before calling the provider, acquire a PostgreSQL-backed 10-minute room hold under User -> Room locks. Capacity includes reserving tenants and other OPEN draft holds whose expiry is still in the future. At expiry the hold stops consuming room capacity regardless of payment evidence; PAID transfers remain credit on the owner’s draft, and late slip verification may record credit without reclaiming a full room. Response adds reservationExpiresAt and serverTime; repeated QR requests reuse the active expiry. The legacy HTTP QR endpoint uses this same owner-scoped draft flow.
 - `POST /api/tenants/draft/upload-slip`: multipart paymentSlip, roomNumber and verificationId. Same recipient/transaction/slip checks apply; only the outstanding amount is accepted. Persist before returning. Reusing a verified slip does not create another transfer.
 - After a room upgrade, original transfer amounts and room references remain unchanged; additional transfers belong to the same draft. Submission consumes all verified transfers atomically, and retry returns the same application. Each linked transfer receives housingApprovedAt when Admin approves. Room-based financial summaries attribute them to the draft's selected room.
 - PROVIDER_PENDING still allows retry of the original slip after the existing five-minute cooldown; it blocks new QR and room changes. MANUAL_REVIEW/VERIFYING require reconciliation; never request another transfer to recover a timeout.
-- A cheaper room exposes excessAmount; submission still requires an exact balance. The applicant may request the full current credit back through the refund-request flow; refunds are never automatic and are not post-approval room transfers. Money transferred without a successfully verified slip is not automatically known to the backend; retain and re-upload the original slip rather than paying again.
+- A cheaper room exposes excessAmount. If verified net credit is greater than the selected room total, the applicant may submit only after explicitly acknowledging that the excess will not be refunded if they proceed; the server rechecks this in the apply transaction and records the accepted amount and timestamp in the contract snapshot. Before submission, the applicant may instead request the full current credit through the refund-request flow. Refunds are never automatic and are not post-approval room transfers. Money transferred without a successfully verified slip is not automatically known to the backend; retain and re-upload the original slip rather than paying again.
 - Guarded tenant/account purge deletes the draft together with its owned payments; manual tenant purge preserves User under the approved deletion policy.
 
 
@@ -361,7 +362,7 @@ Guarded tenant purge may remove an unused PENDING payment batch as part of the e
 
 ### Housing refund requests — 2026-10-19
 
-- POST /api/tenants/draft/refund-request: STUDENT with HOUSING consent requests a refund of the full current net PAID credit; optional reason up to 500 chars. It does not transfer money. The server locks the owner/draft, rejects pending or consumed transfers, releases the room hold, and prevents draft edits, uploads, QR creation and submission while the request is PENDING. A repeated request while pending returns the same request.
+- POST /api/tenants/draft/refund-request: STUDENT with HOUSING consent requests a refund of the full current net PAID credit; accountName and accountNumber are required (account number must be 6–20 digits); optional reason up to 500 chars. It does not transfer money. The server locks the owner/draft, rejects pending or consumed transfers, releases the room hold, and prevents draft edits, uploads, QR creation and submission while the request is PENDING. A repeated request while pending returns the same request. Bank details are visible only in the owning applicant's draft response and the Admin refund list.
 - GET /api/tenants/drafts/refunds: Admin queue, up to 200 drafts that have refund request/history; optional Admin-only `userId` filter. Includes applicant, current credit, request status/reason and completed refund metadata; no private proof paths.
 - POST /api/tenants/drafts/:draftId/refund-requests/:requestId/reject: Admin rejects a pending request with a required note (up to 500 chars). Credit remains on the owner's draft and the user can continue.
 - POST /api/tenants/drafts/:draftId/refunds: Admin records an actual external refund only for the pending request's full amount; multipart version, amount, reference, idempotencyKey (UUID), confirmed="true", proof (JPEG/PNG/WebP up to 10 MB). Recording completes the request and subtracts the refund from draft credit. This API never transfers money.

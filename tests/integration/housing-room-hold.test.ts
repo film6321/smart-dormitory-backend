@@ -88,7 +88,7 @@ test('refund requests hold credit until Admin rejects or records the actual refu
   assert.ok((await prisma.housingApplicationDraft.findUniqueOrThrow({ where: { id: env.drafts[0].id } })).roomHoldExpiresAt);
   const payment = await prisma.payment.create({ data: { payerUserId: user.id, housingDraftId: env.drafts[0].id,
     housingRoomId: env.room.id, housingVerificationId: verification.id, amount: 150, providerTransactionId: crypto.randomUUID(), slipPath: 'fixture-refund.png', idempotencyKey: crypto.randomUUID(), status: 'PAID' } });
-  const request = await HousingRefundService.request(user.id, 'ไม่ประสงค์ดำเนินการสมัครต่อ');
+  const request = await HousingRefundService.request(user.id, 'ผู้สมัครทดสอบ', '1234567890', 'ไม่ประสงค์ดำเนินการสมัครต่อ');
   assert.equal(request.status, 'PENDING'); assert.equal(request.amount, 150);
   assert.equal((await HousingDraftService.get(user.id)).roomHoldExpiresAt, null);
   await assert.rejects(HousingDraftService.save(user.id, 2, {}), conflict);
@@ -97,7 +97,7 @@ test('refund requests hold credit until Admin rejects or records the actual refu
   let summary = await HousingDraftService.get(user.id);
   assert.equal(summary.paidAmount, 150); assert.equal(summary.refundRequest?.status, 'REJECTED');
   await HousingDraftService.save(user.id, summary.version, {});
-  const retryRequest = await HousingRefundService.request(user.id);
+  const retryRequest = await HousingRefundService.request(user.id, 'ผู้สมัครทดสอบ', '1234567890');
   assert.equal(retryRequest.status, 'PENDING');
   const pending = await HousingDraftService.get(user.id);
   const input = { version: pending.version, amount: 150, reference: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() };
@@ -164,6 +164,19 @@ test('expired holds release room capacity even when payment evidence remains wit
     await HousingPaymentService.generateDraftQr(env.users[1].id, env.room.roomNumber);
     assert.equal(await prisma.$transaction(tx => HousingDraftService.heldPlaces(tx, env.room.id)), 1);
   }
+});
+
+test('verified credit above the selected room total is ready for submission and shown as excess', async () => {
+  const env = await fixture();
+  const verification = await prisma.idCardVerification.create({ data: { userId: env.users[0].id, isThaiIdCard: true, idDetected: true } });
+  await prisma.payment.create({ data: { payerUserId: env.users[0].id, housingDraftId: env.drafts[0].id,
+    housingRoomId: env.room.id, housingVerificationId: verification.id, amount: 150, providerTransactionId: crypto.randomUUID(),
+    slipPath: 'fixture-excess.png', idempotencyKey: crypto.randomUUID(), status: 'PAID' } });
+  const summary = await HousingDraftService.get(env.users[0].id);
+  assert.equal(summary.requiredAmount, 100);
+  assert.equal(summary.paidAmount, 150);
+  assert.equal(summary.excessAmount, 50);
+  assert.equal(summary.ready, true);
 });
 
 test('Admin create and move cannot take the place reserved for another user', async t => {

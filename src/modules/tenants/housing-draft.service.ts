@@ -122,7 +122,8 @@ export class HousingDraftService {
     const contractTerms = await getContractTerms(room, tx);
     const rent = room ? cents(room.monthlyRent) : 0;
     const deposit = room ? cents(contractTerms.depositAmount) : 0;
-    const required = rent + deposit;
+    const keycardDeposit = room ? cents(contractTerms.keycardDeposit) : 0;
+    const required = rent + deposit + keycardDeposit;
     const last = paid[paid.length - 1];
     const verification = await tx.idCardVerification.findFirst({ where: { userId: draft.userId, idDetected: true, ...(last?.housingVerificationId ? { id: last.housingVerificationId } : {}) }, orderBy: { id: 'desc' } });
     const account = await tx.user.findUnique({ where: { id: draft.userId }, select: { phone: true, tenant: { select: { status: true } } } });
@@ -130,11 +131,12 @@ export class HousingDraftService {
     return { applicationBlockedReason: account?.tenant?.status === 'INACTIVE' ? 'บันทึกย้ายออกแล้ว กรุณารอผู้ดูแลล้างข้อมูลการพักเดิมก่อนสมัครใหม่' : null,
       roomHoldExpiresAt: draft.roomHoldExpiresAt ?? null, roomHoldActive, holdProtectedByPayment: roomHoldActive && (pending || credit > 0),
       contractTerms, id: draft.id, version: draft.version, status: draft.status, data: draft.data, registeredPhone: account?.phone?.trim() ?? '',
-      roomNumber: room?.roomNumber ?? '', monthlyRentAmount: rent / 100, depositAmount: deposit / 100,
+      roomNumber: room?.roomNumber ?? '', monthlyRentAmount: rent / 100, depositAmount: deposit / 100, keycardDepositAmount: keycardDeposit / 100,
       requiredAmount: required / 100, grossPaidAmount: gross / 100, refundedAmount: refunded / 100, paidAmount: credit / 100,
       remainingAmount: Math.max(0, required - credit) / 100, excessAmount: Math.max(0, credit - required) / 100,
-      pending, canRetrySlip, ready: !!room && credit === required && required > 0 && !pending && refundRequest?.status !== 'PENDING',
+      pending, canRetrySlip, ready: !!room && credit >= required && required > 0 && !pending && refundRequest?.status !== 'PENDING',
       refundRequest: refundRequest ? { id: refundRequest.id, amount: Number(refundRequest.amount), reason: refundRequest.reason,
+        accountName: refundRequest.accountName, accountNumber: refundRequest.accountNumber,
         status: refundRequest.status, adminNote: refundRequest.adminNote, requestedAt: refundRequest.requestedAt, resolvedAt: refundRequest.resolvedAt } : null,
       payment: last ? { id: last.id, slipPath: last.slipPath, status: last.status, amount: credit / 100 } : null,
       payments: payments.map(p => ({ id: p.id, amount: Number(p.amount), status: p.status, roomId: p.housingRoomId })),

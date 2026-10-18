@@ -1,0 +1,2 @@
+ALTER TYPE "NotificationType" ADD VALUE 'HOUSING_REFUND';
+ALTER TYPE "NotificationChannel" ADD VALUE 'IN_APP';

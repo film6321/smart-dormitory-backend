@@ -21,6 +21,7 @@ export function parseHousingApplication(value: unknown): SubmitApplicationInput 
     idCardImagePath: optionalText(body.idCardImagePath), paymentSlipPath: optionalText(body.paymentSlipPath),
     paymentId: body.paymentId === undefined ? undefined : Number(body.paymentId),
     contractAccepted: body.contractAccepted === undefined ? undefined : booleanValue(body.contractAccepted),
+    excessAccepted: body.excessAccepted === undefined ? undefined : booleanValue(body.excessAccepted),
     contractData: body.contractData === undefined ? undefined : requestBody(body.contractData),
   };
 }
@@ -32,7 +33,7 @@ export const requiredContractFields: Record<string, string> = {
   tenantAddress: 'ที่อยู่ผู้เช่า',
   roomNumber: 'ห้องพัก', building: 'อาคาร', floor: 'ชั้น',
   startDate: 'วันเริ่มสัญญา', endDate: 'วันสิ้นสุดสัญญา', monthlyRent: 'ค่าเช่ารายเดือน',
-  depositAmount: 'เงินประกัน', keycardDeposit: 'เงินประกันคีย์การ์ด', payDueDate: 'วันที่ครบกำหนดชำระ',
+  depositAmount: 'เงินประกัน', keycardDeposit: 'เงินประกันกุญแจ', payDueDate: 'วันที่ครบกำหนดชำระ',
   electricityRate: 'อัตราค่าไฟ', waterRate: 'อัตราค่าน้ำ', advanceNoticeDays: 'ระยะเวลาแจ้งย้ายออก',
 };
 

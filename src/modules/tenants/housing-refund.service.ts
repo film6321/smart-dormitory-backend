@@ -6,7 +6,7 @@ import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 import { HousingDraftService } from './housing-draft.service';
 import type { UploadedFile } from './tenants.service';
-import { publishAdminAlert, publishResidentStatus } from '../../realtime/notification-gateway';
+import { publishAdminAlert, publishNotificationAlert, publishResidentStatus } from '../../realtime/notification-gateway';
 import { getSettingValue } from '../settings/settings.service';
 
 export class HousingRefundService {
@@ -19,26 +19,30 @@ export class HousingRefundService {
     });
     const rooms = await prisma.room.findMany({ where: { id: { in: drafts.flatMap(d => d.roomId === null ? [] : [d.roomId]) } } });
     const configuredDeposit = await getSettingValue('contractDepositAmount');
+    const configuredKeycardDeposit = await getSettingValue('contractKeycardDeposit');
     const mapped = drafts.map(draft => {
       const room = rooms.find(value => value.id === draft.roomId);
       const gross = draft.payments.reduce((sum, payment) => sum + Math.round(Number(payment.amount) * 100), 0);
       const refunded = draft.refunds.reduce((sum, refund) => sum + Math.round(Number(refund.amount) * 100), 0);
       const monthlyRent = Math.round(Number(room?.monthlyRent ?? 0) * 100);
       const deposit = room ? Math.round(Number(configuredDeposit.trim() || room.monthlyRent) * 100) : 0;
-      const due = monthlyRent + deposit;
+      const keycardDeposit = room ? Math.round(Number(configuredKeycardDeposit.trim() || 0) * 100) : 0;
+      const due = monthlyRent + deposit + keycardDeposit;
       return { id: draft.id, userId: draft.userId, version: draft.version, status: draft.status, applicant: draft.user.username || draft.user.email,
         roomNumber: room?.roomNumber ?? '', monthlyRentAmount: monthlyRent / 100, depositAmount: deposit / 100,
+        keycardDepositAmount: keycardDeposit / 100,
         requiredAmount: due / 100, paidAmount: (gross - refunded) / 100, refundedAmount: refunded / 100,
         excessAmount: room ? Math.max(0, gross - refunded - due) / 100 : 0,
         refunds: draft.refunds.map(refund => ({ id: refund.id, amount: Number(refund.amount), reference: refund.reference, createdAt: refund.createdAt })),
         refundRequests: draft.refundRequests.map(request => ({ id: request.id, amount: Number(request.amount), reason: request.reason,
+          accountName: request.accountName, accountNumber: request.accountNumber,
           status: request.status, adminNote: request.adminNote, requestedAt: request.requestedAt, resolvedAt: request.resolvedAt,
           resolvedBy: request.resolvedBy?.username ?? null })) };
     });
     return mapped;
   }
 
-  static async request(userId: number, reason?: string) {
+  static async request(userId: number, accountName: string, accountNumber: string, reason?: string) {
     const normalizedReason = reason?.trim() || null;
     if (normalizedReason && normalizedReason.length > 500) throw new AppError('เหตุผลคำขอยาวเกินกำหนด', 400);
     const result = await prisma.$transaction(async tx => {
@@ -49,12 +53,14 @@ export class HousingRefundService {
       const consumed = await tx.payment.count({ where: { housingDraftId: draft.id, OR: [{ housingTenantId: { not: null } }, { housingApprovedAt: { not: null } }] } });
       const summary = await HousingDraftService.summary(tx, draft);
       if (summary.pending || consumed || summary.paidAmount <= 0) throw new AppError('ไม่มียอดเครดิตที่พร้อมขอคืน หรือยังมีรายการชำระรอตรวจสอบ', 409);
-      const request = await tx.housingRefundRequest.create({ data: { draftId: draft.id, amount: summary.paidAmount, reason: normalizedReason } });
+      const request = await tx.housingRefundRequest.create({ data: { draftId: draft.id, amount: summary.paidAmount, reason: normalizedReason,
+        accountName, accountNumber } });
       await tx.housingApplicationDraft.update({ where: { id: draft.id }, data: { roomHoldExpiresAt: null, version: { increment: 1 } } });
       return { request, userId, repeated: false };
     }, { timeout: 15000 });
     if (!result.repeated) publishAdminAlert(result.request.id, 'HOUSING_REFUND_REQUEST', 'มีคำขอคืนเงินจากใบสมัคร', 'PENDING');
     return { id: result.request.id, amount: Number(result.request.amount), reason: result.request.reason,
+      accountName: result.request.accountName, accountNumber: result.request.accountNumber,
       status: result.request.status, requestedAt: result.request.requestedAt };
   }
 
@@ -98,9 +104,18 @@ export class HousingRefundService {
           idempotencyKey: input.idempotencyKey, proofHash: hash, proofPath, recordedById: adminId } });
         await tx.housingRefundRequest.update({ where: { id: refundRequest.id }, data: { status: 'COMPLETED', resolvedById: adminId, resolvedAt: new Date() } });
         await tx.housingApplicationDraft.update({ where: { id: draftId }, data: { version: { increment: 1 } } });
-        return { refund, userId: source.userId };
+        const notification = await tx.notification.create({ data: {
+          userId: source.userId,
+          channel: 'IN_APP',
+          type: 'HOUSING_REFUND',
+          payload: JSON.stringify({ message: `คืนเงินจริง ${Number(refund.amount).toLocaleString()} บาทแล้ว` }),
+          status: 'SENT',
+          sentAt: new Date(),
+        } });
+        return { refund, userId: source.userId, notification };
       }, { timeout: 15000 });
       kept = result.refund.proofPath === proofPath;
+      if (result.notification) publishNotificationAlert(result.notification);
       publishAdminAlert(result.refund.id, 'HOUSING_REFUND', 'บันทึกคืนเงินจริงตามคำขอแล้ว', 'COMPLETE');
       publishResidentStatus(result.userId, 0, 'CREDIT_UPDATED');
       return { id: result.refund.id, amount: Number(result.refund.amount), reference: result.refund.reference, createdAt: result.refund.createdAt };

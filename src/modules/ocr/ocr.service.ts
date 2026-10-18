@@ -23,7 +23,7 @@ import { calculateAge } from '../../shared/date-utils';
 import { isRecord } from '../../shared/input';
 
 const isOptionalStringFields = (value: Record<string, unknown>, fields: string[]): boolean =>
-  fields.every((field) => value[field] === undefined || typeof value[field] === 'string');
+  fields.every((field) => value[field] === undefined || value[field] === null || typeof value[field] === 'string');
 
 const parseOcrResponse = (value: unknown): OcrIdCardResponse | null => {
   if (!isRecord(value)) return null;
@@ -551,7 +551,7 @@ export class OcrService {
         idChecksumValid,
       },
       processingTimeMs: payload.processing_time_ms,
-      jobId: payload.job_id,
+      jobId: payload.job_id ?? undefined,
     };
   }
 
