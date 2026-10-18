@@ -1,3 +1,4 @@
+import { requestBody } from '../../../shared/input';
 import type { Notification, NotificationProvider } from '@prisma/client';
 
 export interface ProviderSendPayload extends Partial<Notification> {
@@ -21,7 +22,7 @@ export async function send(provider: NotificationProvider | null | undefined, _n
   await new Promise((r) => setTimeout(r, 5));
 
   try {
-    const cfg = provider?.config ? JSON.parse(provider.config) : {};
+    const cfg = provider?.config ? requestBody(JSON.parse(provider.config)) : {};
     if (cfg.shouldFail) throw new Error('provider simulated failure');
   } catch (error) {
     if (error instanceof Error && error.message === 'provider simulated failure') {

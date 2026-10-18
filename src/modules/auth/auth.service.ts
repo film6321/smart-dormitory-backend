@@ -1,4 +1,4 @@
-import { disconnectUserSessions } from '../../realtime/notification-gateway';
+import { disconnectUserSessions, disconnectReplacedSessions } from '../../realtime/notification-gateway';
 import { Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { createHash } from 'node:crypto';
@@ -72,14 +72,14 @@ export class AuthService {
     } catch {
       throw new AppError('ไม่อนุญาตให้เข้าถึง: Token หมดอายุหรือไม่ถูกต้อง', 401);
     }
-    if (!Number.isInteger(decoded.id) || decoded.id <= 0 || !Number.isInteger(decoded.sessionVersion)) {
+    if (typeof decoded.id !== 'number' || !Number.isInteger(decoded.id) || decoded.id <= 0 || !Number.isInteger(decoded.sessionVersion)) {
       throw new AppError('กรุณาเข้าสู่ระบบใหม่', 401);
     }
     const user = await AuthRepository.findSessionUser(decoded.id);
     if (!user || user.authSessionVersion !== decoded.sessionVersion || user.role !== decoded.role) {
       throw new AppError('Session ถูกยกเลิกแล้ว กรุณาเข้าสู่ระบบใหม่', 401);
     }
-    return { id: user.id, role: user.role };
+    return { id: user.id, role: user.role, sessionVersion: user.authSessionVersion };
   }
 
   static async logout(userId: number) {
@@ -98,22 +98,26 @@ export class AuthService {
     }
 
     const sessionTimeoutMinutes = Number(await getSettingValue('sessionTimeoutMinutes')) || 30;
-    const token = jwt.sign(
-      { id: user.id, role: user.role, sessionVersion: user.authSessionVersion },
-      getJwtSecret(),
-      { expiresIn: `${sessionTimeoutMinutes}m` }
-    );
-
+    const secret = getJwtSecret();
     const lastLogin = new Date();
+    let session;
     try {
-      await AuthRepository.updateUser(user.id, { lastLogin }, undefined);
+      session = await AuthRepository.startLoginSession(user.id, user.password, lastLogin);
     } catch (error) {
+      if (getPrismaErrorCode(error) === 'P2025') throw new AppError('บัญชีหรือรหัสผ่านเปลี่ยนแล้ว กรุณาเข้าสู่ระบบใหม่', 401);
       if (getPrismaErrorCode(error) !== 'P2022') {
         throw error;
       }
       logger.error({ error, userId: user.id }, 'Cannot persist successful login timestamp');
       throw new AppError('ไม่สามารถบันทึกการเข้าสู่ระบบได้ กรุณาลองใหม่', 503);
     }
+
+    const token = jwt.sign(
+      { id: session.id, role: session.role, sessionVersion: session.authSessionVersion },
+      secret,
+      { expiresIn: `${sessionTimeoutMinutes}m` }
+    );
+    disconnectReplacedSessions(user.id, session.authSessionVersion);
 
     await markUserOnline(user.id, lastLogin);
 
@@ -122,7 +126,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         username: user.username,
-        role: user.role,
+        role: session.role,
         lastLogin: normalizeLastLogin(lastLogin),
         isOnline: true,
       },

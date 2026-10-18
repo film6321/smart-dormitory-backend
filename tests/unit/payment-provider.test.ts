@@ -40,7 +40,7 @@ test('payment provider validates HTTP status and normalized slip metadata', asyn
 });
 
 
-test('housing QR uses database rent and rejects unavailable rooms or invalid provider images', async (t) => {
+test('housing QR combines database rent and security deposit and rejects unavailable rooms or invalid provider images', async (t) => {
   const { prisma } = await import('../../src/database/db');
   const { HousingPaymentService } = await import('../../src/modules/tenants/housing-payment.service');
   let room: { roomNumber: string; status: string; capacity: number; monthlyRent: number; _count: { tenants: number } } | null = {
@@ -54,7 +54,9 @@ test('housing QR uses database rent and rejects unavailable rooms or invalid pro
   const settings = await import('../../src/modules/settings/settings.service');
   t.mock.method(settings, 'getSettingValue', async () => '4');
   let configured = true;
-  t.mock.method(settings, 'getContractTerms', async () => ({ landlordName: configured ? 'QA landlord' : '' }));
+  t.mock.method(settings, 'getContractTerms', async (candidateRoom?: { monthlyRent: unknown }) => ({
+    landlordName: configured ? 'QA landlord' : '', depositAmount: String(candidateRoom?.monthlyRent ?? ''),
+  }));
   let image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const amounts: number[] = [];
   t.mock.method(PaymentProviderClient, 'generateQr', async (amount: number) => { amounts.push(amount); return image; });
@@ -63,21 +65,21 @@ test('housing QR uses database rent and rejects unavailable rooms or invalid pro
   assert.deepEqual(amounts, []);
   configured = true;
   const first = await HousingPaymentService.generateQr('101');
-  assert.equal(first.amount, 100);
+  assert.equal(first.amount, 200);
   assert.deepEqual(findRoom.mock.calls[0].arguments[0]?.include?._count, {
     select: { tenants: { where: { isActive: true, status: { in: ['PENDING', 'APPROVED', 'ACTIVE'] } } } },
   });
   assert.equal(first.qrImage, `data:image/png;base64,${image.toString('base64')}`);
   room = { ...room, roomNumber: '201', monthlyRent: 50 };
-  assert.equal((await HousingPaymentService.generateQr('201')).amount, 50);
-  assert.deepEqual(amounts, [100, 50]);
+  assert.equal((await HousingPaymentService.generateQr('201')).amount, 100);
+  assert.deepEqual(amounts, [200, 100]);
   room.status = 'INACTIVE';
   await assert.rejects(HousingPaymentService.generateQr('201'), (e: unknown) => e instanceof AppError && e.statusCode === 409);
   room.status = 'AVAILABLE'; room._count.tenants = 1;
   await assert.rejects(HousingPaymentService.generateQr('201'));
   room._count.tenants = 0; room.monthlyRent = 0;
   await assert.rejects(HousingPaymentService.generateQr('201'));
-  assert.deepEqual(amounts, [100, 50]);
+  assert.deepEqual(amounts, [200, 100]);
   room.monthlyRent = 50; image = Buffer.from('<html>provider error</html>');
   await assert.rejects(HousingPaymentService.generateQr('201'), (e: unknown) => e instanceof AppError && e.statusCode === 503);
   room = null;

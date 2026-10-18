@@ -1,3 +1,4 @@
+import { requestBody } from '../../shared/input';
 import { Request, Response, Router } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { createHash } from 'node:crypto';
@@ -10,7 +11,8 @@ import { normalizeThaiMobilePhone } from './phone-utils';
 const router = Router();
 
 const getAccountRateLimitKey = (req: Request): string => {
-  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const value = requestBody(req.body).email;
+  const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!email) {
     return ipKeyGenerator(req.ip ?? '127.0.0.1');
   }
@@ -19,7 +21,8 @@ const getAccountRateLimitKey = (req: Request): string => {
 };
 
 const getPhoneRateLimitKey = (req: Request): string => {
-  const rawPhone = typeof req.body?.phone === 'string' ? req.body.phone : '';
+  const value = requestBody(req.body).phone;
+  const rawPhone = typeof value === 'string' ? value : '';
   const phone = normalizeThaiMobilePhone(rawPhone);
   return phone ? createHash('sha256').update(phone).digest('hex') : ipKeyGenerator(req.ip ?? '127.0.0.1');
 };

@@ -33,7 +33,7 @@ function fixture(t: TestContext, phase = 'EXTERNAL', kind = 'user', id = 41, pat
     visitor: { ...empty, update: async () => { actions.push('revoke'); return {}; } },
     faceEnrollmentPhoto: { ...empty, findMany: async () => [{ id: 17, photoPath: photo }], deleteMany: async () => { assert.ok(row); actions.push('photos'); return { count: 1 }; } },
     faceEmbedding: { deleteMany: async () => { assert.ok(row); actions.push('vectors'); return { count: 1 }; } },
-    tenant: empty, payment: empty, paymentBatch: empty, idCardVerification: empty, ocrJob: empty,
+    tenant: empty, payment: empty, paymentBatch: empty, housingRefund: empty, idCardVerification: empty, ocrJob: empty,
     $queryRaw: async () => [],
   } as unknown as typeof prisma;
   const oldKey = process.env.FACE_API_KEY;

@@ -195,7 +195,7 @@ describe('tenant room assignment', () => {
       where: { isActive: true, status: { in: ['PENDING', 'APPROVED', 'ACTIVE'] }, id: { not: 55 } },
     });
     assert.equal(f.transaction.mock.callCount(), 1);
-    assert.equal(f.lock.mock.callCount(), 2);
+    assert.equal(f.lock.mock.calls.filter(call => String((call.arguments as unknown[])[0]).includes('FOR UPDATE')).length, 2);
   });
 
   it('rejects a full destination without changing the old room or tenant', async (t) => {

@@ -377,7 +377,7 @@ export class PaymentBatchService {
     });
 
     if (!bill) throw new AppError('Bill not found', 404);
-    const parseProviderResponse = (value: string | null) => {
+    const parseProviderResponse = (value: string | null): unknown => {
       if (!value) return null;
       try { return JSON.parse(value); } catch { return null; }
     };

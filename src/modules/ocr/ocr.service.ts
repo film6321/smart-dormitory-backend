@@ -20,6 +20,34 @@ import {
 import { enqueueOcrJob } from './ocr.queue';
 import { Prisma } from '@prisma/client';
 import { calculateAge } from '../../shared/date-utils';
+import { isRecord } from '../../shared/input';
+
+const isOptionalStringFields = (value: Record<string, unknown>, fields: string[]): boolean =>
+  fields.every((field) => value[field] === undefined || typeof value[field] === 'string');
+
+const parseOcrResponse = (value: unknown): OcrIdCardResponse | null => {
+  if (!isRecord(value)) return null;
+  if (!isOptionalStringFields(value, [
+    'message', 'error', 'job_id', 'citizen_id', 'id_number', 'birth_date', 'birthDate',
+    'date_of_birth', 'address', 'address_th', 'th_address',
+  ])) return null;
+  if (value.success !== undefined && typeof value.success !== 'boolean') return null;
+  if (value.id_detected !== undefined && typeof value.id_detected !== 'boolean') return null;
+  if (value.processing_time_ms !== undefined
+    && (typeof value.processing_time_ms !== 'number' || !Number.isFinite(value.processing_time_ms) || value.processing_time_ms < 0)) return null;
+  if (value.data !== undefined) {
+    if (!isRecord(value.data) || !isOptionalStringFields(value.data, [
+      'citizen_id', 'id_number', 'th_name', 'bp_full_name_th', 'th_dob', 'dob_th', 'address',
+      'address_th', 'th_address', 'issue_date', 'expiry_date',
+    ])) return null;
+  }
+  if (value.validation !== undefined) {
+    if (!isRecord(value.validation)
+      || value.validation.id_present !== undefined && typeof value.validation.id_present !== 'boolean'
+      || value.validation.id_checksum_valid !== undefined && typeof value.validation.id_checksum_valid !== 'boolean') return null;
+  }
+  return value as OcrIdCardResponse;
+};
 
 const normalizeBaseUrl = (url: string) => url.replace(/\/+$/, '');
 const uploadRoot = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads/private'));
@@ -128,7 +156,7 @@ const callOcrIdCardApi = async (
         },
         timeoutMs,
       );
-      const payload = (await response.json().catch(() => null)) as OcrIdCardResponse | null;
+      const payload = parseOcrResponse(await response.json().catch(() => null));
 
       if (!payload) {
         throw new Error('OCR service returned an invalid response');
@@ -306,6 +334,47 @@ const toSummary = (verification: {
   verifiedAt: verification.verifiedAt,
   createdAt: verification.createdAt,
 });
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+const decodeCachedVerifications = (value: unknown): ListIdCardVerificationsResult | undefined => {
+  if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination)) return undefined;
+  const pagination = value.pagination;
+  if (!isNonNegativeInteger(pagination.page) || !isNonNegativeInteger(pagination.limit)
+    || !isNonNegativeInteger(pagination.total) || !isNonNegativeInteger(pagination.totalPages)) return undefined;
+  const items: IdCardVerificationSummary[] = [];
+  for (const item of value.items) {
+    if (!isRecord(item)
+      || typeof item.id !== 'number' || !Number.isSafeInteger(item.id)
+      || item.userId !== null && typeof item.userId !== 'number'
+      || typeof item.isThaiIdCard !== 'boolean'
+      || item.citizenIdMasked !== null && typeof item.citizenIdMasked !== 'string'
+      || item.fullNameTh !== null && typeof item.fullNameTh !== 'string'
+      || item.birthDateTh !== null && typeof item.birthDateTh !== 'string'
+      || typeof item.idDetected !== 'boolean' || typeof item.idPresent !== 'boolean'
+      || typeof item.idChecksumValid !== 'boolean' || typeof item.hasImage !== 'boolean'
+      || item.reason !== null && typeof item.reason !== 'string'
+      || typeof item.verifiedAt !== 'string' || !Number.isFinite(Date.parse(item.verifiedAt))
+      || typeof item.createdAt !== 'string' || !Number.isFinite(Date.parse(item.createdAt))) return undefined;
+    items.push({
+      id: item.id,
+      userId: item.userId,
+      isThaiIdCard: item.isThaiIdCard,
+      citizenIdMasked: item.citizenIdMasked,
+      fullNameTh: item.fullNameTh,
+      birthDateTh: item.birthDateTh,
+      idDetected: item.idDetected,
+      idPresent: item.idPresent,
+      idChecksumValid: item.idChecksumValid,
+      hasImage: item.hasImage,
+      reason: item.reason,
+      verifiedAt: new Date(item.verifiedAt),
+      createdAt: new Date(item.createdAt),
+    });
+  }
+  return { items, pagination: { page: pagination.page, limit: pagination.limit, total: pagination.total, totalPages: pagination.totalPages } };
+};
 
 const toOcrJobSummary = (job: {
   id: string;
@@ -540,7 +609,7 @@ export class OcrService {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
     const cacheKey = `${idCardVerificationListCachePrefix}:${safePage}:${safeLimit}`;
-    const cached = await getJsonCache<ListIdCardVerificationsResult>(cacheKey);
+    const cached = await getJsonCache(cacheKey, decodeCachedVerifications);
 
     if (cached) {
       return cached;

@@ -1,3 +1,4 @@
+import { requestBody, text, optionalText } from '../../shared/input';
 import { NextFunction, Request, Response } from 'express';
 import type { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { createResponse } from '../../shared/api-response';
@@ -26,7 +27,7 @@ export class NotificationController {
 
   static async createNotification(req: Request, res: Response, next: NextFunction) {
     try {
-      const notification = await NotificationController.getService().scheduleNotification(req.body);
+      const notification = await NotificationController.getService().scheduleNotification((() => { const b = requestBody(req.body); return {channel: text(b.channel), type: text(b.type), payload: typeof b.payload === 'string' ? b.payload : JSON.stringify(b.payload ?? {}), tenantId: b.tenantId === undefined ? undefined : Number(b.tenantId), userId: b.userId === undefined ? undefined : Number(b.userId), recipientPhone: optionalText(b.recipientPhone), scheduledAt: optionalText(b.scheduledAt)}; })());
       return res.status(201).json(createResponse(201, 'Notification scheduled successfully', notification));
     } catch (error) {
       next(error);
@@ -49,7 +50,7 @@ export class NotificationController {
 
   static async handleProviderWebhook(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await NotificationController.getService().handleProviderWebhook(req.body ?? {});
+      const result = await NotificationController.getService().handleProviderWebhook(requestBody(req.body) ?? {});
       return res.status(200).json(createResponse(200, 'Webhook processed', result));
     } catch (error) {
       next(error);

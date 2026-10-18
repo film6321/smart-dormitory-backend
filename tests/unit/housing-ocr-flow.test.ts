@@ -7,6 +7,7 @@ import { OcrService } from '../../src/modules/ocr/ocr.service';
 import { AppError } from '../../src/middlewares/error-handler';
 import fs from 'fs/promises';
 import { HousingPaymentService } from '../../src/modules/tenants/housing-payment.service';
+import { HousingDraftService } from '../../src/modules/tenants/housing-draft.service';
 import { getContractDates } from '../../src/modules/settings/settings.service';
 
 test('contract dates use Bangkok today and five calendar months with month-end clamping', () => {
@@ -17,6 +18,8 @@ test('contract dates use Bangkok today and five calendar months with month-end c
 });
 
 test('Housing Application Validation & OCR Flow', async (t) => {
+  t.mock.method(HousingDraftService, 'bindIdentity', async () => {});
+  t.mock.method(HousingPaymentService, 'verifyDraftSlip', async (...args: Parameters<typeof HousingPaymentService.verifyDraftSlip>) => HousingPaymentService.verifySlip(...args));
   const originalUser = prisma.user.findUnique;
   const originalVerification = prisma.idCardVerification.findUnique;
   Reflect.set(prisma.user, 'findUnique', async () => ({ phone: '0812345678' }));

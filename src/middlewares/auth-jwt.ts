@@ -34,7 +34,7 @@ export const verifyToken = async (req: AuthenticatedRequest, res: Response, next
     next();
   } catch (error) {
     if (!(error instanceof AppError)) return next(error);
-    return next(new AppError('ไม่อนุญาตให้เข้าถึง: Token หมดอายุหรือไม่ถูกต้อง', 401));
+    return next(error);
   }
 };
 

@@ -32,6 +32,11 @@ router.patch('/draft', verifyToken, requirePrivacyConsent('HOUSING'), TenantsCon
 router.get('/draft/payment-qr/:roomNumber', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.generateDraftQr);
 router.post('/draft/upload-identity', verifyToken, requirePrivacyConsent('HOUSING'), uploadFields, TenantsController.uploadDocuments);
 router.post('/draft/upload-slip', verifyToken, requirePrivacyConsent('HOUSING'), uploadFields, TenantsController.uploadDocuments);
+router.post('/draft/refund-request', verifyToken, requireRole(['STUDENT']), requirePrivacyConsent('HOUSING'), TenantsController.requestHousingRefund);
+router.get('/drafts/refunds', verifyToken, requireRole(['ADMIN']), TenantsController.listHousingRefunds);
+router.post('/drafts/:draftId/refunds', verifyToken, requireRole(['ADMIN']), upload.single('proof'), TenantsController.recordHousingRefund);
+router.post('/drafts/:draftId/refund-requests/:requestId/reject', verifyToken, requireRole(['ADMIN']), TenantsController.rejectHousingRefund);
+router.get('/drafts/refunds/:refundId/proof', verifyToken, requireRole(['ADMIN']), TenantsController.getHousingRefundProof);
 
 router.get('/', verifyToken, requireRole(['ADMIN']), TenantsController.listTenants);
 router.get('/payment-qr/:roomNumber', verifyToken, requirePrivacyConsent('HOUSING'), TenantsController.generatePaymentQr);

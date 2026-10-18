@@ -22,8 +22,8 @@ async function main() {
       }
     }
     console.log(`✅ Deleted ${deletedFilesCount} physical photo files from ${UPLOAD_DIR}`);
-  } catch (err: any) {
-    if (err.code === 'ENOENT') {
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
       await fs.mkdir(UPLOAD_DIR, { recursive: true });
       console.log(`📁 Created empty directory: ${UPLOAD_DIR}`);
     } else {

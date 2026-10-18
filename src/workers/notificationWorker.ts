@@ -2,14 +2,14 @@ import { logger } from '../logger';
 import NotificationService from '../modules/notifications/notification.service';
 import { type DbClient } from '../database/db';
 
-const getDbClient = (dbClient?: DbClient) => {
+const getDbClient = async (dbClient?: DbClient): Promise<DbClient | null> => {
   if (dbClient) {
     return dbClient;
   }
 
   try {
      
-    const { prisma } = require('../database/db');
+    const { prisma } = await import('../database/db');
     return prisma;
   } catch (error) {
     logger.warn({ error }, 'Notification worker could not initialize Prisma client');
@@ -50,7 +50,7 @@ export async function processPendingNotifications(dbClient?: DbClient) {
   isProcessing = true;
 
   try {
-    const db = getDbClient(dbClient);
+    const db = await getDbClient(dbClient);
     if (!db) {
       return;
     }

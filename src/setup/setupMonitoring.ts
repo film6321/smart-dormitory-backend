@@ -26,7 +26,9 @@ export const setupMonitoring = (app: Express) => {
 
     const endTimer = httpRequestDuration.startTimer();
     res.on('finish', () => {
-      const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+      const matchedRoute: unknown = req.route;
+      const route = matchedRoute && typeof matchedRoute === 'object' && 'path' in matchedRoute && typeof matchedRoute.path === 'string'
+        ? `${req.baseUrl}${matchedRoute.path}` : req.path;
       const labels = {
         method: req.method,
         route,

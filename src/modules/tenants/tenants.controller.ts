@@ -1,11 +1,13 @@
+import { requestBody, text } from '../../shared/input';
 import { HousingDraftService } from './housing-draft.service';
-import { validateTenantUpdate } from './tenants.dto';
+import { HousingRefundService } from './housing-refund.service';
+import { validateTenantUpdate, parseHousingApplication } from './tenants.dto';
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { HousingPaymentService } from './housing-payment.service';
 import { TenantsService } from './tenants.service';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
-import { isString, isInt, isObject } from 'class-validator';
+import { isString, isInt, isObject, isUUID } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { AppError } from '../../middlewares/error-handler';
 
@@ -13,6 +15,55 @@ class UploadHousingDocumentsDto { roomNumber!: string; }
 class HousingDraftDto { version!: number; data!: Record<string, unknown>; roomNumber?: string; }
 
 export class TenantsController {
+  static async requestHousingRefund(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = requestBody(req.body);
+      if (body.reason !== undefined && (typeof body.reason !== 'string' || body.reason.length > 500)) throw new AppError('เหตุผลคำขอไม่ถูกต้อง', 400);
+      const result = await HousingRefundService.request((req as AuthenticatedRequest).user!.id, typeof body.reason === 'string' ? body.reason : undefined);
+      return res.status(200).json(createResponse(200, 'รับคำขอคืนเงินแล้ว', result));
+    } catch (error) { next(error); }
+  }
+  static async listHousingRefunds(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const rawUserId = _req.query.userId;
+      if (rawUserId !== undefined && (typeof rawUserId !== 'string' || !/^\d+$/.test(rawUserId) || Number(rawUserId) < 1)) {
+        throw new AppError('Invalid userId filter', 400);
+      }
+      const userId = typeof rawUserId === 'string' ? Number(rawUserId) : undefined;
+      return res.status(200).json(createResponse(200, 'Housing excess and refunds', await HousingRefundService.list(userId)));
+    }
+    catch (error) { next(error); }
+  }
+  static async recordHousingRefund(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = requestBody(req.body);
+      const draftId = Number(req.params.draftId), version = Number(body.version), amount = Number(body.amount);
+      if (!isInt(draftId) || draftId < 1 || !isInt(version) || version < 1 || !Number.isFinite(amount)
+        || typeof body.reference !== 'string' || !body.reference.trim() || body.reference.length > 100
+        || !isUUID(body.idempotencyKey) || body.confirmed !== 'true' || !req.file) throw new AppError('กรุณาระบุยอด เลขอ้างอิง หลักฐาน และยืนยันว่าได้คืนเงินจริงแล้ว', 400);
+      const result = await HousingRefundService.record(draftId, (req as AuthenticatedRequest).user!.id,
+        { version, amount, reference: body.reference.trim(), idempotencyKey: text(body.idempotencyKey) }, req.file);
+      return res.status(200).json(createResponse(200, 'บันทึกการคืนเงินจริงแล้ว', result));
+    } catch (error) { next(error); }
+  }
+  static async getHousingRefundProof(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.refundId);
+      if (!isInt(id) || id < 1) throw new AppError('รหัสหลักฐานไม่ถูกต้อง', 400);
+      const proof = await HousingRefundService.proof(id);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.sendFile(proof, error => { if (error) next(new AppError('ไม่พบไฟล์หลักฐานคืนเงิน', 404)); });
+    } catch (error) { next(error); }
+  }
+  static async rejectHousingRefund(req: Request, res: Response, next: NextFunction) {
+    try {
+      const draftId = Number(req.params.draftId), requestId = Number(req.params.requestId);
+      const body = requestBody(req.body);
+      if (!isInt(draftId) || draftId < 1 || !isInt(requestId) || requestId < 1 || typeof body.note !== 'string') throw new AppError('ข้อมูลการจัดการคำขอไม่ถูกต้อง', 400);
+      const result = await HousingRefundService.reject(draftId, requestId, (req as AuthenticatedRequest).user!.id, body.note);
+      return res.status(200).json(createResponse(200, 'ปฏิเสธคำขอคืนเงินแล้ว', result));
+    } catch (error) { next(error); }
+  }
   static async getDraft(req: Request, res: Response, next: NextFunction) {
     try {
       res.setHeader('Cache-Control', 'no-store');
@@ -21,7 +72,7 @@ export class TenantsController {
   }
   static async saveDraft(req: Request, res: Response, next: NextFunction) {
     try {
-      const input = plainToInstance(HousingDraftDto, req.body);
+      const input = plainToInstance(HousingDraftDto, requestBody(req.body));
       if (!isInt(input.version) || input.version < 1 || !isObject(input.data)
         || input.roomNumber !== undefined && (!isString(input.roomNumber) || input.roomNumber.length > 30)) throw new AppError('Invalid housing draft', 400);
       for (const key of ['personalInformation', 'emergencyContact', 'roomPreference', 'contractData']) {
@@ -48,7 +99,7 @@ export class TenantsController {
       if (!isString(input.roomNumber) || !input.roomNumber.trim() || input.roomNumber.length > 30) {
         throw new AppError('กรุณาระบุห้องที่ต้องการชำระมัดจำ', 400);
       }
-      const data = await HousingPaymentService.generateQr(input.roomNumber.trim());
+      const data = await HousingPaymentService.generateDraftQr((req as AuthenticatedRequest).user!.id, input.roomNumber.trim());
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json(createResponse(200, 'Housing payment QR generated', data));
     } catch (error) { next(error); }
@@ -70,13 +121,13 @@ export class TenantsController {
         if (req.path === '/draft/upload-identity') await HousingDraftService.bindIdentity(userId, data.ocrData.verificationId!);
         return res.status(200).json(createResponse(200, 'Identity verified', data));
       }
-      const input = plainToInstance(UploadHousingDocumentsDto, req.body);
+      const input = plainToInstance(UploadHousingDocumentsDto, requestBody(req.body));
       if (!isString(input.roomNumber) || !input.roomNumber.trim() || input.roomNumber.length > 30) throw new AppError('กรุณาระบุห้องที่เลือกก่อนตรวจสอบสลิป', 400);
-      const verificationId = Number(req.body?.verificationId);
+      const verificationId = Number(requestBody(req.body)?.verificationId);
       if (!idCardFile && (!isInt(verificationId) || verificationId <= 0)) throw new AppError('กรุณาตรวจบัตรประชาชนก่อนตรวจสลิป', 400);
       const data = idCardFile
         ? await TenantsService.uploadDocuments(idCardFile, paymentSlipFile!, userId, input.roomNumber.trim())
-        : await TenantsService.verifyHousingPayment(paymentSlipFile!, userId, input.roomNumber.trim(), verificationId, req.path === '/draft/upload-slip');
+        : await TenantsService.verifyHousingPayment(paymentSlipFile!, userId, input.roomNumber.trim(), verificationId, true);
       return res.status(200).json(createResponse(200, 'Documents uploaded successfully', data));
     } catch (error) {
       next(error);
@@ -193,7 +244,7 @@ export class TenantsController {
 
   static async createTenant(req: Request, res: Response, next: NextFunction) {
     try {
-      const tenant = await TenantsService.createTenant(req.body);
+      const tenant = await TenantsService.createTenant(requestBody(req.body));
       return res.status(201).json(createResponse(201, 'Tenant created successfully', tenant));
     } catch (error) {
       next(error);
@@ -203,7 +254,7 @@ export class TenantsController {
   static async submitApplication(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = (req as AuthenticatedRequest).user?.id;
-      const tenant = await TenantsService.submitApplication({ ...req.body, userId });
+      const tenant = await TenantsService.submitApplication({ ...parseHousingApplication(req.body), userId });
       return res.status(201).json(createResponse(201, 'Housing application submitted successfully', tenant));
     } catch (error) {
       next(error);
@@ -217,7 +268,7 @@ export class TenantsController {
         return res.status(400).json(createResponse(400, 'Invalid tenant id'));
       }
 
-      const tenant = await TenantsService.updateTenant(id, validateTenantUpdate(req.body));
+      const tenant = await TenantsService.updateTenant(id, validateTenantUpdate(requestBody(req.body)));
       return res.status(200).json(createResponse(200, 'Tenant updated successfully', tenant));
     } catch (error) {
       next(error);

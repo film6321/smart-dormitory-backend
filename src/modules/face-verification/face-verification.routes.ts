@@ -1,3 +1,4 @@
+import { requestBody } from '../../shared/input';
 import { NextFunction, Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
@@ -63,7 +64,7 @@ const uploadFaceImage = (req: Request, res: Response, next: NextFunction) => {
 };
 
 const authorizeFaceRegistration = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const requestedUserId = Number(req.body.userId || req.body.user_id);
+  const requestedUserId = Number(requestBody(req.body).userId || requestBody(req.body).user_id);
 
   if (req.user?.role === 'ADMIN' || req.user?.id === requestedUserId) {
     return next();

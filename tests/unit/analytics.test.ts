@@ -19,7 +19,11 @@ describe('AnalyticsService (unit)', () => {
     assert.deepEqual(days[29], { date: '2026-10-12', entries: 3, exits: 1 });
   });
   it('returns dashboard analytics with system and dormitory metrics', async (t) => {
-    t.mock.method(AnalyticsService, 'getBusinessAnalytics', async () => ({ totals: {}, perRoom: [], monthlyReceipts: [], urgent: {}, activity: [] }) as never);
+    t.mock.method(AnalyticsService, 'getBusinessAnalytics', async () => ({
+      totals: { billPaid: 0, depositPaid: 0, received: 0, outstanding: 0, receivedThisMonth: 0, undatedReceived: 0 },
+      perRoom: [], monthlyReceipts: [], housingPayments: [],
+      urgent: { overdueBills: 0, waitingVisitors: 0, paidAwaitingApplication: 0, paidAwaitingAdminApproval: 0, housingPaymentsNeedReview: 0 }, activity: [],
+    }));
     t.mock.method(AnalyticsService, 'getDailyAccessAnalytics', async () => []);
     // Mock db client
     const mockDb = {
@@ -81,6 +85,15 @@ describe('AnalyticsService (unit)', () => {
 
 
 describe('observability analytics', () => {
+  it('rejects malformed external metrics rather than treating null or objects as zero', async t => {
+    for (const sample of [null, { metric: { status_code: '200' }, value: [1, null] }, { metric: { status_code: {} }, value: [1, '4'] }]) {
+      t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ status: 'success', data: { result: [sample] } })));
+      const result = await AnalyticsService.getObservabilityAnalytics();
+      assert.equal(result.metricsAvailable, false);
+      assert.equal(result.http, null);
+      t.mock.restoreAll();
+    }
+  });
   it('groups HTTP statuses and returns security counters without querying dormitory data', async (t) => {
     t.mock.method(AnalyticsService, 'getDashboardAnalytics', () => { throw new Error('Database must not be queried'); });
     t.mock.method(globalThis, 'fetch', async (input: string) => {

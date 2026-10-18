@@ -3,6 +3,7 @@ import { AccountRetentionService } from '../users/account-retention.service';
 import fs from 'fs/promises';
 import { createHash } from 'crypto';
 import { HousingPaymentService } from './housing-payment.service';
+import { HousingDraftService } from './housing-draft.service';
 import { OcrService } from '../ocr/ocr.service';
 import { isFilledText, normalizeThaiNameForComparison, validateHousingApplication } from './tenants.dto';
 import { logger } from '../../logger';
@@ -14,7 +15,7 @@ import path from 'path';
 import { getContractTerms, getSettingValue } from '../settings/settings.service';
 import { AcademicService } from '../settings/academic.service';
 import { calculateAge } from '../../shared/date-utils';
-import { publishAdminAlert } from '../../realtime/notification-gateway';
+import { publishAdminAlert, publishResidentStatus } from '../../realtime/notification-gateway';
 
 export interface CreateTenantInput {
   userId?: number | null;
@@ -219,8 +220,10 @@ export class TenantsService {
   }
 
   static async uploadDocuments(idCardFile: UploadedFile, paymentSlipFile: UploadedFile, userId: number, roomNumber: string) {
+    await HousingDraftService.assertEditable(userId);
     const identity = await this.verifyIdentity(idCardFile, userId);
-    const payment = await this.verifyHousingPayment(paymentSlipFile, userId, roomNumber, identity.ocrData.verificationId!);
+    await HousingDraftService.bindIdentity(userId, identity.ocrData.verificationId!);
+    const payment = await this.verifyHousingPayment(paymentSlipFile, userId, roomNumber, identity.ocrData.verificationId!, true);
     return { ...identity, ...payment };
   }
 
@@ -346,6 +349,7 @@ export class TenantsService {
       }
       const maxOccupants = await this.getMaxOccupants();
       this.assertRoomHasCapacity(targetRoom, maxOccupants);
+      await HousingDraftService.assertHeldCapacity(client, targetRoom, targetRoom.tenants.length, maxOccupants, userId!);
       tenantPayload.room = { connect: { id: targetRoom.id } };
       if (existing && ['APPROVED', 'ACTIVE'].includes(existing.status)) {
         throw new AppError('ใบสมัครได้รับการอนุมัติแล้ว ไม่สามารถส่งทับได้', 409);
@@ -360,7 +364,7 @@ export class TenantsService {
         where: { id: payment.housingDraftId ? { in: paymentIds } : payment.id, status: 'PAID', housingTenantId: null }, data: { housingTenantId: tenant.id },
       });
       if (consumed.count !== paymentIds.length) throw new AppError('รายการชำระนี้ถูกใช้ยื่นใบสมัครแล้ว', 409);
-      if (payment.housingDraftId) await client.housingApplicationDraft.update({ where: { id: payment.housingDraftId }, data: { status: 'SUBMITTED', version: { increment: 1 } } });
+      if (payment.housingDraftId) await client.housingApplicationDraft.update({ where: { id: payment.housingDraftId }, data: { status: 'SUBMITTED', roomHoldExpiresAt: null, version: { increment: 1 } } });
       for (const roomId of roomIds) await this.refreshRoomStatus(client, roomId, maxOccupants);
       return tenant;
     };
@@ -391,6 +395,7 @@ export class TenantsService {
         if (!room) throw new AppError('Room not found', 404);
         if (!['AVAILABLE', 'OCCUPIED'].includes(room.status)) throw new AppError('ห้องไม่พร้อมรับผู้พัก', 409);
         this.assertRoomHasCapacity(room, maxOccupants);
+        await HousingDraftService.assertHeldCapacity(client, room, room.tenants.length, maxOccupants, data.userId ?? 0);
       }
       const tenant = await TenantsRepository.createTenant({
         userId: data.userId ?? null, roomId: data.roomId ?? null,
@@ -426,6 +431,10 @@ export class TenantsService {
       if (tenant.userId !== snapshot.userId) throw new AppError('ข้อมูลผู้พักถูกแก้ไขพร้อมกัน กรุณาลองใหม่', 409);
 
       if (tenant.status === 'ARCHIVED') throw new AppError('ข้อมูลผู้พักถูกลบแล้ว', 409);
+      if (tenant.status === 'REJECTED' && data.status && ['PENDING', 'APPROVED', 'ACTIVE'].includes(data.status)
+        && tenant.userId !== null && await tx.housingApplicationDraft.findFirst({ where: { userId: tenant.userId, status: 'OPEN' } })) {
+        throw new AppError('ผู้สมัครกำลังแก้ใบสมัคร กรุณารอให้ยื่นใบสมัครใหม่ก่อนพิจารณา', 409);
+      }
       if (tenant.status === 'INACTIVE' && (data.status && data.status !== 'INACTIVE' || data.isActive === true || data.roomId != null || data.userId !== undefined)) {
         throw new AppError('ผู้ย้ายออกต้องยื่นใบสมัครใหม่ ไม่สามารถเปิดการเข้าพักเดิม', 409);
       }
@@ -481,6 +490,7 @@ export class TenantsService {
         if (!target) throw new AppError('Room not found', 404);
         if (!['AVAILABLE', 'OCCUPIED'].includes(target.status)) throw new AppError('ห้องไม่พร้อมรับผู้พัก', 409);
         this.assertRoomHasCapacity(target, maxOccupants);
+        await HousingDraftService.assertHeldCapacity(tx, target, target.tenants.length, maxOccupants, tenant.userId ?? 0);
       }
 
       if (nextRoomId !== tenant.roomId) {
@@ -508,6 +518,7 @@ export class TenantsService {
     // An injected transaction's owner must publish only after it commits.
     if (ownsTransaction) {
       publishAdminAlert(updated.id, 'TENANT_STATUS', `อัปเดตสถานะผู้พักอาศัย ${updated.fullName || ''}: ${updated.status}`, updated.status);
+      publishResidentStatus(updated.userId, updated.id, updated.status);
     }
     return updated;
   }

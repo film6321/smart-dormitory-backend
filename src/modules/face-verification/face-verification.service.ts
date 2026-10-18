@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/input';
 import { PrivacyConsentService } from '../users/privacy-consent.service';
 /// <reference lib="dom" />
 import { createHash } from 'node:crypto';
@@ -460,8 +461,8 @@ export class FaceVerificationService {
         return this.createMockFaceVerificationResult(fileBuffer, fileName, effectiveThreshold);
       }
 
-      const result = await response.json();
-      if (typeof result !== 'object' || result === null) {
+      const result: unknown = await response.json();
+      if (!isRecord(result)) {
         throw new AppError('Face recognition service returned invalid JSON', 502);
       }
 
@@ -482,9 +483,9 @@ export class FaceVerificationService {
       // Strict Threshold Guardrail:
       // Even if external API returns matched, ensure similarity meets the effective threshold to prevent false positives
       const matched = rawMatched && scoreAvailable && similarity >= effectiveThreshold
-        && Number.isSafeInteger(result.user_id) && result.user_id > 0 && result.user_id !== 1000000;
+        && typeof result.user_id === 'number' && Number.isSafeInteger(result.user_id) && result.user_id > 0 && result.user_id !== 1000000;
       const matchedUserId = matched && result.user_id !== undefined && result.user_id !== null ? Number(result.user_id) : null;
-      let userName = matched ? result.message : undefined;
+      let userName = matched ? providerMessage : undefined;
 
       if (matched && matchedUserId) {
         const owner = matchedUserId > 1000000

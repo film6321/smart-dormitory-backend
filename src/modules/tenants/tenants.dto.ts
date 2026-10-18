@@ -3,6 +3,27 @@ import { plainToInstance } from 'class-transformer';
 import { isInt, matches, isString, isBoolean, isISO8601 } from 'class-validator';
 import { AppError } from '../../middlewares/error-handler';
 import type { SubmitApplicationInput, CreateTenantInput } from './tenants.service';
+import { requestBody, text, optionalText, booleanValue } from '../../shared/input';
+
+export function parseHousingApplication(value: unknown): SubmitApplicationInput {
+  const body = requestBody(value);
+  const personal = requestBody(body.personalInformation), emergency = requestBody(body.emergencyContact), room = requestBody(body.roomPreference);
+  const ocr = body.ocrData === undefined ? undefined : requestBody(body.ocrData);
+  return {
+    personalInformation: { fullName: text(personal.fullName), studentId: text(personal.studentId), course: text(personal.course),
+      facultyId: optionalText(personal.facultyId), yearLevel: text(personal.yearLevel), emailAddress: optionalText(personal.emailAddress),
+      citizenId: optionalText(personal.citizenId), address: optionalText(personal.address), birthDate: optionalText(personal.birthDate) },
+    emergencyContact: { emergencyName: text(emergency.emergencyName), relationship: text(emergency.relationship), emergencyNumber: text(emergency.emergencyNumber) },
+    roomPreference: { preferredRoomType: text(room.preferredRoomType), roomNumber: optionalText(room.roomNumber), notes: optionalText(room.notes),
+      isRandomRoom: room.isRandomRoom === undefined ? undefined : booleanValue(room.isRandomRoom) },
+    ocrData: ocr ? { verificationId: ocr.verificationId === undefined ? undefined : Number(ocr.verificationId), citizenId: optionalText(ocr.citizenId),
+      address: optionalText(ocr.address), birthDate: optionalText(ocr.birthDate), birthDateTh: optionalText(ocr.birthDateTh), fullNameTh: optionalText(ocr.fullNameTh) } : undefined,
+    idCardImagePath: optionalText(body.idCardImagePath), paymentSlipPath: optionalText(body.paymentSlipPath),
+    paymentId: body.paymentId === undefined ? undefined : Number(body.paymentId),
+    contractAccepted: body.contractAccepted === undefined ? undefined : booleanValue(body.contractAccepted),
+    contractData: body.contractData === undefined ? undefined : requestBody(body.contractData),
+  };
+}
 
 export const requiredContractFields: Record<string, string> = {
   docLocation: 'สถานที่ทำสัญญา', docDate: 'วันที่ทำสัญญา', docMonth: 'เดือนที่ทำสัญญา', docYear: 'ปีที่ทำสัญญา',

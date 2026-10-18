@@ -2,12 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { OcrService } from './ocr.service';
-import { VerifyIdCardRequest } from './ocr.types';
+import { requestBody } from '../../shared/input';
 
 export class OcrController {
   static async createIdCardVerificationJob(req: Request, res: Response, next: NextFunction) {
     try {
-      const { imageBase64 } = req.body as Partial<VerifyIdCardRequest>;
+      const imageBase64 = requestBody(req.body).imageBase64;
       const uploadedFile = req.file ?? getUploadedFileFromFields(req.files);
       const inputImageBase64 = uploadedFile
         ? `data:${uploadedFile.mimetype};base64,${uploadedFile.buffer.toString('base64')}`
@@ -45,7 +45,7 @@ export class OcrController {
 
   static async verifyIdCard(req: Request, res: Response, next: NextFunction) {
     try {
-      const { imageBase64 } = req.body as Partial<VerifyIdCardRequest>;
+      const imageBase64 = requestBody(req.body).imageBase64;
       const uploadedFile = req.file ?? getUploadedFileFromFields(req.files);
       const inputImageBase64 = uploadedFile
         ? `data:${uploadedFile.mimetype};base64,${uploadedFile.buffer.toString('base64')}`

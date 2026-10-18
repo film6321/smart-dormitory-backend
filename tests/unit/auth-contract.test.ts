@@ -3,6 +3,9 @@ import { it, TestContext } from 'node:test';
 import express from 'express';
 import { Role } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import * as presence from '../../src/shared/presence';
+import * as settings from '../../src/modules/settings/settings.service';
 import { AuthController } from '../../src/modules/auth/auth.controller';
 import { AuthRepository } from '../../src/modules/auth/auth.repository';
 import { AuthService } from '../../src/modules/auth/auth.service';
@@ -29,6 +32,50 @@ const start = async (t: TestContext, routes = false) => {
 };
 const post = (url: string, body: object | string | number | null) => fetch(url, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+
+it('new login revokes the old cookie while failed login preserves the current session', async t => {
+  const oldSecret = process.env.JWT_SECRET; process.env.JWT_SECRET = 'single-session-unit-secret';
+  t.after(() => { if (oldSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = oldSecret; });
+  const user = { id: 57, email: 'qa@example.com', password: 'stored-hash', username: 'qa', role: Role.STUDENT,
+    authSessionVersion: 1, createdAt: new Date(), updatedAt: new Date(), lastLogin: null };
+  let version = 1;
+  t.mock.method(AuthRepository, 'findByEmail', async () => user);
+  t.mock.method(bcrypt, 'compare', async (password: string) => password === 'correct');
+  t.mock.method(settings, 'getSettingValue', async () => '30');
+  t.mock.method(presence, 'markUserOnline', async () => {});
+  t.mock.method(AuthRepository, 'startLoginSession', async () => ({ id: user.id, role: user.role, authSessionVersion: ++version }));
+  t.mock.method(AuthRepository, 'findSessionUser', async () => ({ id: user.id, role: user.role, authSessionVersion: version }));
+  const url = await start(t);
+  const first = await post(`${url}/login`, { email: user.email, password: 'correct' });
+  const firstCookie = first.headers.get('set-cookie')!.split(';')[0];
+  assert.equal(first.status, 200);
+  const second = await post(`${url}/login`, { email: user.email, password: 'correct' });
+  const secondCookie = second.headers.get('set-cookie')!.split(';')[0];
+  assert.equal(second.status, 200);
+  assert.equal((await fetch(`${url}/me`, { headers: { Cookie: firstCookie } })).status, 401);
+  assert.equal((await fetch(`${url}/me`, { headers: { Cookie: secondCookie } })).status, 200);
+  assert.equal((await post(`${url}/login`, { email: user.email, password: 'wrong' })).status, 401);
+  assert.equal(version, 3);
+  assert.equal((await fetch(`${url}/me`, { headers: { Cookie: secondCookie } })).status, 200);
+});
+
+it('concurrent successful logins issue distinct versions and only the latest remains authorized', async t => {
+  const oldSecret = process.env.JWT_SECRET; process.env.JWT_SECRET = 'concurrent-session-unit-secret';
+  t.after(() => { if (oldSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = oldSecret; });
+  const user = { id: 57, email: 'qa@example.com', password: 'stored-hash', username: 'qa', role: Role.ADMIN,
+    authSessionVersion: 1, createdAt: new Date(), updatedAt: new Date(), lastLogin: null };
+  let version = 1;
+  t.mock.method(AuthRepository, 'findByEmail', async () => user);
+  t.mock.method(bcrypt, 'compare', async () => true);
+  t.mock.method(settings, 'getSettingValue', async () => '30');
+  t.mock.method(presence, 'markUserOnline', async () => {});
+  t.mock.method(AuthRepository, 'startLoginSession', async () => ({ id: user.id, role: user.role, authSessionVersion: ++version }));
+  t.mock.method(AuthRepository, 'findSessionUser', async () => ({ id: user.id, role: user.role, authSessionVersion: version }));
+  const sessions = await Promise.all([1, 2].map(() => AuthService.login(user.email, 'correct')));
+  assert.notEqual(sessions[0].token, sessions[1].token);
+  const checks = await Promise.allSettled(sessions.map(session => AuthService.authenticateToken(session.token)));
+  assert.equal(checks.filter(check => check.status === 'fulfilled').length, 1);
 });
 
 it('login rejects malformed bodies and types before calling the service', async t => {

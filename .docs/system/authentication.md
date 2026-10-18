@@ -7,10 +7,10 @@
 ## 2. หน้าจอและ flow
 
 1. สมัครบัญชีด้วยข้อมูลที่แบบฟอร์มกำหนด ระบบตรวจรูปแบบและข้อมูลซ้ำ แล้วเก็บ password hash
-2. Login ตรวจบัญชีและรหัสผ่าน เมื่อสำเร็จบันทึก lastLogin และออก HttpOnly cookie `access_token` โดย body ไม่ส่ง JWT
+2. Login ตรวจบัญชีและรหัสผ่าน เมื่อสำเร็จบันทึก lastLogin และเพิ่ม authSessionVersion ในการเขียนฐานข้อมูลครั้งเดียว จากนั้นออก HttpOnly cookie `access_token` ด้วย version ใหม่ โดย body ไม่ส่ง JWT; session ก่อนหน้าหมดสิทธิ์ทุกเครื่อง แม้ token ยังไม่หมดอายุ
 3. เว็บส่งคำขอพร้อม credentials และอ่าน `/auth/me` เพื่อทราบบัญชีปัจจุบัน
 4. REST และ Socket ตรวจบัญชีปัจจุบันกับ `authSessionVersion` ใน PostgreSQL; session เก่าที่ถูกยกเลิกใช้ไม่ได้
-5. Logout และเปลี่ยนรหัสผ่านยกเลิก session ทุกเครื่อง การเชื่อม Socket ของบัญชีนั้นถูกยกเลิกด้วย
+5. Logout และเปลี่ยนรหัสผ่านยกเลิก session ทุกเครื่อง การเชื่อม Socket ของบัญชีนั้นถูกยกเลิกด้วย Login ใหม่ตัด Socket รุ่นเก่า โดยไม่ตัด session ที่ใหม่กว่าหากมี login พร้อมกัน
 
 ```mermaid
 sequenceDiagram
@@ -73,3 +73,9 @@ Login จำกัดความพยายามที่ล้มเหล�
 - [Routes](../../src/modules/auth/auth.routes.ts), [Service](../../src/modules/auth/auth.service.ts), [OTP service](../../src/modules/auth/password-reset-otp.service.ts)
 - [Auth contract tests](../../tests/unit/auth-contract.test.ts), [Auth middleware tests](../../tests/unit/auth-jwt.test.ts)
 - [รายงาน OTP](../qa/password-reset-otp-report.md), [QA หลัก](../qa/system-flow-report.md)
+
+
+นโยบาย session ล่าสุด (18 ต.ค. 2569): ใช้กับทั้ง Admin และ User ล็อกอินผิดไม่เพิ่ม version และไม่ตัด session ปัจจุบัน หากรหัสผ่านเปลี่ยนระหว่างตรวจ hash กับบันทึก login ให้ปฏิเสธคำขอเก่า การเปิดหลายแท็บใน browser เดียวกันยังใช้ cookie ร่วมกัน จึงยังรักษา OCC/lock/idempotency เพื่อป้องกันข้อมูลและยอดเงิน ไม่มีการเปลี่ยน schema หรือใช้ User.version แทน authSessionVersion
+
+
+การแสดงผล session สิ้นสุด (18 ต.ค. 2569): เมื่อ Socket แจ้ง sessionReplaced เว็บล้างสิทธิ์ในเครื่องและแสดง Modal กากบาทแดงขนาดใหญ่ พร้อมข้อความบัญชีนี้มีการเข้าสู่ระบบจากที่อื่นและปุ่มเข้าสู่ระบบอีกครั้ง Modal อยู่ระดับ AuthProvider จึงคงอยู่แม้หน้าป้องกันสิทธิ์เปลี่ยนไป login คำตอบ 401 ยังถูกต้องตาม HTTP; กรณีหมดเวลา/ยกเลิกทั่วไปแสดงข้อความแยก ไม่อ้างว่า login ซ้อนทุกกรณี การล็อกอินผิดบนหน้าสาธารณะไม่เปิด Modal นี้

@@ -8,6 +8,7 @@ import { publishAdminAlert } from '../../realtime/notification-gateway';
 import { BillingRepository } from './billing.repository';
 import { PaymentProviderClient } from './payment.provider';
 import { acquireLock, releaseLock } from '../../shared/redis';
+import { getSettingValue } from '../settings/settings.service';
 
 export interface GenerateRoomBillInput {
   roomNumber: string;
@@ -151,10 +152,14 @@ export class BillingService {
     };
     const electricUnits = Number(data.electricUnits);
     if (!Number.isFinite(electricUnits) || electricUnits < 0) throw new AppError('หน่วยไฟฟ้าต้องเป็นจำนวนไม่ติดลบ', 400);
-    const electricRate = data.electricRate === undefined ? 8 : Number(data.electricRate);
+    const configuredElectricRate = await getSettingValue('contractElectricityRate');
+    const electricRate = data.electricRate === undefined
+      ? (configuredElectricRate.trim() ? Number(configuredElectricRate) : 8)
+      : Number(data.electricRate);
     cents(electricRate);
     const electricCents = cents(electricUnits * electricRate);
-    const waterCents = cents(data.waterAmount === undefined ? 100 : Number(data.waterAmount));
+    const configuredWaterAmount = await getSettingValue('billingWaterAmount');
+    const waterCents = cents(data.waterAmount === undefined ? Number(configuredWaterAmount) : Number(data.waterAmount));
     try {
       return await prisma.$transaction(async tx => {
         const snapshot = await BillingRepository.findRoomByNumberWithTenants(data.roomNumber, tx);

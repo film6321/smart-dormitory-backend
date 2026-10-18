@@ -1,3 +1,4 @@
+import { requestBody } from '../../shared/input';
 import { NextFunction, Request, Response } from 'express';
 import { AuthenticatedRequest } from '../../middlewares/auth-jwt';
 import { createResponse } from '../../shared/api-response';
@@ -8,7 +9,7 @@ export class PaymentBatchController {
     try {
       const authReq = req as AuthenticatedRequest;
       const idempotencyKey = req.header('Idempotency-Key')?.trim();
-      const billIds = req.body?.billIds;
+      const billIds = requestBody(req.body)?.billIds;
 
       if (!idempotencyKey) {
         return res.status(400).json(createResponse(400, 'Idempotency-Key header is required'));

@@ -44,7 +44,7 @@ export class HousingPaymentService {
     const room = await this.getAvailableRoom(roomNumber);
     const terms = await getContractTerms(room);
     if (Object.values(terms).some(value => !value.trim())) throw new AppError('ผู้ดูแลยังตั้งค่าเงื่อนไขสัญญาไม่ครบ กรุณาติดต่อผู้ดูแลก่อนชำระเงิน', 409);
-    const amount = Number(room.monthlyRent);
+    const amount = Number(room.monthlyRent) + Number(terms.depositAmount);
     if (!Number.isFinite(amount) || amount <= 0) throw new AppError('ห้องที่เลือกยังไม่มีราคามัดจำที่ถูกต้อง', 422);
     const image = await PaymentProviderClient.generateQr(amount);
     if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
@@ -54,15 +54,12 @@ export class HousingPaymentService {
   }
 
   static async generateDraftQr(userId: number, roomNumber: string) {
-    const summary = await HousingDraftService.get(userId);
-    if (Object.values(summary.contractTerms).some(value => !value.trim())) throw new AppError('ผู้ดูแลยังตั้งค่าเงื่อนไขสัญญาไม่ครบ กรุณาติดต่อผู้ดูแลก่อนชำระเงิน', 409);
-    if (summary.status !== 'OPEN' || summary.roomNumber !== roomNumber) throw new AppError('กรุณาบันทึกห้องในฉบับร่างก่อนสร้าง QR', 409);
-    await this.getAvailableRoom(roomNumber);
-    if (summary.pending) throw new AppError('มีรายการรอตรวจสอบ กรุณาอย่าโอนซ้ำ', 409);
-    if (summary.remainingAmount <= 0) throw new AppError('ยอดชำระครบแล้ว ไม่ต้องโอนเพิ่ม', 409);
+    const summary = await HousingDraftService.reserveForQr(userId, roomNumber);
     const image = await PaymentProviderClient.generateQr(summary.remainingAmount);
     if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new AppError('บริการชำระเงินส่งรูป QR ไม่ถูกต้อง', 503);
-    return { roomNumber, amount: summary.remainingAmount, qrImage: `data:image/png;base64,${image.toString('base64')}` };
+    const [clock] = await prisma.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+    return { roomNumber, amount: summary.remainingAmount, qrImage: `data:image/png;base64,${image.toString('base64')}`,
+      reservationExpiresAt: summary.reservation.expiresAt, serverTime: clock.now };
   }
   static async verifyDraftSlip(roomNumber: string, userId: number, file: UploadedFile, verificationId: number) {
     const summary = await HousingDraftService.get(userId);
@@ -70,8 +67,10 @@ export class HousingPaymentService {
   }
 
   static async verifySlip(roomNumber: string, userId: number, file: UploadedFile, verificationId: number, draftId?: number) {
-    const room = await this.getAvailableRoom(roomNumber);
-    let amount = Number(room.monthlyRent);
+    // A genuine transfer must still be recorded when a temporary room hold expired.
+    const room = draftId !== undefined ? await prisma.room.findUnique({ where: { roomNumber } }) : await this.getAvailableRoom(roomNumber);
+    if (!room) throw new AppError('ไม่พบห้อง กรุณาติดต่อผู้ดูแลเพื่อตรวจยอดเดิม อย่าโอนซ้ำ', 409);
+    let amount = Number(room.monthlyRent) + Number((await getContractTerms(room)).depositAmount);
     if (!Number.isFinite(amount) || amount <= 0) throw new AppError('ห้องที่เลือกยังไม่มีราคามัดจำที่ถูกต้อง', 422);
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
       throw new AppError('สลิปต้องเป็นรูป JPG, PNG หรือ WEBP', 400);
@@ -81,13 +80,21 @@ export class HousingPaymentService {
     const payment = await prisma.$transaction(async (tx) => {
       if (draftId !== undefined) {
         const draft = await HousingDraftService.locked(tx, userId);
+        await HousingDraftService.assertNoPendingRefundRequest(tx, draft.id);
         if (draft.id !== draftId || draft.status !== 'OPEN' || draft.roomId !== room.id) throw new AppError('ห้องในฉบับร่างเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด', 409);
         await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${room.id} FOR UPDATE`;
+        try { await HousingDraftService.reserveLocked(tx, draft); }
+        catch (error) {
+          if (!(error instanceof AppError) || error.statusCode !== 409) throw error;
+          // Do not retroactively reserve a full room. Continue verifying money already sent.
+          await tx.housingApplicationDraft.update({ where: { id: draft.id }, data: { roomHoldExpiresAt: null } });
+        }
         amount = (await HousingDraftService.summary(tx, draft)).remainingAmount;
       } else {
         await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${room.id} FOR UPDATE`;
         const currentRoom = await tx.room.findUnique({ where: { id: room.id } });
-        if (!currentRoom || Number(currentRoom.monthlyRent) !== amount) throw new AppError('ราคาห้องเปลี่ยนแล้ว กรุณาโหลดข้อมูลก่อนตรวจสลิป', 409);
+        const currentTerms = currentRoom ? await getContractTerms(currentRoom, tx) : null;
+        if (!currentRoom || !currentTerms || Math.round((Number(currentRoom.monthlyRent) + Number(currentTerms.depositAmount)) * 100) / 100 !== amount) throw new AppError('ราคาและเงินประกันเปลี่ยนแล้ว กรุณาโหลดข้อมูลก่อนตรวจสลิป', 409);
       }
       const previous = await tx.payment.findUnique({ where: { idempotencyKey } });
       if (previous) {
@@ -196,14 +203,19 @@ export class HousingPaymentService {
     if (payment?.housingDraftId) {
       const draft = await db.housingApplicationDraft.findUnique({ where: { id: payment.housingDraftId } });
       if (!draft || draft.userId !== input.userId) throw new AppError('ไม่พบฉบับร่างของผู้สมัคร', 409);
+      await HousingDraftService.assertNoPendingRefundRequest(db, draft.id);
       const selected = draft.roomId ? await db.room.findUnique({ where: { id: draft.roomId } }) : null;
       const transfers = await db.payment.findMany({ where: { housingDraftId: draft.id, payerUserId: input.userId, status: 'PAID' } });
-      const total = transfers.reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0);
-      const due = selected ? Math.round(Number(selected.monthlyRent) * 100) : 0;
+      const refunds = await db.housingRefund.aggregate({ where: { draftId: draft.id }, _sum: { amount: true } });
+      const total = transfers.reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0) - Math.round(Number(refunds._sum.amount ?? 0) * 100);
+      const rentDue = selected ? Math.round(Number(selected.monthlyRent) * 100) : 0;
+      const terms = selected ? await getContractTerms(selected, db) : null;
+      const depositDue = terms ? Math.round(Number(terms.depositAmount) * 100) : 0;
+      const due = rentDue + depositDue;
       const pending = await db.payment.count({ where: { housingDraftId: draft.id, OR: [{ status: { in: ['PENDING', 'VERIFYING', 'MANUAL_REVIEW'] } }, { status: 'FAILED', failureReason: 'PROVIDER_PENDING' }] } });
       const parse = (v: string) => Math.round(Number(v.replace(/,/g, '')) * 100);
       if (!selected || selected.roomNumber !== input.roomNumber || !due || total !== due || pending
-        || parse(input.monthlyRent) !== due || parse(input.depositAmount) !== due || payment.slipPath !== input.slipPath
+        || parse(input.monthlyRent) !== rentDue || parse(input.depositAmount) !== depositDue || payment.slipPath !== input.slipPath
         || payment.billId !== null || payment.housingVerificationId !== input.verificationId
         || payment.status !== 'PAID' || payment.payerUserId !== input.userId || !payment.providerTransactionId
         || !transfers.length || transfers.some(p => !p.providerTransactionId || p.housingTenantId !== payment.housingTenantId)) {
@@ -221,7 +233,10 @@ export class HousingPaymentService {
       throw new AppError('ไม่พบผลตรวจสลิปที่ผ่านและตรงกับผู้สมัคร ห้อง และเอกสารนี้ กรุณาตรวจสอบหลักฐานใหม่', 422);
     }
     const amount = Number(payment.amount);
-    if (amount !== Number(room.monthlyRent) || amount !== parseMoney(input.monthlyRent) || amount !== parseMoney(input.depositAmount)) {
+    const terms = await getContractTerms(room, db);
+    const rentDue = Math.round(Number(room.monthlyRent) * 100) / 100;
+    const depositDue = Math.round(Number(terms.depositAmount) * 100) / 100;
+    if (amount !== rentDue + depositDue || parseMoney(input.monthlyRent) !== rentDue || parseMoney(input.depositAmount) !== depositDue) {
       throw new AppError('ราคาห้องหรือยอดในสัญญาเปลี่ยนจากรายการชำระ กรุณาติดต่อเจ้าหน้าที่ก่อนดำเนินการต่อ', 409);
     }
     return payment;

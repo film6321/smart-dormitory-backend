@@ -35,7 +35,7 @@ describe('FaceVerificationService (unit)', () => {
       if (!setting || setting.value !== where.value) return { count: 0 };
       setting = { ...setting, ...data }; return { count: 1 };
     });
-    for (const model of [prisma.tenant, prisma.payment, prisma.paymentBatch, prisma.idCardVerification, prisma.ocrJob, prisma.visitor, prisma.faceEnrollmentPhoto]) stub(model, 'count', async () => 0);
+    for (const model of [prisma.tenant, prisma.payment, prisma.paymentBatch, prisma.housingRefund, prisma.idCardVerification, prisma.ocrJob, prisma.visitor, prisma.faceEnrollmentPhoto]) stub(model, 'count', async () => 0);
 
     stub(prisma.faceEnrollmentPhoto, 'findUnique', async () => ({
       id: 12, userId: 99, visitorId: null, photoPath: 'uploads/face-photo/test.jpg', createdAt: new Date(),

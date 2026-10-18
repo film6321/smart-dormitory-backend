@@ -16,10 +16,7 @@ export interface ObservabilityAnalyticsResponse {
   timestamp: string;
 }
 
-interface PrometheusQueryResponse {
-  status: 'success' | 'error';
-  data?: { result?: Array<{ metric?: Record<string, string>; value?: [number, string] }> };
-}
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export interface SystemAnalytics {
   uptimeSeconds: number;
@@ -222,7 +219,8 @@ export class AnalyticsService {
       // Bill payments are deliberately excluded: each PAID bill is counted once above,
       // including bills paid in a batch. A housing deposit is its own payment ledger.
       db.payment.findMany({ where: { status: 'PAID', billId: null, housingRoomId: { not: null } },
-        select: { id: true, housingDraft: { select: { roomId: true } }, housingRoomId: true, housingTenantId: true, housingApprovedAt: true, payerUserId: true, housingTenant: { select: { status: true } }, payerUser: { select: { username: true } }, amount: true, transferAt: true, verifiedAt: true } }),
+        orderBy: { id: 'asc' },
+        select: { id: true, housingDraft: { select: { id: true, roomId: true, refunds: { select: { amount: true } } } }, housingRoomId: true, housingTenantId: true, housingApprovedAt: true, payerUserId: true, housingTenant: { select: { status: true } }, payerUser: { select: { username: true } }, amount: true, transferAt: true, verifiedAt: true } }),
       db.visitor.count({ where: { status: 'REGISTERED', logs: { none: { eventType: 'DOOR_ACCESS_GRANTED' } }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
       db.tenant.findMany({ where: { status: { not: 'ARCHIVED' } }, orderBy: { createdAt: 'desc' }, take: 12,
         select: { id: true, createdAt: true, roomId: true, user: { select: { username: true } } } }),
@@ -267,8 +265,14 @@ export class AnalyticsService {
       }
     }
     const housingPayments: { id: number; roomNumber: string; amount: number; state: string; username: string | null }[] = [];
+    const remainingRefunds = new Map<number, number>();
     for (const deposit of deposits) {
-      const amount = satang(deposit.amount), date = deposit.transferAt || deposit.verifiedAt;
+      const draft = deposit.housingDraft;
+      if (draft && !remainingRefunds.has(draft.id)) remainingRefunds.set(draft.id, (draft.refunds ?? []).reduce((sum, refund) => sum + satang(refund.amount), 0));
+      const gross = satang(deposit.amount);
+      const deducted = draft ? Math.min(gross, remainingRefunds.get(draft.id) ?? 0) : 0;
+      if (draft) remainingRefunds.set(draft.id, (remainingRefunds.get(draft.id) ?? 0) - deducted);
+      const amount = gross - deducted, date = deposit.transferAt || deposit.verifiedAt;
       const state = deposit.housingApprovedAt ? 'ADMIN_CONFIRMED' : deposit.housingTenantId
         ? deposit.housingTenant?.status === 'ARCHIVED' ? 'RETAINED_HISTORY' : 'AWAITING_ADMIN_APPROVAL'
         : deposit.payerUserId && deposit.payerUser ? 'AWAITING_APPLICATION' : 'NEEDS_REVIEW';
@@ -356,15 +360,18 @@ export class AnalyticsService {
     });
     if (!response.ok) throw new Error(`Prometheus query failed with HTTP ${response.status}`);
 
-    const payload = await response.json() as PrometheusQueryResponse;
-    if (payload.status !== 'success' || !Array.isArray(payload.data?.result)) throw new Error('Prometheus query was unsuccessful');
-
-    return (payload.data?.result ?? []).reduce<MetricBreakdown>((result, item) => {
-      const key = item.metric?.[label];
-      const value = Number(item.value?.[1]);
-      if (key && Number.isFinite(value)) result[key] = value;
-      return result;
-    }, {});
+    const payload: unknown = await response.json();
+    if (!isRecord(payload) || payload.status !== 'success' || !isRecord(payload.data) || !Array.isArray(payload.data.result)) throw new Error('Prometheus query was unsuccessful');
+    const result: MetricBreakdown = {};
+    const samples: unknown[] = payload.data.result;
+    for (const item of samples) {
+      if (!isRecord(item) || !isRecord(item.metric) || !Array.isArray(item.value)) throw new Error('Invalid Prometheus time series');
+      const key = item.metric[label];
+      const raw: unknown = item.value[1];
+      if (typeof key !== 'string' || !key || typeof raw !== 'string' || !raw.trim() || !Number.isFinite(Number(raw))) throw new Error('Invalid Prometheus sample');
+      result[key] = Number(raw);
+    }
+    return result;
   }
 
   private static sumStatusClass(breakdown: MetricBreakdown, statusClass: number): number {

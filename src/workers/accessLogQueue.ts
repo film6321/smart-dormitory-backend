@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../database/db';
 import { logger } from '../logger';
 import { getRedisClient } from '../shared/redis';
+import { isRecord } from '../shared/input';
 
 export interface AccessLogJob {
   method: string;
@@ -48,6 +49,21 @@ const toAccessLogInput = (job: AccessLogJob): Prisma.AccessLogCreateManyInput =>
   createdAt: new Date(job.createdAt),
 });
 
+const isAccessLogJob = (value: unknown): value is AccessLogJob => {
+  return isRecord(value)
+    && typeof value.method === 'string' && value.method.length > 0
+    && typeof value.path === 'string' && value.path.length > 0
+    && (value.ip === undefined || typeof value.ip === 'string')
+    && (value.userId === undefined || Number.isSafeInteger(value.userId) && Number(value.userId) > 0)
+    && (value.duration === undefined || typeof value.duration === 'number' && Number.isFinite(value.duration) && value.duration >= 0)
+    && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt));
+};
+
+const parseAccessLogJob = (value: unknown): AccessLogJob => {
+  if (!isAccessLogJob(value)) throw new Error('Invalid access log queue item');
+  return value;
+};
+
 export const flushAccessLogQueue = async (): Promise<void> => {
   if (isFlushing) {
     return;
@@ -68,7 +84,7 @@ export const flushAccessLogQueue = async (): Promise<void> => {
       }
 
       try {
-        jobs.push(toAccessLogInput(JSON.parse(rawJob) as AccessLogJob));
+        jobs.push(toAccessLogInput(parseAccessLogJob(JSON.parse(rawJob) as unknown)));
       } catch (error) {
         logger.warn({ error }, 'Dropped malformed access log job');
       }

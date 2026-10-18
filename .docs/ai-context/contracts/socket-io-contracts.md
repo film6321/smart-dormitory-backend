@@ -135,3 +135,12 @@ useEffect(() => {
 
 - ห้าม register event ซ้ำในจังหวะ reconnect
 - ตรวจ `socket.connected` ก่อน emit ทุกครั้ง
+
+
+### Resident status reconciliation — 2026-10-18
+
+publishResidentStatus sends tenantStatusUpdated { tenantId, status } only to authenticated user:<ownerId>, never admins or roommates. The event is a refresh hint; HTTP remains authoritative. StudentHome refetches on connect/event/focus/visible and every 30 seconds, aborts superseded requests, and removes listeners, timers and socket on unmount. CREDIT_UPDATED may use tenantId=0 for an applicant without a Tenant; it grants no rights or payment status by itself.
+
+Login replacement disconnects owner-room sockets with a sessionVersion lower than the newly committed version. It must preserve a newer concurrent session. Connection rechecks authentication after joining to cover a rotation during the handshake. Reconnecting an old token is rejected; logout/password revocation retain the existing all-session disconnect policy.
+
+Before disconnecting replaced sockets, emit sessionReplaced { reason: "SESSION_REPLACED" } only to the affected socket. The shared client dispatches auth:expired with that reason; AuthProvider clears local authentication and shows one persistent session dialog. Expired/revoked HTTP sessions use generic distinct wording when no explicit replacement event is available.

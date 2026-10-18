@@ -1,3 +1,4 @@
+import { requestBody } from '../../shared/input';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -31,7 +32,7 @@ export class MaintenanceService {
   static async cleanupExpiredUploads(now = new Date()) {
     const rows = await prisma.systemSetting.findMany({ where: { category: 'MAINTENANCE_UPLOAD' } });
     for (const row of rows) {
-      if (new Date(JSON.parse(row.value).expiresAt).getTime() > now.getTime()) continue;
+      if (new Date(String(requestBody(JSON.parse(row.value)).expiresAt)).getTime() > now.getTime()) continue;
       await prisma.$transaction(async tx => {
         await tx.$queryRaw`SELECT id FROM "SystemSetting" WHERE id = ${row.id} FOR UPDATE`;
         if (!await tx.systemSetting.findUnique({ where: { id: row.id } })) return;

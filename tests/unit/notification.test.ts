@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import NotificationController from '../../src/modules/notifications/notification.controller';
 import NotificationService from '../../src/modules/notifications/notification.service';
-import { validateNotificationPayload } from '../../src/modules/notifications/notification.dto';
+import { validateNotificationPayload, parseNotificationChannel, parseNotificationType } from '../../src/modules/notifications/notification.dto';
 import NotificationPreferenceController from '../../src/modules/notifications/notification-preferences.controller';
 import { startNotificationWorker, stopNotificationWorker } from '../../src/workers/notificationWorker';
 import { AuthenticatedRequest } from '../../src/middlewares/auth-jwt';
@@ -10,8 +10,27 @@ import { Response } from 'express';
 import { DbClient } from '../../src/database/db';
 import { NotificationChannel, NotificationStatus, NotificationType, Prisma, Role } from '@prisma/client';
 import { NotificationRepository } from '../../src/modules/notifications/notification.repository';
+import { AcademicService } from '../../src/modules/settings/academic.service';
+import { prisma } from '../../src/database/db';
 import { createServer } from 'node:http';
 import { initializeNotificationGateway, closeNotificationGateway, publishNotificationAlert } from '../../src/realtime/notification-gateway';
+
+it('notification enum values are checked instead of asserted before database access', () => {
+  assert.equal(parseNotificationChannel('SMS'), NotificationChannel.SMS);
+  assert.equal(parseNotificationType('GENERIC'), NotificationType.GENERIC);
+  assert.throws(() => parseNotificationChannel('invalid'), /Invalid notification channel/);
+  assert.throws(() => parseNotificationType('invalid'), /Invalid notification type/);
+});
+
+it('academic catalogue validates persisted JSON before using its fields', async t => {
+  const delegate = prisma.systemSetting;
+  const original = Object.getOwnPropertyDescriptor(delegate, 'findUnique');
+  t.after(() => { if (original) Object.defineProperty(delegate, 'findUnique', original); else Reflect.deleteProperty(delegate, 'findUnique'); });
+  for (const value of ['null', '{"revision":1,"faculties":[{"id":1}],"programs":[]}', '{"revision":-1,"faculties":[],"programs":[]}']) {
+    Object.defineProperty(delegate, 'findUnique', { configurable: true, value: async () => ({ value }) });
+    await assert.rejects(AcademicService.read(), /รูปแบบไม่ถูกต้อง/);
+  }
+});
 
 it('notification queries separate admin operations from resident ownership', async () => {
   const filters: unknown[] = [];
@@ -143,6 +162,9 @@ describe('NotificationService (unit)', () => {
     let attemptCount = 0;
 
     const mockDb = {
+      notificationAuditLog: { create: async () => ({}) },
+      notificationDeadLetter: { findFirst: async () => null, create: async () => ({}) },
+      systemSetting: { findUnique: async () => null },
       notification: {
         findUnique: async ({ where }: Prisma.NotificationFindUniqueArgs) => (where.id === 2 ? { ...notificationRecord } : null),
         update: async (args: Prisma.NotificationUpdateArgs) => {
@@ -225,6 +247,9 @@ describe('NotificationService (unit)', () => {
   it('resolves recipient phone from tenant data when scheduling notifications', async () => {
     const created: Prisma.NotificationCreateInput[] = [];
     const mockDb = {
+      notificationAuditLog: { create: async () => ({}) },
+      notificationDeadLetter: { findFirst: async () => null, create: async () => ({}) },
+      systemSetting: { findUnique: async () => null },
       tenant: {
         findUnique: async () => ({ id: 1, phone: '+66912345678', user: null }),
       },
@@ -270,6 +295,9 @@ describe('NotificationService (unit)', () => {
     let processed = 0;
 
     const mockDb = {
+      notificationAuditLog: { create: async () => ({}) },
+      notificationDeadLetter: { findFirst: async () => null, create: async () => ({}) },
+      systemSetting: { findUnique: async () => null },
       notification: {
         findMany: async () => [{ id: 42 }],
         count: async () => 0,
@@ -308,6 +336,7 @@ describe('NotificationService (unit)', () => {
     const deadLetters: Prisma.NotificationDeadLetterCreateInput[] = [];
 
     const mockDb = {
+      systemSetting: { findUnique: async () => null },
       notification: {
         findFirst: async () => ({ id: 7, providerMessageId: 'twilio-msg-1', status: NotificationStatus.PENDING }),
         update: async ({ where, data }: Prisma.NotificationUpdateArgs) => ({ id: where.id, ...data }),
@@ -339,6 +368,9 @@ describe('NotificationService (unit)', () => {
     let updatedArgs: Prisma.NotificationUpdateArgs | null = null;
 
     const mockDb = {
+      notificationAuditLog: { create: async () => ({}) },
+      notificationDeadLetter: { findFirst: async () => null, create: async () => ({}) },
+      systemSetting: { findUnique: async () => null },
       notification: {
         findUnique: async ({ where }: Prisma.NotificationFindUniqueArgs) => (where.id === 1 ? { ...notificationRecord } : null),
         update: async (args: Prisma.NotificationUpdateArgs) => {

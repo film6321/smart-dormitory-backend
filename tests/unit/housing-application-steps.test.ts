@@ -10,6 +10,73 @@ import { HousingPaymentService } from '../../src/modules/tenants/housing-payment
 import { OcrService } from '../../src/modules/ocr/ocr.service';
 import { requiredContractFields, validateHousingApplication } from '../../src/modules/tenants/tenants.dto';
 import { AppError } from '../../src/middlewares/error-handler';
+import { HousingDraftService } from '../../src/modules/tenants/housing-draft.service';
+import type { Prisma } from '@prisma/client';
+
+function rejectedDraftFixture(status = 'REJECTED', paymentOverrides: Record<string, unknown> = {}) {
+  let draft = { id: 3, userId: 25, status: 'SUBMITTED', version: 8, roomId: 1,
+    data: { activeStep: 3, personalInformation: { firstName: 'fixture' } } };
+  const payment = { payerUserId: 25, housingTenantId: 7 as number | null, housingApprovedAt: null,
+    billId: null, status: 'PAID', amount: 100, providerTransactionId: 'fixture-txn', ...paymentOverrides };
+  const writes: unknown[] = [];
+  const tx = {
+    $queryRaw: async () => [], user: { findUnique: async () => ({ id: 25 }) },
+    tenant: { findUnique: async () => ({ id: 7, userId: 25, status }) },
+    housingApplicationDraft: { findUnique: async () => draft,
+      update: async ({ data }: { data: { status: string; data: typeof draft.data } }) => {
+        writes.push(data); draft = { ...draft, status: data.status, data: data.data, version: draft.version + 1 }; return draft;
+      } },
+    payment: { findMany: async () => [payment], findFirst: async () => null,
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        if ('housingTenantId' in data) {
+          assert.deepEqual(where, { housingDraftId: 3, payerUserId: 25, housingTenantId: 7,
+            billId: null, housingApprovedAt: null, status: 'PAID' });
+          assert.deepEqual(data, { housingTenantId: null }); payment.housingTenantId = null; writes.push(data);
+        }
+        return { count: 1 };
+      } },
+  } as unknown as Prisma.TransactionClient;
+  return { tx, payment, writes };
+}
+
+test('rejected submitted draft reopens at the first step once and keeps verified credit and personal data', async () => {
+  const env = rejectedDraftFixture();
+  const restored = await HousingDraftService.locked(env.tx, 25);
+  assert.equal(restored.status, 'OPEN'); assert.equal(restored.version, 9);
+  assert.deepEqual(restored.data, { activeStep: 0, personalInformation: { firstName: 'fixture' } });
+  assert.equal(env.payment.housingTenantId, null); assert.equal(env.payment.amount, 100);
+  assert.equal(env.payment.status, 'PAID'); assert.equal(env.payment.providerTransactionId, 'fixture-txn');
+  await HousingDraftService.locked(env.tx, 25); assert.equal(env.writes.length, 2);
+});
+
+test('pending and approved applications cannot reopen their submitted draft', async () => {
+  for (const status of ['PENDING', 'APPROVED', 'ACTIVE', 'INACTIVE']) {
+    const env = rejectedDraftFixture(status);
+    assert.equal((await HousingDraftService.locked(env.tx, 25)).status, 'SUBMITTED');
+    assert.equal(env.writes.length, 0); assert.equal(env.payment.housingTenantId, 7);
+  }
+});
+
+test('Admin cannot approve an old rejected application while its owner is editing the reopened draft', async () => {
+  const db = {
+    user: { findUnique: async () => ({ version: 1 }), updateMany: async () => ({ count: 1 }) },
+    tenant: { findUnique: async () => ({ id: 7, userId: 25, status: 'REJECTED' }) },
+    housingApplicationDraft: { findFirst: async () => ({ id: 3, status: 'OPEN' }) },
+    $queryRaw: async () => [],
+  } as unknown as DbClient;
+  for (const status of ['PENDING', 'APPROVED', 'ACTIVE']) {
+    await assert.rejects(TenantsService.updateTenant(7, { status }, db),
+      (error: unknown) => error instanceof AppError && error.statusCode === 409 && error.message.includes('ยื่นใบสมัครใหม่'));
+  }
+});
+
+test('reopening rejects credit owned elsewhere, approved deposits, bill payments and invalid consumed payments', async () => {
+  for (const fields of [{ payerUserId: 99 }, { housingTenantId: 99 }, { housingApprovedAt: new Date() }, { billId: 1 }, { status: 'REFUNDED' }]) {
+    const env = rejectedDraftFixture('REJECTED', fields);
+    await assert.rejects(HousingDraftService.locked(env.tx, 25), (error: unknown) => error instanceof AppError && error.statusCode === 409);
+    assert.equal(env.writes.length, 0);
+  }
+});
 
 const file = { mimetype: 'image/png', buffer: Buffer.from('test-image') };
 const application = (): SubmitApplicationInput => ({

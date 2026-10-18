@@ -46,6 +46,9 @@ export class AccountRetentionService {
     if (!tenant) throw new AppError('ไม่พบผู้พัก', 404);
     if (!['INACTIVE', 'REJECTED', 'ARCHIVED'].includes(tenant.status) || tenant.roomId !== null) throw new AppError('ต้องบันทึกย้ายออกหรือปฏิเสธใบสมัครก่อนลบข้อมูล', 409);
     const userId = tenant.userId;
+    if (userId !== null && await tx.housingRefundRequest.count({ where: { draft: { userId }, status: 'PENDING' } })) {
+      throw new AppError('มีคำขอคืนเงินจากใบสมัครที่ยังไม่สิ้นสุด ต้องจัดการก่อนลบข้อมูล', 409);
+    }
     const sharedBatch = await tx.paymentBatch.count({ where: { items: { some: { bill: { tenantId } } }, AND: { items: { some: { bill: { tenantId: { not: tenantId } } } } } } });
     if (sharedBatch) throw new AppError('มีบิลรวมร่วมกับผู้พักอื่น ต้องแยกจัดการก่อนลบข้อมูล', 409);
     // A QR-only placeholder is not an unsettled transfer once every owned bill
@@ -145,6 +148,9 @@ export class AccountRetentionService {
     return this.finishCleanup(keys, db);
   }
   private static async purgeUserArtifacts(tx: Prisma.TransactionClient, userId: number) {
+    if (await tx.housingRefundRequest.count({ where: { draft: { userId }, status: 'PENDING' } })) {
+      throw new AppError('มีคำขอคืนเงินจากใบสมัครที่ยังไม่สิ้นสุด ต้องจัดการก่อนลบบัญชี', 409);
+    }
     const sharedBatch = await tx.paymentBatch.count({ where: { payerUserId: userId, items: { some: {} } } });
     if (sharedBatch) throw new AppError('บัญชีมีบิลรวมที่ยังผูกกับข้อมูลผู้พัก ต้องแยกจัดการก่อนลบ', 409);
     if (await tx.payment.count({ where: { payerUserId: userId, billId: { not: null } } })) throw new AppError('มีรายการชำระที่ผูกบิลผู้พักอื่น ต้องแยกจัดการก่อนลบ', 409);
@@ -162,7 +168,8 @@ export class AccountRetentionService {
       if (!/^[a-f0-9-]+\.(jpg|png|webp)$/.test(filename)) throw new AppError('Invalid staged maintenance filename', 409);
       return path.join(path.resolve(process.env.UPLOAD_ROOT || 'uploads/maintenance'), filename);
     });
-    const fileTasks = await this.queueFiles(tx, [...stagedFiles, ...jobs.map(j => j.imagePath), ...verifications.map(v => v.imagePath), ...payments.map(p => p.slipPath), ...batches.map(b => b.slipPath)]);
+    const refunds = await tx.housingRefund.findMany({ where: { draft: { userId } }, select: { proofPath: true } });
+    const fileTasks = await this.queueFiles(tx, [...stagedFiles, ...jobs.map(j => j.imagePath), ...verifications.map(v => v.imagePath), ...payments.map(p => p.slipPath), ...batches.map(b => b.slipPath), ...refunds.map(refund => refund.proofPath)]);
     await tx.payment.deleteMany({ where: { payerUserId: userId } });
     await tx.paymentBatch.deleteMany({ where: { payerUserId: userId } });
     await tx.transaction.deleteMany({ where: { userId } });
@@ -191,8 +198,9 @@ export class AccountRetentionService {
           if (user.tenant && (!['INACTIVE', 'REJECTED', 'ARCHIVED'].includes(user.tenant.status) || user.tenant.roomId !== null)) return false;
           const financialPending = await tx.payment.count({ where: { payerUserId: user.id, status: { in: [...pendingPayments] } } });
           const batchesPending = await tx.paymentBatch.count({ where: { payerUserId: user.id, status: { in: [...pendingPayments] } } });
+          const refundRequestPending = await tx.housingRefundRequest.count({ where: { draft: { userId: user.id }, status: 'PENDING' } });
           const jobsPending = await tx.ocrJob.count({ where: { userId: user.id, status: { in: ['PENDING', 'PROCESSING'] } } });
-          if (financialPending || batchesPending || jobsPending) return false;
+          if (financialPending || batchesPending || refundRequestPending || jobsPending) return false;
           if (user.tenant) {
             const unsettled = await tx.bill.count({ where: { tenantId: user.tenant.id, status: { not: 'PAID' } } });
             const repairs = await tx.maintenanceTicket.count({ where: { tenantId: user.tenant.id, status: { notIn: ['CLOSED', 'CANCELLED'] } } });
@@ -235,6 +243,7 @@ export class AccountRetentionService {
           db.tenant.count({ where: { OR: [{ idCardImagePath: { in: paths } }, { paymentSlipPath: { in: paths } }] } }),
           db.payment.count({ where: { slipPath: { in: paths } } }),
           db.paymentBatch.count({ where: { slipPath: { in: paths } } }),
+          db.housingRefund.count({ where: { proofPath: { in: paths } } }),
           db.idCardVerification.count({ where: { imagePath: { in: paths } } }),
           db.ocrJob.count({ where: { imagePath: { in: paths } } }),
           db.visitor.count({ where: { idCardImagePath: { in: paths } } }),

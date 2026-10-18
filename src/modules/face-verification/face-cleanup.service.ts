@@ -4,12 +4,22 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
 import { logger } from '../../logger';
+import { isRecord } from '../../shared/input';
 
 export const FACE_CLEANUP_CATEGORY = 'FACE_CLEANUP';
 type Owner = { kind: 'user' | 'visitor'; id: number };
 type Job = Owner & { phase: 'EXTERNAL' | 'FILES' | 'DONE'; paths: string[]; templateIds: number[] };
 export interface CleanupTask { taskKey: string; status: 'PENDING' | 'COMPLETE'; }
 export interface CleanupReceipt { status: 'PENDING' | 'COMPLETE'; tasks: CleanupTask[]; }
+
+const isCleanupJob = (value: unknown): value is Job => isRecord(value)
+  && (value.kind === 'user' || value.kind === 'visitor')
+  && typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0
+  && Number.isSafeInteger(value.id + 1000000)
+  && !(value.kind === 'user' && value.id >= 1000000)
+  && (value.phase === 'EXTERNAL' || value.phase === 'FILES' || value.phase === 'DONE')
+  && Array.isArray(value.paths) && value.paths.every((item: unknown) => typeof item === 'string')
+  && Array.isArray(value.templateIds) && value.templateIds.every((item: unknown) => Number.isSafeInteger(item) && Number(item) > 0);
 
 export function faceApiVerifyUrl(): string {
   const base = (process.env.FACE_API_URL?.trim() || 'http://127.0.0.1:8000').replace(/\/+$/u, '');
@@ -19,10 +29,10 @@ export function faceApiVerifyUrl(): string {
 }
 
 export class FaceCleanupService {
-  private static parse(value: string): Job {
-    const job = JSON.parse(value) as Job;
-    if (!['user', 'visitor'].includes(job.kind) || !Number.isSafeInteger(job.id) || job.id <= 0 || !Number.isSafeInteger(job.id + 1000000) || job.kind === 'user' && job.id >= 1000000 || !['EXTERNAL', 'FILES', 'DONE'].includes(job.phase) || !Array.isArray(job.paths) || job.paths.some(p => typeof p !== 'string') || !Array.isArray(job.templateIds) || job.templateIds.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new AppError('Invalid face cleanup job', 409);
-    return job;
+  private static parse(raw: string): Job {
+    const value: unknown = JSON.parse(raw);
+    if (!isCleanupJob(value)) throw new AppError('Invalid face cleanup job', 409);
+    return value;
   }
   static async enqueue(tx: Prisma.TransactionClient, owner: Owner): Promise<string> {
     if (!Number.isSafeInteger(owner.id) || owner.id <= 0 || !Number.isSafeInteger(owner.id + 1000000) || owner.kind === 'user' && owner.id >= 1000000) throw new AppError('Invalid face owner', 400);
@@ -124,6 +134,7 @@ export class FaceCleanupService {
             db.tenant.count({ where: { OR: [{ idCardImagePath: { in: aliases } }, { paymentSlipPath: { in: aliases } }] } }),
             db.payment.count({ where: { slipPath: { in: aliases } } }),
             db.paymentBatch.count({ where: { slipPath: { in: aliases } } }),
+            db.housingRefund.count({ where: { proofPath: { in: aliases } } }),
             db.idCardVerification.count({ where: { imagePath: { in: aliases } } }),
             db.ocrJob.count({ where: { imagePath: { in: aliases } } }),
             db.visitor.count({ where: { idCardImagePath: { in: aliases } } }),

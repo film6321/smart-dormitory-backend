@@ -1,3 +1,4 @@
+import { requestBody } from '../../shared/input';
 import { MaintenanceStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../database/db';
 import { AppError } from '../../middlewares/error-handler';
@@ -46,7 +47,7 @@ export class MaintenanceRepository {
         await tx.$queryRaw`SELECT id FROM "SystemSetting" WHERE key = ${key} FOR UPDATE`;
         const staged = await tx.systemSetting.findUnique({ where: { key } });
         if (!staged || staged.category !== 'MAINTENANCE_UPLOAD' || staged.updatedById !== tenant.userId
-          || new Date(JSON.parse(staged.value).expiresAt).getTime() <= now.getTime()) throw new AppError('ภาพแจ้งซ่อมไม่ใช่ของบัญชีนี้หรือหมดอายุ กรุณาอัปโหลดใหม่', 400);
+          || new Date(String(requestBody(JSON.parse(staged.value)).expiresAt)).getTime() <= now.getTime()) throw new AppError('ภาพแจ้งซ่อมไม่ใช่ของบัญชีนี้หรือหมดอายุ กรุณาอัปโหลดใหม่', 400);
         imageRecord = staged;
       }
       const ticket = await tx.maintenanceTicket.create({

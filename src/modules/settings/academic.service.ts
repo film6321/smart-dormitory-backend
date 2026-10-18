@@ -7,10 +7,19 @@ export interface AcademicItem { id: string; name: string; active: boolean; facul
 interface Catalog { revision: number; faculties: AcademicItem[]; programs: AcademicItem[]; }
 export interface AcademicChange { revision: number; action: 'SAVE' | 'DELETE'; kind: 'FACULTY' | 'PROGRAM'; id?: string; name?: string; facultyId?: string; active?: boolean; }
 const key = 'academic-catalog';
+const isAcademicItem = (value: unknown): value is AcademicItem => typeof value === 'object' && value !== null
+  && 'id' in value && typeof value.id === 'string' && 'name' in value && typeof value.name === 'string'
+  && 'active' in value && typeof value.active === 'boolean' && (!('facultyId' in value) || typeof value.facultyId === 'string');
 export class AcademicService {
   static async read(db: Prisma.TransactionClient = prisma): Promise<Catalog> {
     const row = await db.systemSetting.findUnique({ where: { key } });
-    return row ? JSON.parse(row.value) as Catalog : { revision: 0, faculties: [], programs: [] };
+    if (!row) return { revision: 0, faculties: [], programs: [] };
+    const value: unknown = JSON.parse(row.value);
+    if (typeof value !== 'object' || value === null || !('revision' in value) || typeof value.revision !== 'number'
+      || !Number.isInteger(value.revision) || value.revision < 0 || !('faculties' in value) || !Array.isArray(value.faculties)
+      || !value.faculties.every(isAcademicItem) || !('programs' in value) || !Array.isArray(value.programs)
+      || !value.programs.every(isAcademicItem)) throw new AppError('ข้อมูลคณะในระบบมีรูปแบบไม่ถูกต้อง กรุณาตรวจสอบการตั้งค่า', 500);
+    return { revision: value.revision, faculties: value.faculties, programs: value.programs };
   }
   static async get(admin: boolean) {
     const catalog = await this.read();

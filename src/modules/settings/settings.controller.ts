@@ -8,6 +8,15 @@ import { AcademicService, type AcademicChange } from './academic.service';
 import { AppError } from '../../middlewares/error-handler';
 
 class SettingsRequestDto { [key: string]: string; }
+class AcademicRequestDto implements AcademicChange {
+  revision!: number;
+  action!: AcademicChange['action'];
+  kind!: AcademicChange['kind'];
+  id?: string;
+  name?: string;
+  facultyId?: string;
+  active?: boolean;
+}
 
 export class SettingsController {
   static async academics(req: Request, res: Response, next: NextFunction) {
@@ -17,10 +26,10 @@ export class SettingsController {
   static async changeAcademic(req: Request, res: Response, next: NextFunction) {
     try {
       if (!isObject(req.body)) throw new AppError('Invalid academic request', 400);
-      const input = plainToInstance(SettingsRequestDto, req.body) as unknown as AcademicChange;
+      const input = plainToInstance(AcademicRequestDto, req.body);
       if (!isInt(input.revision) || input.revision < 0 || !isIn(input.action, ['SAVE', 'DELETE']) || !isIn(input.kind, ['FACULTY', 'PROGRAM'])
         || Object.keys(input).some(field => !['revision', 'action', 'kind', 'id', 'name', 'facultyId', 'active'].includes(field))
-        || ['id', 'name', 'facultyId'].some(field => input[field as 'id'] !== undefined && !isString(input[field as 'id']))
+        || (['id', 'name', 'facultyId'] as const).some(field => input[field] !== undefined && !isString(input[field]))
         || input.active !== undefined && !isBoolean(input.active)) throw new AppError('Invalid academic request', 400);
       return res.json(createResponse(200, 'Academic catalogue saved', await AcademicService.change(input, (req as AuthenticatedRequest).user!.id)));
     } catch (error) { next(error); }

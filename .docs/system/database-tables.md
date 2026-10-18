@@ -1,12 +1,12 @@
 # ตารางฐานข้อมูลและพจนานุกรมข้อมูล MEEDEE Dormitory
 
-ตรวจ schema และ source code วันที่ **16 ตุลาคม 2569** เอกสารนี้อธิบายระบบรวม ไม่แยกตามหน้าจอ และไม่เพิ่ม/เปลี่ยนตารางจริง
+ตรวจ schema และ source code วันที่ **18 ตุลาคม 2569** เอกสารนี้อธิบายระบบรวม ไม่แยกตามหน้าจอ และไม่เพิ่ม/เปลี่ยนตารางจริง
 
 ## 1. ขอบเขตและวิธีอ่าน
 
-- Schema มี **24 model/table** พบ **23 ตาราง** ที่มีการอ่าน/เขียนในงานหรือบริการสนับสนุน ส่วน `Transaction` พบเพียง cleanup จึงแยกไว้ท้ายเอกสาร ไม่ถือเป็นตารางการเงินหลักปัจจุบัน
+- Schema มี **25 model/table** พบ **24 ตาราง** ที่มีการอ่าน/เขียนในงานหรือบริการสนับสนุน ส่วน `Transaction` พบเพียง cleanup จึงแยกไว้ท้ายเอกสาร ไม่ถือเป็นตารางการเงินหลักปัจจุบัน
 - “ใช้งาน” หมายถึงมีเส้นทางใน source รวม nested create/include ไม่ได้แปลว่าทุกตารางมีข้อมูลอยู่ หรือ provider/อุปกรณ์จริงผ่านการทดสอบแล้ว
-- Docker daemon ไม่ทำงานตอนตรวจ จึงยังไม่ยืนยัน live database/migration drift หรือจำนวนแถว ตารางนี้ยึด schema กับโค้ด ไม่อ้างว่าได้สำรวจข้อมูลส่วนบุคคลจากฐานจริง
+- พจนานุกรมยึด schema กับโค้ด ไม่อ้างจำนวนข้อมูลส่วนบุคคลจริง; migration ห้องจองและคืนส่วนเกินตรวจใช้กับ Compose และฐานข้อมูลทดสอบแยกเมื่อ 18 ต.ค. 2569
 - ชื่อตารางตรง Prisma model เพราะไม่มี @@map เปลี่ยนชื่อ ตารางฟิลด์แสดงชื่อคอลัมน์จริงหากมี @map เช่น photo_path/model_version
 - PK = Primary key, FK = Foreign key ที่ประกาศจริง, UQ = Unique; “ว่างได้” อิงเครื่องหมาย ? ใน schema ไม่ใช่การรับรองว่า API ยอมให้ข้าม validation
 - ฟิลด์ relation เช่น user, tenant, items, bills ไม่ใช่คอลัมน์เพิ่ม จึงไม่นับซ้ำ; enum เป็นชนิดข้อมูล ไม่ใช่ตาราง
@@ -42,6 +42,9 @@
 | 22 | [FaceEnrollmentPhoto](#table-faceenrollmentphoto) | ข้อมูลใบหน้า | path ภาพลงทะเบียนสำหรับประมวลผลและ cleanup | ใช้ใน wrapper/integration; ไม่รับรองกล้องจริง |
 | 23 | [FaceEmbedding](#table-faceembedding) | ข้อมูลใบหน้า | เวกเตอร์และรุ่นโมเดลที่ integration รับมาจัดเก็บ | ใช้ใน wrapper/integration; ไม่รับรอง provider จริง |
 | 24 | [Transaction](#table-transaction) | โครงสร้างเดิม | โครงรายการรายรับ/รายจ่ายเดิม; พบการล้าง แต่ไม่พบ flow สร้าง/อ่านเพื่อการเงินปัจจุบัน | พบเฉพาะ cleanup; ไม่จัดเป็นตารางการเงินหลัก |
+
+| 25 | [HousingRefund](#table-housingrefund) | คืนเงินใบสมัคร | บันทึกคืนส่วนเกินจริง หลักฐานและผู้บันทึก โดยคง Payment เดิม | ใช้ในงานปัจจุบัน |
+| 26 | [HousingRefundRequest](#table-housingrefundrequest) | คำขอคืนเครดิต | บันทึกคำขอของผู้สมัครและสถานะการพิจารณาของ Admin | ใช้ในงานปัจจุบัน |
 
 ## 3. รายละเอียดทุกคอลัมน์
 
@@ -153,6 +156,7 @@
 | `id` | `id` | Int | ไม่ | PK | รหัสรายการ |
 | `userId` | `userId` | Int | ไม่ | UQ; FK → User.id | รหัสบัญชีเจ้าของข้อมูล |
 | `roomId` | `roomId` | Int | ได้ | — | รหัสห้องที่ service ตรวจและล็อก; ไม่มี FK ไป Room ใน schema |
+| `roomHoldExpiresAt` | `roomHoldExpiresAt` | DateTime | ได้ | index ร่วม roomId/status | เวลาหมดอายุสิทธิ์กันที่พักก่อนชำระเงิน เพิ่ม 18 ต.ค. 2569; ใช้ร่วมสถานะ Payment เพื่อตรวจสิทธิ์ที่กำลังตรวจเงิน |
 | `data` | `data` | Json | ไม่ | — | ข้อมูลฟอร์มฉบับร่างชนิด JSON |
 | `status` | `status` | String | ไม่ | — | สถานะฉบับร่างชนิด String เริ่มต้น OPEN |
 | `version` | `version` | Int | ไม่ | — | รุ่นข้อมูลสำหรับตรวจการแก้ไขพร้อมกัน |
@@ -791,3 +795,39 @@ flowchart LR
 > สรุประบบ MEEDEE Dormitory เป็นระบบเดียว แสดง Admin ผู้พัก และผู้มาติดต่อ เชื่อมงานสมัคร/สัญญา ห้อง บิล/ชำระเงิน ซ่อม ผู้มาติดต่อ และแจ้งเตือนกับ PostgreSQL/ไฟล์ ใช้ Redis เฉพาะ cache/lock แยก OCR/Face/Payment เป็นบริการเชื่อมต่อ อย่าสมมติตาราง Faculty/Building/Contract และอย่าวาดความสัมพันธ์ logical เป็น FK ใส่หมายเหตุว่าอุปกรณ์/ผู้ให้บริการจริงยังไม่ใช่ผลทดสอบที่รับรอง
 
 อ่านต่อ: [บทที่ 3](03-system-design.md), [สารบัญระบบ](README.md), [กฎการล้างข้อมูล](users-and-tenants.md), [ขอบเขตบริการภายนอก](deployment-and-data.md)
+
+
+<a id="table-housingrefund"></a>
+
+### 25. HousingRefund
+
+หลักฐาน: prisma/schema.prisma และ src/modules/tenants/housing-refund.service.ts
+
+| คอลัมน์ | ชนิด | หน้าที่ |
+|---|---|---|
+| id | Int PK autoincrement | รหัสรายการคืนเงิน |
+| draftId | Int FK | ผูกฉบับร่าง; cascade เมื่อ purge ฉบับร่าง |
+| amount | Decimal(10,2) | ยอดคืนจริง ต้องมากกว่า 0 และไม่เกินส่วนเกินปัจจุบัน |
+| reference | String varchar(100) unique | เลขอ้างอิงคืนเงินจริง |
+| idempotencyKey | String unique | ป้องกัน retry สร้างรายการซ้ำ |
+| proofHash | String unique | SHA-256 ป้องกันใช้หลักฐานเดิมซ้ำ |
+| proofPath | String | path ภาพหลักฐานส่วนตัว ไม่เปิด public |
+| recordedById | Int? FK User | Admin ผู้บันทึก; SetNull หากบัญชีถูกลบ |
+| createdAt | DateTime default now | เวลา server บันทึก |
+
+ดัชนี draftId; relation draft และ recordedBy ใช้เชื่อมข้อมูล ไม่ใช่คอลัมน์เพิ่ม ยอดรับเดิมยังอยู่ใน Payment ส่วนเครดิตสุทธิคำนวณหัก HousingRefund ไม่อ้างว่าระบบส่งเงินคืนผ่านธนาคารเอง ไฟล์หลักฐานเข้าคิว cleanup เมื่อ guarded purge ลบผู้พัก/ฉบับร่าง
+
+### 26. HousingRefundRequest
+
+| ฟิลด์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `id` | Int | รหัสคำขอ |
+| `draftId` | Int | ฉบับสมัครที่เป็นเจ้าของเครดิต; ลบตาม draft |
+| `amount` | Decimal(10,2) | เครดิตสุทธิทั้งหมดที่ขอคืน ณ เวลาส่งคำขอ |
+| `reason` | String? | เหตุผลจากผู้สมัคร ไม่เกิน 500 ตัวอักษร |
+| `status` | String | `PENDING`, `COMPLETED` หรือ `REJECTED` |
+| `adminNote` | String? | เหตุผลประกอบการปฏิเสธ |
+| `resolvedById` | Int? | Admin ผู้ปิดคำขอ; ลบผู้ดูแลแล้วคงคำขอ |
+| `requestedAt` / `resolvedAt` | DateTime | เวลาส่งและเวลาปิดคำขอ |
+
+Index `draftId/status/requestedAt`; request อ้าง `HousingApplicationDraft` จึงแสดงในคิว Admin ได้ก่อนมี Tenant หรือเอกสาร เมื่อ PENDING จะกันใช้เครดิตซ้ำ; `COMPLETED` ต้องมี HousingRefund บันทึกการคืนเงินจริง ส่วน `REJECTED` คงเครดิตให้ผู้สมัครใช้ต่อ

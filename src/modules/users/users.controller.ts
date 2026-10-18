@@ -1,3 +1,4 @@
+import { requestBody, text, optionalText } from '../../shared/input';
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { UsersService } from './users.service';
@@ -16,7 +17,7 @@ export class UsersController {
   static async acceptPrivacyConsent(req: Request, res: Response, next: NextFunction) {
     try {
       return res.status(200).json(createResponse(200, 'Privacy consent recorded',
-        await PrivacyConsentService.accept((req as AuthenticatedRequest).user!.id, req.body)));
+        await PrivacyConsentService.accept((req as AuthenticatedRequest).user!.id, requestBody(req.body))));
     } catch (error) { next(error); }
   }
   static async listUsers(req: Request, res: Response, next: NextFunction) {
@@ -48,8 +49,9 @@ export class UsersController {
 
   static async createUser(req: Request, res: Response, next: NextFunction) {
     try {
-      UsersService.validatePhone(req.body);
-      const user = await UsersService.createUser(req.body);
+      UsersService.validatePhone(requestBody(req.body));
+      const body = requestBody(req.body);
+      const user = await UsersService.createUser({ email: text(body.email), password: text(body.password), username: optionalText(body.username), phone: body.phone === null ? null : optionalText(body.phone), role: optionalText(body.role) });
       return res.status(201).json(createResponse(201, 'User created successfully', user));
     } catch (error) {
       next(error);
@@ -63,8 +65,9 @@ export class UsersController {
         return res.status(400).json(createResponse(400, 'Invalid user id'));
       }
 
-      UsersService.validatePhone(req.body);
-      const user = await UsersService.updateUser(id, req.body);
+      UsersService.validatePhone(requestBody(req.body));
+      const body = requestBody(req.body);
+      const user = await UsersService.updateUser(id, { email: optionalText(body.email), password: optionalText(body.password), username: optionalText(body.username), phone: body.phone === null ? null : optionalText(body.phone), role: optionalText(body.role) });
       return res.status(200).json(createResponse(200, 'User updated successfully', user));
     } catch (error) {
       next(error);

@@ -17,14 +17,14 @@ import * as settings from '../../src/modules/settings/settings.service';
 const now = new Date('2026-10-07T05:00:00Z');
 const old = new Date('2025-10-07T05:00:00Z');
 const baseUser = { id: 11, version: 1, role: Role.STUDENT, lastLogin: old, createdAt: new Date('2024-01-01'), tenant: null as Record<string, unknown> | null };
-const baseTenant = { id: 55, userId: 11, roomId: null as number | null, status: 'INACTIVE', isActive: false, fullName: 'Private name', idCardImagePath: null, paymentSlipPath: null, checkInDate: old, checkOutDate: now };
-type Args = { where?: Record<string, unknown>; data?: Record<string, unknown> };
+const baseTenant = { id: 55, userId: 11, roomId: null as number | null, status: 'INACTIVE', isActive: false, fullName: 'Private name', idCardImagePath: null, paymentSlipPath: null, checkInDate: old, checkOutDate: now as Date | null };
+type Args = { where?: Record<string, unknown>; data?: Record<string, unknown>; create?: { category?: string; value?: string } };
 function fixture(t: TestContext, user: Omit<typeof baseUser, 'role'> & { role: Role } = { ...baseUser }) {
   const writes: Array<{ model: string; method: string; args: Args }> = [];
   const locks: string[] = [];
   let tenant = { ...baseTenant };
   const tx: Record<string, unknown> = {};
-  for (const model of ['user', 'tenant', 'bill', 'maintenanceTicket', 'payment', 'paymentBatch', 'paymentBatchItem', 'ocrJob', 'visitor', 'visitorLog', 'notification', 'notificationPreference', 'faceEnrollmentPhoto', 'faceEmbedding', 'idCardVerification', 'accessLog', 'systemSetting', 'transaction', 'room', 'housingApplicationDraft']) {
+  for (const model of ['user', 'tenant', 'bill', 'maintenanceTicket', 'payment', 'paymentBatch', 'housingRefund', 'housingRefundRequest', 'paymentBatchItem', 'ocrJob', 'visitor', 'visitorLog', 'notification', 'notificationPreference', 'faceEnrollmentPhoto', 'faceEmbedding', 'idCardVerification', 'accessLog', 'systemSetting', 'transaction', 'room', 'housingApplicationDraft']) {
     tx[model] = {
       count: async () => 0,
       findMany: async () => [],
@@ -88,12 +88,18 @@ it('pending OCR and payment work blocks automatic account removal', async t => {
   assert.equal((await AccountRetentionService.process(now, false, f.db)).deleted, 0);
   assert.equal(f.writes.length, 0);
 });
+it('pending housing refund requests block manual and automatic removal before writes', async t => {
+  const f = fixture(t); t.mock.method(f.tx.housingRefundRequest, 'count', async () => 1);
+  assert.equal((await AccountRetentionService.process(now, false, f.db)).deleted, 0);
+  await assert.rejects(AccountRetentionService.deleteTenant(55, f.tx), /คำขอคืนเงิน/u);
+  assert.equal(f.writes.length, 0);
+});
 it('manual removal deletes the profile and its financial rows while retaining the user', async t => {
   const f = fixture(t);
   await AccountRetentionService.deleteTenant(55, f.tx);
   assert.ok(f.writes.some(w => w.model === 'tenant' && w.method === 'delete'));
   assert.equal(f.writes.some(w => w.model === 'user' && w.method === 'delete'), false);
-  for (const model of ['bill', 'payment', 'paymentBatch', 'transaction']) assert.ok(f.writes.some(w => w.model === model && w.method === 'deleteMany'));
+  for (const model of ['bill', 'payment', 'paymentBatch', 'transaction', 'housingApplicationDraft']) assert.ok(f.writes.some(w => w.model === model && w.method === 'deleteMany'));
   assert.ok(f.writes.some(w => w.model === 'faceEmbedding' && w.method === 'deleteMany'));
 });
 it('automatic removal clears owned artifacts and deletes only an eligible user', async t => {
@@ -111,7 +117,7 @@ it('upload cleanup accepts stored private paths and rejects traversal or unrelat
   assert.throws(() => AccountRetentionService.resolveFile(path.resolve('package.json')));
 });
 it('move-out sets status, checkout date, inactive flag and disconnects the room', async t => {
-  const f = fixture(t); f.setTenant({ ...baseTenant, status: 'ACTIVE', roomId: 22, checkOutDate: null as unknown as Date });
+  const f = fixture(t); f.setTenant({ ...baseTenant, status: 'ACTIVE', roomId: 22, checkOutDate: null });
   t.mock.method(settings, 'getSettingValue', async () => '4');
   await TenantsService.updateTenant(55, { status: 'INACTIVE' }, f.tx);
   const data = f.writes.find(w => w.model === 'tenant')!.args.data!;
@@ -144,7 +150,7 @@ it('file cleanup retains files still referenced by others, retries later, and sa
   const file = path.join(root, 'test-only.txt'); await fs.writeFile(file, 'test fixture');
   let refs = 1; let removed = 0;
   const db: Record<string, unknown> = {};
-  for (const model of ['tenant', 'payment', 'paymentBatch', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto', 'maintenanceTicket']) db[model] = { count: async () => model === 'tenant' ? refs : 0 };
+  for (const model of ['tenant', 'payment', 'paymentBatch', 'housingRefund', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto', 'maintenanceTicket']) db[model] = { count: async () => model === 'tenant' ? refs : 0 };
   db.systemSetting = { findMany: async () => [{ id: 1, key: 'retention-file:test', value: file }], delete: async () => { removed++; } };
   await AccountRetentionService.flushFiles(db as unknown as typeof prisma);
   assert.equal(await fs.readFile(file, 'utf8'), 'test fixture'); assert.equal(removed, 0);
@@ -156,7 +162,7 @@ it('file cleanup retains files still referenced by others, retries later, and sa
 
 it('file cleanup refuses a resolved symlink target outside uploads and keeps its retry entry', async t => {
   const db: Record<string, unknown> = {};
-  for (const model of ['tenant', 'payment', 'paymentBatch', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto', 'maintenanceTicket']) db[model] = { count: async () => 0 };
+  for (const model of ['tenant', 'payment', 'paymentBatch', 'housingRefund', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto', 'maintenanceTicket']) db[model] = { count: async () => 0 };
   const target = path.resolve(process.env.UPLOAD_ROOT || 'uploads/private', 'test-only.txt');
   let removed = false;
   db.systemSetting = { findMany: async () => [{ id: 1, key: 'retention-file:test', value: target }], delete: async () => { removed = true; } };
@@ -173,7 +179,7 @@ it('login is not successful when the inactivity timestamp cannot be persisted', 
   t.mock.method(AuthRepository, 'findByEmail', async () => ({ ...baseUser, email: 'unit@example.test', username: 'unit', password: 'mock', updatedAt: old }));
   t.mock.method(bcrypt, 'compare', async () => true);
   t.mock.method(settings, 'getSettingValue', async () => '30');
-  t.mock.method(AuthRepository, 'updateUser', async () => { throw { code: 'P2022' }; });
+  t.mock.method(AuthRepository, 'startLoginSession', async () => { throw { code: 'P2022' }; });
   const online = t.mock.method(presence, 'markUserOnline', async () => {});
   await assert.rejects(AuthService.login('unit@example.test', 'mock'), (error: unknown) => (error as { statusCode: number }).statusCode === 503);
   assert.equal(online.mock.callCount(), 0);
@@ -187,11 +193,11 @@ it('successful login persists lastLogin before marking presence or returning the
   t.mock.method(AuthRepository, 'findByEmail', async () => user);
   t.mock.method(bcrypt, 'compare', async () => true);
   t.mock.method(settings, 'getSettingValue', async () => '30');
-  const save = t.mock.method(AuthRepository, 'updateUser', async () => { order.push('persist'); return user; });
+  const save = t.mock.method(AuthRepository, 'startLoginSession', async () => { order.push('persist'); return {id:user.id,role:user.role,authSessionVersion:2}; });
   t.mock.method(presence, 'markUserOnline', async () => { order.push('presence'); });
   const response = await AuthService.login('unit@example.test', 'mock');
   assert.deepEqual(order, ['persist', 'presence']); assert.ok(response.token);
-  assert.ok((save.mock.calls[0].arguments[1] as { lastLogin: Date }).lastLogin instanceof Date);
+  assert.ok(save.mock.calls[0].arguments[2] instanceof Date);
 });
 
 it('manual account removal uses the same eligibility guards and queues faces before deleting the account', async t => {
@@ -215,16 +221,17 @@ it('tenant purge queues repair attachments before removing tickets and rejects u
   t.mock.method(f.tx.maintenanceTicket, 'findMany', async () => [
     { description: '[IMAGE:fixture-repair.jpg] | Broken tap' },
     { description: 'No attachment' },
-  ] as never);
+  ]);
   await AccountRetentionService.deleteTenant(55, f.tx);
   const fileWrite = f.writes.find(w => w.model === 'systemSetting' && w.method === 'upsert'
-    && (w.args as unknown as { create?: { category?: string } }).create?.category === 'RETENTION_FILES');
+    && w.args.create?.category === 'RETENTION_FILES');
   assert.ok(fileWrite);
-  const stored = (fileWrite.args as unknown as { create: { value: string } }).create.value;
+  const stored = fileWrite.args.create?.value;
+  assert.equal(typeof stored, 'string');
   assert.equal(stored, path.resolve(process.env.UPLOAD_ROOT || 'uploads/maintenance', 'fixture-repair.jpg'));
   assert.ok(f.writes.findIndex(w => w === fileWrite) < f.writes.findIndex(w => w.model === 'maintenanceTicket' && w.method === 'deleteMany'));
   f.setTenant({ ...baseTenant });
-  t.mock.method(f.tx.maintenanceTicket, 'findMany', async () => [{ description: '[IMAGE:../../private.txt]' }] as never);
+  t.mock.method(f.tx.maintenanceTicket, 'findMany', async () => [{ description: '[IMAGE:../../private.txt]' }]);
   const before = f.writes.length;
   await assert.rejects(AccountRetentionService.purgeTenant(f.tx, 55), /ก่อนลบ/u);
   assert.equal(f.writes.length, before);
@@ -243,7 +250,7 @@ it('repair image cleanup keeps another ticket attachment and removes the file on
   await fs.writeFile(image, 'test fixture');
   let refs = 1, removed = 0;
   const db: Record<string, unknown> = {};
-  for (const model of ['tenant', 'payment', 'paymentBatch', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto']) db[model] = { count: async () => 0 };
+  for (const model of ['tenant', 'payment', 'paymentBatch', 'housingRefund', 'idCardVerification', 'ocrJob', 'visitor', 'faceEnrollmentPhoto']) db[model] = { count: async () => 0 };
   db.maintenanceTicket = { count: async (args: { where: { description: { startsWith: string } } }) => {
     assert.equal(args.where.description.startsWith, '[IMAGE:fixture-repair.jpg]'); return refs;
   } };

@@ -1,4 +1,4 @@
-import { Server, Socket } from 'socket.io';
+import { Server, Socket, type DefaultEventsMap } from 'socket.io';
 import type { Server as HttpServer } from 'http';
 import { AuthService } from '../modules/auth/auth.service';
 import { logger } from '../logger';
@@ -21,7 +21,10 @@ export interface UserPresencePayload {
   lastSeenAt?: string;
 }
 
-let realtimeServer: Server | undefined;
+interface SocketData { user?: Awaited<ReturnType<typeof AuthService.authenticateToken>>; }
+type RealtimeServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
+type RealtimeSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
+let realtimeServer: RealtimeServer | undefined;
 type UserRoomResolver = (userId: number) => Promise<string | undefined>;
 
 const getCookieValue = (cookieHeader: string | undefined, name: string) => (
@@ -32,8 +35,8 @@ const getCookieValue = (cookieHeader: string | undefined, name: string) => (
     ?.slice(name.length + 1)
 );
 
-const getSocketToken = (socket: Socket) => {
-  const authToken = socket.handshake.auth?.token;
+const getSocketToken = (socket: RealtimeSocket) => {
+  const authToken: unknown = socket.handshake.auth?.token;
   return typeof authToken === 'string' && authToken ? authToken : getCookieValue(socket.handshake.headers.cookie, 'access_token');
 };
 
@@ -41,8 +44,20 @@ export const disconnectUserSessions = (userId: number) => {
   realtimeServer?.in(`user:${userId}`).disconnectSockets(true);
 };
 
+export const disconnectReplacedSessions = (userId: number, sessionVersion: number) => {
+  // A slower login must not disconnect a newer session that has already connected.
+  realtimeServer?.in(`user:${userId}`).fetchSockets().then(sockets => {
+    for (const socket of sockets) {
+      if ((socket.data.user?.sessionVersion ?? -1) < sessionVersion) {
+        socket.emit('sessionReplaced', { reason: 'SESSION_REPLACED' });
+        socket.disconnect(true);
+      }
+    }
+  }).catch(error => logger.warn({ error, userId }, 'Could not disconnect replaced sessions'));
+};
+
 export const initializeNotificationGateway = (httpServer: HttpServer, resolveUserRoom?: UserRoomResolver) => {
-  realtimeServer = new Server(httpServer, {
+  realtimeServer = new Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>(httpServer, {
     cors: { origin: true, credentials: true },
   });
 
@@ -62,8 +77,11 @@ export const initializeNotificationGateway = (httpServer: HttpServer, resolveUse
   });
 
   realtimeServer.on('connection', (socket) => {
-    const user = socket.data.user as { id: number; role: string };
+    const user = socket.data.user;
+    if (!user) { socket.disconnect(true); return; }
     socket.join(`user:${user.id}`);
+    // Cover a login rotation between the handshake check and joining the owner room.
+    void AuthService.authenticateToken(getSocketToken(socket)!).catch(() => socket.disconnect(true));
     if (user.role === 'ADMIN') {
       socket.join('admins');
     }
@@ -200,6 +218,10 @@ export const publishAdminAlert = (id: number, type: string, message: string, sta
     payload: JSON.stringify({ message }),
     createdAt: new Date(),
   });
+};
+
+export const publishResidentStatus = (userId: number | null, tenantId: number, status: string) => {
+  if (userId !== null) realtimeServer?.to(`user:${userId}`).emit('tenantStatusUpdated', { tenantId, status });
 };
 
 export const publishUserPresence = (userId: number, isOnline: boolean, lastSeenAt?: string) => {

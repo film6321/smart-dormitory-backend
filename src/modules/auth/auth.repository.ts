@@ -27,6 +27,14 @@ export class AuthRepository {
     return db.user.updateMany({ where: { id }, data: { authSessionVersion: { increment: 1 } } });
   }
 
+  static async startLoginSession(id: number, passwordHash: string, lastLogin: Date, db = prisma) {
+    return db.user.update({
+      where: { id, password: passwordHash },
+      data: { lastLogin, authSessionVersion: { increment: 1 } },
+      select: { id: true, role: true, authSessionVersion: true },
+    });
+  }
+
   static async findByUsername(username: string, db = prisma) {
     return db.user.findUnique({
       where: { username },

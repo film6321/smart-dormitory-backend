@@ -11,11 +11,13 @@ export const DEFAULT_SETTINGS = {
   contractBuilding: { value: '', category: 'CONTRACT' },
   contractStartDate: { value: '', category: 'CONTRACT' },
   contractEndDate: { value: '', category: 'CONTRACT' },
+  contractDepositAmount: { value: '', category: 'CONTRACT' },
   contractKeycardDeposit: { value: '', category: 'CONTRACT' },
   contractPayDueDate: { value: '', category: 'CONTRACT' },
   contractElectricityRate: { value: '', category: 'CONTRACT' },
   contractWaterRate: { value: '', category: 'CONTRACT' },
   contractAdvanceNoticeDays: { value: '', category: 'CONTRACT' },
+  billingWaterAmount: { value: '100', category: 'BILLING' },
   academicYear: { value: '2026/2027', category: 'GENERAL' },
   currentTerm: { value: 'ภาคการศึกษาที่ 2', category: 'GENERAL' },
   maxOccupants: { value: '4', category: 'DORMITORY' },
@@ -66,11 +68,12 @@ export class SettingsService {
 
     for (const [key, value] of entries) {
       if (key.startsWith('contract')) {
-        if (!value.trim() || value.length > 1000) throw new AppError('กรุณากรอกเงื่อนไขสัญญาให้ครบ', 400);
+        if ((key !== 'contractDepositAmount' && !value.trim()) || value.length > 1000) throw new AppError('กรุณากรอกเงื่อนไขสัญญาให้ครบ', 400);
         if (['contractStartDate', 'contractEndDate'].includes(key) && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !isISO8601(value, { strict: true }))) throw new AppError('วันที่สัญญาต้องเป็น YYYY-MM-DD', 400);
-        if (['contractKeycardDeposit', 'contractElectricityRate', 'contractWaterRate'].includes(key) && (!/^\d+(?:\.\d{1,2})?$/.test(value) || Number(value) > 1000000)) throw new AppError('อัตราบริการต้องเป็นจำนวนเงินที่ถูกต้อง', 400);
+        if (['contractKeycardDeposit', 'contractElectricityRate', 'contractWaterRate', 'contractDepositAmount'].includes(key) && value.trim() && (!/^\d+(?:\.\d{1,2})?$/.test(value) || Number(value) > 1000000)) throw new AppError('อัตราบริการต้องเป็นจำนวนเงินที่ถูกต้อง', 400);
         if (['contractPayDueDate', 'contractAdvanceNoticeDays'].includes(key) && (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > (key === 'contractPayDueDate' ? 28 : 365))) throw new AppError('กำหนดวันในสัญญาไม่ถูกต้อง', 400);
       }
+      if (key === 'billingWaterAmount' && (!/^\d+(?:\.\d{1,2})?$/.test(value) || Number(value) > 1000000)) throw new AppError('ค่าน้ำเหมาจ่ายต้องเป็นจำนวนเงินที่ถูกต้อง', 400);
       if (key === 'twoFactorAuthentication' && value !== 'false') throw new AppError('ระบบยังไม่รองรับการยืนยันตัวตนสองขั้นตอน', 400);
       if (['academicYear', 'currentTerm'].includes(key) && (!value.trim() || value.length > 100)) {
         throw new AppError(`กรุณาระบุ ${key === 'academicYear' ? 'ปีการศึกษา' : 'ภาคการศึกษา'} ไม่เกิน 100 ตัวอักษร`, 400);
@@ -126,6 +129,6 @@ export const getContractTerms = async (room?: { roomNumber: string; floor?: numb
     docDate: now.toLocaleDateString('en-GB', { day: 'numeric', timeZone: 'Asia/Bangkok' }),
     docMonth: now.toLocaleDateString('th-TH', { month: 'long', timeZone: 'Asia/Bangkok' }),
     docYear: now.toLocaleDateString('th-TH-u-nu-latn', { year: 'numeric', timeZone: 'Asia/Bangkok' }).replace(/[^0-9]/g, ''),
-    ...(room ? { roomNumber: room.roomNumber, floor: String(room.floor ?? ''), monthlyRent: String(room.monthlyRent), depositAmount: String(room.monthlyRent) } : {}),
+    ...(room ? { roomNumber: room.roomNumber, floor: String(room.floor ?? ''), monthlyRent: String(room.monthlyRent), depositAmount: values.contractDepositAmount.trim() || String(room.monthlyRent) } : {}),
   };
 };

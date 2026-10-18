@@ -1,3 +1,4 @@
+import { requestBody, text, optionalText } from '../../shared/input';
 import { NextFunction, Request, Response } from 'express';
 import { createResponse } from '../../shared/api-response';
 import { BillingService } from './billing.service';
@@ -59,13 +60,13 @@ export class BillingController {
 
   static async generateRoomBills(req: Request, res: Response, next: NextFunction) {
     try {
-      const { roomNumber, electricUnits, electricRate, waterAmount, dueDate, billingMonth, customRent } = req.body;
+      const { roomNumber, electricUnits, electricRate, waterAmount, dueDate, billingMonth, customRent } = requestBody(req.body);
       const result = await BillingService.generateRoomBills({
         roomNumber: String(roomNumber),
         electricUnits: Number(electricUnits),
         electricRate: electricRate !== undefined ? Number(electricRate) : undefined,
         waterAmount: waterAmount !== undefined ? Number(waterAmount) : undefined,
-        dueDate: dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        dueDate: optionalText(dueDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         billingMonth: billingMonth ? String(billingMonth) : undefined,
         customRent: customRent !== undefined ? Number(customRent) : undefined,
       });
@@ -125,7 +126,7 @@ export class BillingController {
   static async updateBillStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const billId = Number(req.params.id);
-      const { status, reason } = req.body;
+      const { status, reason } = requestBody(req.body);
 
       if (!Number.isInteger(billId) || billId <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid bill id'));
@@ -136,11 +137,11 @@ export class BillingController {
         return res.status(404).json(createResponse(404, 'Bill not found'));
       }
 
-      if (!canTransitionBillStatus(existingBill.status, status)) {
+      if (!canTransitionBillStatus(existingBill.status, text(status))) {
         return next(new AppError('Invalid bill state transition', 409));
       }
 
-      const updated = await BillingService.updateBillStatus(billId, status, reason);
+      const updated = await BillingService.updateBillStatus(billId, text(status), optionalText(reason));
       return res.status(200).json(createResponse(200, 'Bill status updated', updated));
     } catch (error) {
       next(error);

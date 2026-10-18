@@ -37,3 +37,17 @@ export const createNotificationSchema = {
   tenantId: (value: unknown) => value === undefined || (typeof value === 'number' && value > 0),
   payload: (value: unknown) => value === undefined || (typeof value === 'object' && value !== null && !Array.isArray(value)),
 };
+import { NotificationChannel, NotificationType } from '@prisma/client';
+import { AppError } from '../../middlewares/error-handler';
+
+export const parseNotificationChannel = (value: string): NotificationChannel => {
+  const channel = Object.values(NotificationChannel).find(item => item === value);
+  if (!channel) throw new AppError('Invalid notification channel', 400);
+  return channel;
+};
+
+export const parseNotificationType = (value: string): NotificationType => {
+  const type = Object.values(NotificationType).find(item => item === value);
+  if (!type) throw new AppError('Invalid notification type', 400);
+  return type;
+};

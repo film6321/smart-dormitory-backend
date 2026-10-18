@@ -67,17 +67,19 @@ model User {
   updatedAt                   DateTime  @updatedAt
 
   // Relations
-  accessLogs           AccessLog[]
-  transactions         Transaction[]
-  payments             Payment[]
-  paymentBatches       PaymentBatch[]
-  idCardVerifications  IdCardVerification[]
-  ocrJobs              OcrJob[]
-  tenant               Tenant?
-  housingDraft         HousingApplicationDraft?
-  faceEmbeddings       FaceEmbedding[]
-  faceEnrollmentPhotos FaceEnrollmentPhoto[]
-  updatedSettings      SystemSetting[]
+  accessLogs                    AccessLog[]
+  transactions                  Transaction[]
+  payments                      Payment[]
+  paymentBatches                PaymentBatch[]
+  idCardVerifications           IdCardVerification[]
+  ocrJobs                       OcrJob[]
+  tenant                        Tenant?
+  housingDraft                  HousingApplicationDraft?
+  housingRefundsRecorded        HousingRefund[]          @relation("HousingRefundRecorder")
+  housingRefundRequestsResolved HousingRefundRequest[]   @relation("HousingRefundRequestResolver")
+  faceEmbeddings                FaceEmbedding[]
+  faceEnrollmentPhotos          FaceEnrollmentPhoto[]
+  updatedSettings               SystemSetting[]
 }
 
 model SystemSetting {
@@ -133,9 +135,9 @@ model Transaction {
  * ---------- Sensitive Document Verification Metadata ----------
  */
 model IdCardVerification {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
   userId           Int?
-  user             User?    @relation(fields: [userId], references: [id])
+  user             User?     @relation(fields: [userId], references: [id])
   imagePath        String?
   isThaiIdCard     Boolean
   citizenIdMasked  String?
@@ -144,15 +146,15 @@ model IdCardVerification {
   birthDateTh      String?
   issueDate        String?
   expiryDate       String?
-  idDetected       Boolean  @default(false)
-  idPresent        Boolean  @default(false)
-  idChecksumValid  Boolean  @default(false)
+  idDetected       Boolean   @default(false)
+  idPresent        Boolean   @default(false)
+  idChecksumValid  Boolean   @default(false)
   reason           String?
   ocrJobId         String?
   processingTimeMs Int?
-  verifiedAt       DateTime @default(now())
-  createdAt        DateTime @default(now())
-  ocrJobs          OcrJob[] @relation("OcrJobResultVerification")
+  verifiedAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  ocrJobs          OcrJob[]  @relation("OcrJobResultVerification")
   housingPayments  Payment[]
 
   @@index([userId])
@@ -315,42 +317,42 @@ model Bill {
   payments   Payment[]
   batchItems PaymentBatchItem[]
 
+  @@unique([tenantId, roomId, billingPeriod])
   @@index([tenantId])
   @@index([roomId])
   @@index([status])
   @@index([dueDate])
-  @@unique([tenantId, roomId, billingPeriod])
 }
 
 model Payment {
-  id                    Int             @id @default(autoincrement())
+  id                    Int                      @id @default(autoincrement())
   billId                Int?
-  bill                  Bill?           @relation(fields: [billId], references: [id], onDelete: Restrict)
+  bill                  Bill?                    @relation(fields: [billId], references: [id], onDelete: Restrict)
   housingRoomId         Int?
-  housingRoom           Room?           @relation(fields: [housingRoomId], references: [id], onDelete: Restrict)
+  housingRoom           Room?                    @relation(fields: [housingRoomId], references: [id], onDelete: Restrict)
   housingVerificationId Int?
-  housingVerification   IdCardVerification? @relation(fields: [housingVerificationId], references: [id], onDelete: Restrict)
+  housingVerification   IdCardVerification?      @relation(fields: [housingVerificationId], references: [id], onDelete: Restrict)
   housingTenantId       Int?
   housingDraftId        Int?
   housingDraft          HousingApplicationDraft? @relation(fields: [housingDraftId], references: [id], onDelete: SetNull)
   housingApprovedAt     DateTime?
-  housingTenant         Tenant?         @relation(fields: [housingTenantId], references: [id], onDelete: Restrict)
+  housingTenant         Tenant?                  @relation(fields: [housingTenantId], references: [id], onDelete: Restrict)
   payerUserId           Int?
-  payerUser             User?           @relation(fields: [payerUserId], references: [id])
-  amount                Decimal         @db.Decimal(10, 2)
-  status                PaymentStatus   @default(PENDING)
-  provider              PaymentProvider @default(THUNDER)
-  providerTransactionId String?         @unique
-  idempotencyKey        String          @unique
-  slipHash              String?         @unique
+  payerUser             User?                    @relation(fields: [payerUserId], references: [id])
+  amount                Decimal                  @db.Decimal(10, 2)
+  status                PaymentStatus            @default(PENDING)
+  provider              PaymentProvider          @default(THUNDER)
+  providerTransactionId String?                  @unique
+  idempotencyKey        String                   @unique
+  slipHash              String?                  @unique
   slipPath              String?
-  slipAmount            Decimal?        @db.Decimal(10, 2)
+  slipAmount            Decimal?                 @db.Decimal(10, 2)
   transferAt            DateTime?
   providerResponse      String?
   failureReason         String?
   verifiedAt            DateTime?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   @@index([billId])
   @@index([housingRoomId])
@@ -363,16 +365,53 @@ model Payment {
 }
 
 model HousingApplicationDraft {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roomId    Int?
-  data      Json     @default("{}")
-  status    String   @default("OPEN")
-  version   Int      @default(1)
-  payments  Payment[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                Int                    @id @default(autoincrement())
+  userId            Int                    @unique
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomId            Int?
+  roomHoldExpiresAt DateTime?
+  data              Json                   @default("{}")
+  status            String                 @default("OPEN")
+  version           Int                    @default(1)
+  payments          Payment[]
+  refunds           HousingRefund[]
+  refundRequests    HousingRefundRequest[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@index([roomId, status, roomHoldExpiresAt])
+}
+
+model HousingRefund {
+  id             Int                     @id @default(autoincrement())
+  draftId        Int
+  draft          HousingApplicationDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  amount         Decimal                 @db.Decimal(10, 2)
+  reference      String                  @unique @db.VarChar(100)
+  idempotencyKey String                  @unique
+  proofHash      String                  @unique
+  proofPath      String
+  recordedById   Int?
+  recordedBy     User?                   @relation("HousingRefundRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime                @default(now())
+
+  @@index([draftId])
+}
+
+model HousingRefundRequest {
+  id           Int                     @id @default(autoincrement())
+  draftId      Int
+  draft        HousingApplicationDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  amount       Decimal                 @db.Decimal(10, 2)
+  reason       String?                 @db.VarChar(500)
+  status       String                  @default("PENDING")
+  adminNote    String?                 @db.VarChar(500)
+  resolvedById Int?
+  resolvedBy   User?                   @relation("HousingRefundRequestResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  requestedAt  DateTime                @default(now())
+  resolvedAt   DateTime?
+
+  @@index([draftId, status, requestedAt])
 }
 
 model PaymentBatch {
@@ -436,34 +475,34 @@ model MaintenanceTicket {
 }
 
 model Visitor {
-  faceRevokedAt     DateTime?
-  id                Int           @id @default(autoincrement())
-  tenantId          Int?
-  tenant            Tenant?       @relation(fields: [tenantId], references: [id])
-  roomId            Int?
-  room              Room?         @relation(fields: [roomId], references: [id])
-  guestName         String
+  faceRevokedAt       DateTime?
+  id                  Int           @id @default(autoincrement())
+  tenantId            Int?
+  tenant              Tenant?       @relation(fields: [tenantId], references: [id])
+  roomId              Int?
+  room                Room?         @relation(fields: [roomId], references: [id])
+  guestName           String
   requestedTenantName String?
-  phone             String?
-  citizenId         String?
-  citizenIdMasked   String?
-  relationship      String?
-  age               Int?
-  birthDate         String?
-  address           String?
-  idCardImagePath   String?
-  purpose           String?
-  expectedEntryTime DateTime?
-  status            VisitorStatus @default(REGISTERED)
-  pdpaConsent       Boolean       @default(false)
-  pdpaConsentAt     DateTime?
-  expiresAt         DateTime?
-  cancelledAt       DateTime?
-  qrCodeData        String?
-  checkedInAt       DateTime?
-  checkedOutAt      DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  phone               String?
+  citizenId           String?
+  citizenIdMasked     String?
+  relationship        String?
+  age                 Int?
+  birthDate           String?
+  address             String?
+  idCardImagePath     String?
+  purpose             String?
+  expectedEntryTime   DateTime?
+  status              VisitorStatus @default(REGISTERED)
+  pdpaConsent         Boolean       @default(false)
+  pdpaConsentAt       DateTime?
+  expiresAt           DateTime?
+  cancelledAt         DateTime?
+  qrCodeData          String?
+  checkedInAt         DateTime?
+  checkedOutAt        DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   logs                 VisitorLog[]
   faceEmbeddings       FaceEmbedding[]

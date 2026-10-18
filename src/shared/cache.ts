@@ -1,10 +1,12 @@
 import { logger } from '../logger';
 import { getRedisClient } from './redis';
 
-export const getJsonCache = async <T>(key: string): Promise<T | undefined> => {
+export const getJsonCache = async <T>(key: string, decode: (value: unknown) => T | undefined): Promise<T | undefined> => {
   try {
     const cached = await getRedisClient().get(key);
-    return cached ? (JSON.parse(cached) as T) : undefined;
+    if (!cached) return undefined;
+    const value: unknown = JSON.parse(cached);
+    return decode(value);
   } catch (error) {
     logger.warn({ error, key }, 'Failed to read cache');
     return undefined;

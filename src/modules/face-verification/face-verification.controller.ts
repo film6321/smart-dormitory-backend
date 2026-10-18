@@ -1,3 +1,4 @@
+import { requestBody, text, optionalText, isNumberMatrix, isNumberArray } from '../../shared/input';
 import { FaceCleanupService } from './face-cleanup.service';
 import { Request, Response, NextFunction } from 'express';
 import path from 'path';
@@ -16,7 +17,7 @@ export class FaceVerificationController {
 
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = Number(req.body.userId || req.body.user_id);
+      const userId = Number(requestBody(req.body).userId || requestBody(req.body).user_id);
       if (!userId || !Number.isInteger(userId) || userId <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid or missing user_id'));
       }
@@ -46,7 +47,7 @@ export class FaceVerificationController {
         return res.status(400).json(createResponse(400, 'Image file is required'));
       }
 
-      const threshold = req.body.threshold !== undefined ? Number(req.body.threshold) : undefined;
+      const threshold = requestBody(req.body).threshold !== undefined ? Number(requestBody(req.body).threshold) : undefined;
       if (threshold !== undefined && (isNaN(threshold) || threshold < 0 || threshold > 1)) {
         return res.status(400).json(createResponse(400, 'Threshold must be a number between 0.0 and 1.0'));
       }
@@ -61,8 +62,8 @@ export class FaceVerificationController {
       );
       recordFaceVerificationAttempt(data.matched ? 'matched' : 'not_matched');
 
-      const deviceCode = (typeof req.body?.device_code === 'string' && req.body.device_code.trim()) || 'MAIN_GATE_01';
-      const direction = (typeof req.body?.direction === 'string' && req.body.direction.toUpperCase() === 'OUT') ? 'OUT' : 'IN';
+      const deviceCode = optionalText(requestBody(req.body).device_code)?.trim() || 'MAIN_GATE_01';
+      const direction = optionalText(requestBody(req.body).direction)?.toUpperCase() === 'OUT' ? 'OUT' : 'IN';
       let studentName = data.message || 'ผู้พักอาศัย';
       let cooldownActive = false;
 
@@ -204,9 +205,9 @@ export class FaceVerificationController {
   static async storeEmbeddings(req: Request, res: Response, next: NextFunction) {
     try {
       const studentId = Number(req.params.studentId);
-      const { model_version, embeddings, quality_scores } = req.body;
+      const { model_version, embeddings, quality_scores } = requestBody(req.body);
 
-      if (isNaN(studentId) || studentId <= 0 || !model_version || !embeddings || !Array.isArray(embeddings)) {
+      if (isNaN(studentId) || studentId <= 0 || typeof model_version !== 'string' || !isNumberMatrix(embeddings) || quality_scores !== undefined && !isNumberArray(quality_scores)) {
         return res.status(400).json({ status: 'rejected', reason: 'bad_request' });
       }
 
@@ -225,9 +226,9 @@ export class FaceVerificationController {
 
   static async scan(req: Request, res: Response, next: NextFunction) {
     try {
-      const { student_code, direction, confidence, scanned_at, device_code, snapshot_base64 } = req.body;
+      const { student_code, direction, confidence, scanned_at, device_code, snapshot_base64 } = requestBody(req.body);
 
-      if (!student_code || !direction || !scanned_at) {
+      if (typeof student_code !== 'string' || !direction || typeof scanned_at !== 'string') {
         return res.status(400).json({ status: 'ignored', reason: 'missing_required_fields' });
       }
 
@@ -239,9 +240,9 @@ export class FaceVerificationController {
         student_code,
         direction,
         confidence !== undefined ? Number(confidence) : 1.0,
-        scanned_at,
-        device_code,
-        snapshot_base64
+        text(scanned_at),
+        optionalText(device_code),
+        optionalText(snapshot_base64)
       );
 
       if (!result.cooldown_active && result.id && result.scanned_at) {
@@ -251,7 +252,7 @@ export class FaceVerificationController {
           direction,
           confidence: confidence !== undefined ? Number(confidence) : 1.0,
           scanned_at: result.scanned_at,
-          device_code,
+          device_code: optionalText(device_code),
           action: result.action,
           activity_type: 'FACE_SCAN',
           student: result.student,
@@ -266,8 +267,8 @@ export class FaceVerificationController {
 
   static async heartbeat(req: Request, res: Response, next: NextFunction) {
     try {
-      const { device_code } = req.body;
-      if (!device_code) {
+      const { device_code } = requestBody(req.body);
+      if (typeof device_code !== 'string' || !device_code) {
         return res.status(400).json({ status: 'ignored', reason: 'missing_device_code' });
       }
 
@@ -281,7 +282,7 @@ export class FaceVerificationController {
 
   static async doorCommand(req: Request, res: Response, next: NextFunction) {
     try {
-      const { device_code, action } = req.body ?? {};
+      const { device_code, action } = requestBody(req.body) ?? {};
       const normalizedAction = typeof action === 'string' ? action.toLowerCase() : '';
 
       if (!device_code) {
@@ -303,8 +304,8 @@ export class FaceVerificationController {
 
   static async liveFrame(req: Request, res: Response, next: NextFunction) {
     try {
-      const { device_code, frame_base64 } = req.body;
-      if (!device_code || !frame_base64) {
+      const { device_code, frame_base64 } = requestBody(req.body);
+      if (typeof device_code !== 'string' || typeof frame_base64 !== 'string' || !device_code || !frame_base64) {
         return res.status(400).json({ status: 'ignored', reason: 'missing_required_fields' });
       }
 
@@ -329,7 +330,7 @@ export class FaceVerificationController {
   // Accept generic detection payloads from external detectors and broadcast as 'scan' events
   static async detections(req: Request, res: Response, next: NextFunction) {
     try {
-      const payload = req.body || {};
+      const payload = requestBody(req.body) || {};
 
       const { id, confidence, scanned_at, device_code, direction } = payload;
 
@@ -339,13 +340,13 @@ export class FaceVerificationController {
 
       const scan: CameraScanSnapshot = {
         id: String(id),
-        student_code: payload.student_code || '',
+        student_code: optionalText(payload.student_code) || '',
         direction: direction === 'OUT' ? 'OUT' : 'IN',
         confidence: confidence !== undefined ? Number(confidence) : 0,
-        scanned_at,
-        device_code,
-        action: payload.action,
-        student: payload.student,
+        scanned_at: text(scanned_at),
+        device_code: optionalText(device_code),
+        action: optionalText(payload.action),
+        student: payload.student === undefined ? undefined : (() => { const student = requestBody(payload.student); return {code: text(student.code), name: text(student.name), room: text(student.room)}; })(),
       };
 
       // Record to monitoring bus (will broadcast SSE 'scan')
@@ -372,7 +373,7 @@ export class FaceVerificationController {
       faceVerificationMonitoringBus.clearScanHistory();
 
       // 2. Clear recent database access logs for face gate if requested
-      const clearDb = req.query.clear_db === 'true' || req.body?.clear_db === true || req.query.clear_db === undefined;
+      const clearDb = req.query.clear_db === 'true' || requestBody(req.body)?.clear_db === true || req.query.clear_db === undefined;
       let deletedCount = 0;
       if (clearDb) {
         const deleteResult = await prisma.accessLog.deleteMany({

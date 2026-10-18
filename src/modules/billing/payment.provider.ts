@@ -1,4 +1,5 @@
 import { AppError } from '../../middlewares/error-handler';
+import { isRecord } from '../../shared/input';
 
 export interface PaymentVerificationResult {
   success: boolean;
@@ -33,6 +34,29 @@ interface PaymentProviderResponse {
     };
   };
 }
+
+const isOptionalText = (value: unknown): boolean => value === undefined || typeof value === 'string';
+
+const parsePaymentProviderResponse = (value: unknown): PaymentProviderResponse | null => {
+  if (!isRecord(value)) return null;
+  if (value.success !== undefined && typeof value.success !== 'boolean') return null;
+  if (!isOptionalText(value.message) || !isOptionalText(value.code)) return null;
+  if (value.error !== undefined && typeof value.error !== 'string'
+    && (!isRecord(value.error) || !isOptionalText(value.error.code) || !isOptionalText(value.error.message))) return null;
+  if (value.data !== undefined) {
+    if (!isRecord(value.data)) return null;
+    if (value.data.isDuplicate !== undefined && typeof value.data.isDuplicate !== 'boolean') return null;
+    if (value.data.rawSlip !== undefined) {
+      if (!isRecord(value.data.rawSlip) || !isOptionalText(value.data.rawSlip.transRef)) return null;
+      if (value.data.rawSlip.amount !== undefined
+        && (!isRecord(value.data.rawSlip.amount)
+          || value.data.rawSlip.amount.amount !== undefined
+            && typeof value.data.rawSlip.amount.amount !== 'number'
+            && typeof value.data.rawSlip.amount.amount !== 'string')) return null;
+    }
+  }
+  return value as PaymentProviderResponse;
+};
 
 const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '');
 
@@ -123,7 +147,7 @@ export class PaymentProviderClient {
       method: 'POST',
       body: formData,
     });
-    const payload = (await response.json().catch(() => null)) as PaymentProviderResponse | null;
+    const payload = parsePaymentProviderResponse(await response.json().catch(() => null));
 
     if (!payload) {
       throw new AppError('Payment Gateway returned an invalid response. Please try again later.', 503);

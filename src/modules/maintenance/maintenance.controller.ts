@@ -1,3 +1,4 @@
+import { requestBody, text, optionalText } from '../../shared/input';
 import { NextFunction, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -13,8 +14,8 @@ export class MaintenanceController {
     try {
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json(createResponse(400, 'Invalid ticket id'));
-      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
-        || validateSync(plainToInstance(ConfirmMaintenanceDto, req.body), { whitelist: true, forbidNonWhitelisted: true }).length) {
+      if (!requestBody(req.body) || typeof requestBody(req.body) !== 'object' || Array.isArray(requestBody(req.body))
+        || validateSync(plainToInstance(ConfirmMaintenanceDto, requestBody(req.body)), { whitelist: true, forbidNonWhitelisted: true }).length) {
         return res.status(400).json(createResponse(400, 'Please confirm the completed repair'));
       }
       const updated = await MaintenanceService.confirmTicket(id, (req as AuthenticatedRequest).user!.id);
@@ -25,7 +26,7 @@ export class MaintenanceController {
   static async createTicket(req: Request, res: Response, next: NextFunction) {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { roomId, category, description, contactTime } = req.body;
+      const { roomId, category, description, contactTime } = requestBody(req.body);
 
       const tenant = await MaintenanceService.getTenantByUserId(authReq.user?.id ?? 0);
       if (!tenant) {
@@ -35,7 +36,7 @@ export class MaintenanceController {
       // Validate contactTime upfront — prevent invalid dates from reaching PostgreSQL
       let parsedContactTime: Date | undefined;
       if (contactTime !== undefined && contactTime !== null) {
-        parsedContactTime = new Date(contactTime);
+        parsedContactTime = new Date(text(contactTime));
         if (isNaN(parsedContactTime.getTime())) {
           return res.status(400).json(createResponse(400, 'contactTime must be a valid ISO 8601 date string (e.g. 2026-09-14T10:00:00.000Z)'));
         }
@@ -43,9 +44,9 @@ export class MaintenanceController {
 
       const ticket = await MaintenanceService.createTicket({
         tenantId: tenant.id,
-        roomId: roomId ?? tenant.roomId ?? undefined,
-        category,
-        description,
+        roomId: roomId === undefined ? tenant.roomId ?? undefined : Number(roomId),
+        category: text(category),
+        description: text(description),
         contactTime: parsedContactTime,
       });
 
@@ -68,13 +69,13 @@ export class MaintenanceController {
   static async updateTicketStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Number(req.params.id);
-      const { status, note } = req.body;
+      const { status, note } = requestBody(req.body);
 
       if (!Number.isInteger(id) || id <= 0) {
         return res.status(400).json(createResponse(400, 'Invalid ticket id'));
       }
 
-      const updated = await MaintenanceService.updateTicketStatus(id, status, note);
+      const updated = await MaintenanceService.updateTicketStatus(id, text(status), optionalText(note));
       return res.status(200).json(createResponse(200, 'Maintenance ticket updated', updated));
     } catch (error) {
       next(error);

@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS } from '../settings/settings.service';
 import { logger } from '../../logger';
 import { prisma, type DbClient } from '../../database/db';
 import { NotificationRepository } from './notification.repository';
+import { parseNotificationChannel, parseNotificationType } from './notification.dto';
 import type { NotificationChannel, NotificationProvider, NotificationType, Prisma } from '@prisma/client';
 import { publishNotificationAlert } from '../../realtime/notification-gateway';
 import type { NotificationProviderModule, ProviderSendPayload, ProviderSendResult } from './provider/simpleProvider';
@@ -49,8 +50,8 @@ export class NotificationService {
     const tenant = data.tenantId ? await NotificationRepository.findTenantById(data.tenantId, this.db) : null;
     const recipientPhone = data.recipientPhone ?? tenant?.phone ?? null;
     const payload: Prisma.NotificationCreateInput = {
-      channel: data.channel as NotificationChannel,
-      type: data.type as NotificationType,
+      channel: parseNotificationChannel(data.channel),
+      type: parseNotificationType(data.type),
       payload: data.payload,
       recipientPhone,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
@@ -110,8 +111,8 @@ export class NotificationService {
   private async getProviderModule(): Promise<NotificationProviderModule> {
     if (this.providerModule) return this.providerModule;
     return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
-      ? require('./provider/twilioProvider')
-      : require('./provider/simpleProvider');
+      ? import('./provider/twilioProvider')
+      : import('./provider/simpleProvider');
   }
 
   private async sendWithRetry(notif: ProviderSendPayload, providerModule: NotificationProviderModule, provider: NotificationProvider | null | undefined): Promise<ProviderSendResult> {
@@ -143,10 +144,9 @@ export class NotificationService {
     if (!notif) throw new Error('Notification not found');
 
     // Global switches govern delivery, independently of the real provider.
-    const channelSetting = { EMAIL: 'emailNotifications', SMS: 'smsNotifications' } as const;
-    const key = channelSetting[notif.channel as keyof typeof channelSetting];
+    const key = notif.channel === 'EMAIL' ? 'emailNotifications' : notif.channel === 'SMS' ? 'smsNotifications' : undefined;
     if (key) {
-      const setting = await db.systemSetting?.findUnique({ where: { key } });
+      const setting = await db.systemSetting.findUnique({ where: { key } });
       if ((setting?.value ?? DEFAULT_SETTINGS[key].value) === 'false') {
         await db.notification.update({ where: { id: notificationId }, data: { status: 'CANCELLED' } });
         return { cancelled: true };
@@ -177,8 +177,7 @@ export class NotificationService {
       await this.createAuditLog(notificationId, 'DELIVERY_SENT', { providerMessageId: result.id, status: 'SENT' });
       return result;
     } catch (err: unknown) {
-      const errorObj = err as { message?: string } | undefined;
-      const errorMessage = errorObj?.message || String(err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
       const nextAttempts = (notif.attempts ?? 0) + 1;
       await db.notification.update({ where: { id: notificationId }, data: { status: 'FAILED', lastError: errorMessage, attempts: nextAttempts } });
       await this.createAuditLog(notificationId, 'DELIVERY_FAILED', { error: errorMessage, attempts: nextAttempts });
@@ -193,8 +192,8 @@ export class NotificationService {
 
   async handleProviderWebhook(payload: Record<string, unknown>) {
     const db = this.db;
-    const providerMessageId = (payload.MessageSid ?? payload.messageSid) as string | undefined;
-    if (!providerMessageId) return null;
+    const providerMessageId = payload.MessageSid ?? payload.messageSid;
+    if (typeof providerMessageId !== 'string' || !providerMessageId) return null;
 
     const notification = await db.notification.findFirst({ where: { providerMessageId } });
     if (!notification) {

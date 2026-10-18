@@ -1060,3 +1060,121 @@ Build/TypeScript และ lint ของไฟล์ที่เกี่ยว
 สร้างภาพรวมระบบ, flow สมัครถึงย้ายออก, ERD หลัก 10 ตาราง/161 คอลัมน์/17 FK และ System Architecture พร้อม HTML interactive และ canonical PNG/SVG จากเมนูส่งออกของ Archify อ้าง source ที่ commit c6897b6a50e7f7074b6d3321691788d92afda1ba ไม่ใช้เอกสารที่ยังไม่ commit เป็น source evidence
 
 ทั้ง 4 ภาพผ่าน validate/deliver/strict check/browser-check ของเครื่องมือ เก็บ candidate และ receipts ใน .docs/system/diagrams/ มีหน้ารวม index.html และ exports.json สำหรับตรวจ hash ภาพ ERD มีบางเส้นอ้อมเพื่อหลบตาราง จึงควรซูมหรือใช้ SVG ข้อความภาพเป็นภาษาไทย ส่วน fixed Viewer UI และ HTML lang ยังใช้ English fallback การตรวจภาพไม่ใช่ผลทดสอบ flow ระบบหรือ provider จริง และ Docker daemon ไม่ทำงานในรอบสำรวจฐานข้อมูลก่อนสร้างภาพ
+
+## ป้องกัน Race Condition ก่อนชำระมัดจำ — 18 ต.ค. 2569
+
+- ผู้ใช้ให้ทำเรื่องนี้ก่อน และพักอีก 6 ข้อจาก source review ไว้ เพิ่ม roomHoldExpiresAt และ composite index ใน HousingApplicationDraft เดิม พร้อม migration 20261018000000_housing_room_hold ไม่มีตารางใหม่
+- ก่อน QR: transaction ล็อก User -> Room ตรวจ reserving tenants + holds ของคนอื่นตามเวลา PostgreSQL และสถานะหลักฐานชำระ ผู้ขอสิทธิ์สุดท้ายพร้อมกันมีผู้ได้สิทธิ์เพียงคนเดียว provider เรียกเฉพาะผู้ได้สิทธิ์ 10 นาทีตามที่ผู้ใช้เลือก รีเฟรช QR ไม่ต่อ active expiry ส่วน legacy HTTP QR/อัปโหลดรวมใช้ draft flow เดียวกัน
+- Holds ที่มีเงิน PAID/อยู่ระหว่างตรวจยังคุ้มครองหลังหมดเวลา ที่ยังไม่ส่งหลักฐานคืนโดยเงื่อนไขเวลา ไม่พึ่ง worker/Redis การยื่นสมัครเปลี่ยนเป็น Tenant PENDING และล้าง hold ใน transaction เดียว ไม่คิดจำนวนซ้ำ Admin เพิ่ม/ย้ายและการเปลี่ยนความจุ/ปิด/เปลี่ยนเลข/ลบห้องต้องเคารพ hold
+- Late payment: ยังตรวจผ่าน provider และบันทึกเครดิตจริงจำลองได้ แม้ห้องถูกกันให้คนอื่นแล้ว แต่ล้าง hold ที่หมดสิทธิ์และไม่แย่งห้องกลับ เจ้าของใช้เครดิตกับห้องอื่นหรือให้ Admin ตรวจจัดการ ไม่มี auto refund และ QR ธนาคารที่บันทึกไปแล้วไม่ได้ถูกเพิกถอนจริงจากการซ่อนภาพบนเว็บ
+- Frontend แสดงนับถอยหลังอิง serverTime/reservationExpiresAt ซ่อน QR เมื่อหมดเวลา ไม่ renew อัตโนมัติ ยังคงแนบสลิปเดิมได้และเตือนอย่าโอนซ้ำ cleanup timer เมื่อออกจากหน้า
+- Regression backend 190/190 และ frontend 127/127 ผ่าน Build/TypeScript และ lint ผ่าน Integration ใหม่ tests/integration/housing-room-hold.test.ts 8/8 ผ่าน PostgreSQL ฐาน housing_room_hold_test แยกจริงพร้อม mock QR/slip ไม่มีการโอนเงินจริง รวมผู้ขอ QR พร้อมกัน Admin แข่งกับ QR สิทธิ์หมดอายุ สถานะตรวจเงิน ป้องกัน Admin ลบ/เปลี่ยนห้อง เปลี่ยนห้อง และผู้โอนสองคนยื่นสมัครพร้อมกันได้ที่พักเพียงคนเดียว ยอดอีกคนยังอยู่
+- migration ทดสอบผ่านฐานแยกแล้วนำไปใช้ฐาน Compose เดิมสำเร็จโดยไม่ reset Deploy backend เสร็จ ตรวจ health ผ่าน nginx ได้ HTTP 200 ยืนยัน dist มี reserveForQr/roomHoldExpiresAt และ frontend เสิร์ฟ index-Dyd3ESXz.js คอลัมน์ roomHoldExpiresAt มีในฐานหลัก ไม่ใช้ tests นี้เป็นผล load test หรือ browser acceptance ของอุปกรณ์/ธนาคารจริง
+
+## ตรวจรอยต่อ flow เพิ่มเติมหลังแก้ใบสมัครถูกปฏิเสธ — 18 ต.ค. 2569
+
+ตารางนี้เป็นรายการที่พบจาก source review ก่อนแก้ไข สถานะล่าสุด: แก้ทั้ง 6 จุดแล้วตามผลตรวจหัวข้อท้ายรายงาน ไม่ใช่หลักฐาน browser acceptance
+
+| ลำดับ | กรณีและผลที่เห็นจากโค้ด | สิ่งที่ควรแก้/ตรวจต่อ |
+|---|---|---|
+| 1 | กลับมาแก้ใบสมัครที่มีห้องเดิมเต็ม/ไม่พร้อมแล้ว: autosave ส่ง roomNumber เดิมทุกขั้น HousingDraftService.save ตรวจความพร้อมและคืน 409 จากนั้น draftError ล็อกปุ่มขั้นถัดไป แม้ผู้ใช้ยังอยู่ขั้นข้อมูลส่วนตัวและยังไปเลือกห้องใหม่ไม่ได้ | ให้เปลี่ยนห้องได้จากจุดที่ติด และแยกบันทึกข้อมูลส่วนตัวจากการเลือกห้องที่ต้องตรวจความพร้อม |
+| 2 | เปิดสองแท็บแล้ว OCC ขัดแย้ง: ปุ่ม retry เรียก refreshDraft(false) รับ version ล่าสุดแต่เก็บ local fields เดิม จากนั้น autosave อาจส่งข้อมูลเก่าทับข้อมูลที่อีกแท็บเพิ่งบันทึก | แยก timeout จาก 409 และให้เลือกโหลดข้อมูลล่าสุด/ยืนยันเก็บข้อมูลของแท็บนี้ก่อนเขียนทับ |
+| 3 | เปลี่ยนเป็นห้องราคาต่ำกว่ายอดที่จ่าย: summary แสดง excessAmount แต่ ready ต้อง credit === required และการยื่นปฏิเสธยอดส่วนเกิน หน้าสมัครจบที่ให้ติดต่อ Admin ในโมดูล housing/payment ที่ตรวจยังไม่พบขั้นปิดยอดส่วนเกิน | กำหนดนโยบายและ flow คืนเงิน/จัดการส่วนเกินให้จบ โดยไม่แก้ PAID หรือยอดจริงเพื่อให้ผ่าน |
+| 4 | เงื่อนไขสัญญาเปลี่ยนจาก response autosave: applyDraft เปลี่ยน contractData จาก contractTerms แต่ไม่ได้ยกเลิก contractAccepted การอัปเดตเงื่อนไขจึงอาจคงช่องยอมรับเดิมไว้ แม้ server ยังตรวจ terms ล่าสุดตอนยื่น | ตรวจ snapshot ที่ยอมรับ หากเงื่อนไขเปลี่ยนต้องแสดงให้ตรวจและติ๊กยอมรับใหม่ |
+| 5 | Admin อนุมัติ/ปฏิเสธขณะผู้พักเปิดหน้าหลักค้าง: StudentHome โหลด tenant ตอน mount หรือ retry หลัง error ไม่มี listener tenantStatusUpdated ในหน้านี้ เมนูและข้อความสถานะอาจค้างจน refresh | เพิ่ม reload ตาม event พร้อม cleanup และตรวจ reconnect/focus ให้เหมาะสม |
+| 6 | ย้ายออก INACTIVE แต่ยังไม่ล้างข้อมูลเดิม: StudentHome ซ่อนเมนูสมัครเฉพาะ PENDING/APPROVED/ACTIVE จึงยังเปิดสมัครได้ แต่ service ไม่อนุญาตสมัครทับ INACTIVE และ draft เดิมยังส่งแล้ว | แสดงสถานะรอผู้ดูแลจัดการข้อมูลเดิมแทนชวนให้สมัคร และเปิดสมัครเมื่อ guarded purge เสร็จ |
+
+อ้างอิง: HousingDraftService.save/summary, useTenantApplication.applyDraft/refreshDraft/autosave, TenantApplication ปุ่ม retry/ยอดส่วนเกิน, StudentHome เมนูและ effect โหลด tenant, TenantsService.submitApplication กรณี INACTIVE ยังไม่ใช้จำนวน regression ที่ผ่านเป็นหลักฐานว่ารอยต่อข้างต้นผ่านแล้ว
+
+## ใบสมัครถูกปฏิเสธแล้วกลับมาแก้ไขไม่ได้ — 18 ต.ค. 2569
+
+- ผู้ใช้ยืนยันว่า Admin ปฏิเสธใบสมัคร แล้ว URL สลับ /apply กับ /student Source review พบว่า Tenant เป็น REJECTED แต่ HousingApplicationDraft ยัง SUBMITTED และหน้าสมัคร redirect ทันทีเมื่อ draft ไม่ OPEN; ยังไม่ได้บันทึก browser trace ยืนยันตัวกระตุ้นการกลับเข้า /apply ทุกครั้ง
+- แก้ HousingDraftService.locked ภายใต้ User lock เดิม: เปิดเฉพาะ SUBMITTED ของ Tenant REJECTED เป็น OPEN เริ่ม activeStep 0 เก็บข้อมูลเดิมและเพิ่ม version เพื่อรักษา OCC
+- คืนการผูกเครดิตเฉพาะ PAID ของเจ้าของ/draft/Tenant เดียวกัน ที่ไม่ใช่บิลและยังไม่อนุมัติมัดจำ โดยไม่เปลี่ยนยอด สถานะชำระ transaction หรือหลักฐาน หากพบเจ้าของอื่น ยอดอนุมัติแล้ว หรือการผูกผิด ให้ 409 และรอผู้ดูแล ไม่เปิดให้ใช้ยอดซ้ำ
+- ป้องกัน Admin เปลี่ยนใบสมัครเก่า REJECTED เป็น PENDING/APPROVED/ACTIVE ขณะที่ draft OPEN ต้องรอเจ้าของยื่นใหม่ก่อน ส่วน PENDING/APPROVED/ACTIVE/INACTIVE ไม่เปิด draft ให้อัตโนมัติ
+- ฝั่งเว็บหยุด redirect อัตโนมัติเมื่อ draft ยังส่งแล้ว แสดงหน้าสถานะคงที่พร้อมตรวจสถานะล่าสุด และไม่ autosave draft ที่ไม่ OPEN เพิ่ม regression test กรณีนี้ไว้
+- Backend targeted unit/mock 14/14 และ regression 190/190 (24 suites) ผ่าน รวมเปิดซ้ำอย่าง idempotent รักษายอด/ข้อมูล ปฏิเสธยอดผิดเจ้าของและป้องกันอนุมัติใบเก่า Build, test:typecheck และ lint ไฟล์ที่แก้ผ่าน
+- ช่วงแรก frontend tests/build/lint ถูก automatic approval review ระงับเพราะโควตาการตรวจอนุมัติหมด ต่อมาผู้ใช้สั่งดำเนินการและรันสำเร็จ: frontend 125/125 รวมกรณี draft ส่งแล้วไม่ redirect/ไม่ autosave และกลับมาแก้หลังเปิด draft พร้อมรักษายอดเดิม Build/TypeScript และ lint ผ่าน
+- Deploy รอบต่อมา 18 ต.ค. 2569: เปิด Docker Desktop ที่หยุดอยู่ แล้ว build/start backend พร้อม nginx/ngrok และบริการตาม dependency โดยใช้ volume เดิม ตรวจ health ผ่าน nginx ได้ HTTP 200 ยืนยัน backend dist มี rejected-draft recovery และ frontend เสิร์ฟ index-BpiArfet.js แล้ว ไม่ได้ใช้ session ผู้พักยิง flow สมัครจริงหรือสั่งชำระเงิน ต้องให้ผู้ใช้ลองเปิดใบสมัครที่ถูกปฏิเสธ แก้/refresh/ส่งใหม่ และตรวจว่าเป็น PENDING โดยไม่จ่ายยอดเดิมซ้ำ
+
+## หน้าสมัครเรียก API Admin และปุ่มถัดไปค้าง — 18 ต.ค. 2569
+
+- ผู้ใช้รายงาน GET /api/tenants และ /api/users ตอบ 403 พร้อมยืนยันว่าขั้นข้อมูลส่วนตัวปุ่มสีจาง และ PATCH /api/tenants/draft ค้าง Pending
+- Source review: DashboardProvider ครอบ App ทั้งหมดและโหลดข้อมูลเมื่อมี session ทำให้หน้า STUDENT เรียก API รายชื่อ Admin ซึ่ง requireRole ADMIN ปฏิเสธถูกต้อง ย้าย provider ไปใต้ ProtectedRoute ของ Admin ไม่แก้ลดสิทธิ์ API
+- ปุ่มถัดไป disabled เมื่อ draftSaving; คำขอ GET/PATCH draft เดิมไม่มี Axios timeout เพิ่ม 20 วินาที หยุด autosave หลัง error จนผู้ใช้ตรวจสถานะใหม่ และแสดง spinner บนปุ่มเดิม
+- ปุ่มตรวจสถานะและลองบันทึกอีกครั้งรักษาข้อมูลที่กำลังกรอกเมื่อมี draft แล้ว ส่วนกู้ครั้งแรกยังคืนข้อมูลจาก server เพิ่มสรุป validation ใกล้ปุ่ม รวม accountPhone ที่เดิมไม่มีข้อความในฟอร์ม
+- Unit/mock: frontend 124/124 ผ่าน รวมจำลอง save timeout และ retry ที่คงข้อมูล กับ render เส้นทางที่ยืนยัน DashboardProvider ไม่ mount ในหน้า STUDENT/สาธารณะ และ mount ใน Admin ที่มีสิทธิ์ Build/TypeScript และ lint ผ่าน
+- Runtime read-only: nginx health ตอบสำเร็จ และ PostgreSQL ขณะตรวจมี connection idle 4 รายการ ไม่มี query รอ lock; ยังยืนยันต้นเหตุระดับเครือข่ายของ PATCH เดิมไม่ได้ ไม่ได้ใช้ session ผู้สมัครยิง PATCH จริง
+- Build dist ใหม่แล้ว nginx เสิร์ฟ index-BLftjUwF.js การยืนยันว่าผู้ใช้กดถัดไปผ่านจาก browser/ngrok จริงยังรอผู้ใช้ทดสอบ ควรเก็บข้อความที่ยังไม่ได้บันทึกก่อน reload หน้าเก่า
+
+
+## ปิดรอยต่อใบสมัคร 6 จุดและคืนส่วนเกิน — 18 ต.ค. 2569
+
+| จุด | พฤติกรรมหลังแก้ |
+|---|---|
+| ห้องเดิมเต็ม/ปิดใช้งาน | บันทึกข้อมูลส่วนตัวต่อได้โดยไม่ตรวจห้องเดิมซ้ำ และมีทางไปเลือกห้องใหม่; การกันสิทธิ์/ยืนยันยังตรวจความจุจริง |
+| สองแท็บแก้พร้อมกัน | 409 หยุด autosave และคิวเก่า ต้องเลือกโหลดข้อมูลระบบ หรือยืนยันใช้ข้อมูลในแท็บนี้ก่อนเขียนทับ |
+| ห้องราคาถูกลง | เปลี่ยนห้องได้ รอ Admin คืนส่วนเกินจริงแล้วบันทึกยอด เลขอ้างอิงและภาพหลักฐานใน นักศึกษา/ผู้เช่า > ใบสมัครที่มียอดคืน ได้แม้ยังไม่มี Tenant/เอกสารใบสมัคร และไม่โอนเงินให้อัตโนมัติ |
+| เงื่อนไข/วันสัญญาเปลี่ยน | ล้างการติ๊กยอมรับเมื่อ snapshot เปลี่ยน และโหลด terms ล่าสุดก่อนส่ง หากเปลี่ยนให้กลับไปอ่านและยอมรับใหม่ |
+| สถานะหน้าหลักผู้พัก | รับ event เฉพาะเจ้าของ โหลดใหม่เมื่อกลับเข้าแท็บ/reconnect และตรวจซ้ำทุก 30 วินาที ยกเลิก request/listeners/timers เมื่อออกจากหน้า |
+| ย้ายออกแล้วยังมีข้อมูลเดิม | ซ่อนเมนูสมัครของ INACTIVE และแสดงเหตุผลรอผู้ดูแลล้างข้อมูล ทั้งหน้าหลักและการเข้าหน้าสมัครโดยตรง |
+
+การคืนเงินใช้ HousingRefund แยกจาก Payment เดิม: เครดิตสุทธิ = PAID เดิม − ยอดคืนที่บันทึก; ใช้เครดิตสุทธิตรวจยื่นใบสมัครและสรุปยอดการเงิน User/Room lock + draft version ป้องกันบันทึกแข่งกัน ตรวจยอดไม่เกินส่วนเกิน ไม่มีรายการรอตรวจ/เครดิตถูกใช้แล้ว และ reference/idempotencyKey/proof hash ไม่ซ้ำ เฉพาะ Admin อ่านและบันทึกหลักฐาน ไฟล์อยู่ private storage และ guarded purge ล้าง record/ไฟล์ตามเจ้าของโดยเก็บ User ไว้
+
+ผลตรวจ: Backend unit/mock 190/190, Frontend unit/mock 132/132, PostgreSQL แยก 11/11 (8 กรณีจองห้องเดิม + 3 กรณีห้องใช้ไม่ได้/INACTIVE/คืนเงิน) ผ่าน กรณีคืนเงินตรวจสิทธิ์ Admin, คืนเกินยอด, บันทึกพร้อมกันและ retry, คง Payment.amount เดิม, ยื่นตรวจเครดิตสุทธิ และลบหลักฐานจริงจากพื้นที่ทดสอบโดย User ยังอยู่ การตรวจ cache ใช้ mock ไม่เรียก Redis จริงในชุดนี้; provider ชำระเงินจำลอง ไม่มีโอนหรือคืนเงินจริง
+
+Build/TypeScript ทั้งสอง repository, backend test:typecheck, lint ฝั่งเว็บและไฟล์ backend ที่แก้ผ่าน Migration housing_refunds ใช้กับฐานข้อมูลแยกและ Compose projectdb แล้ว การยืนยันคลิกผ่าน browser หลัง deploy และการคืนเงินจริงยังไม่ใช่ผลผ่านของรอบนี้
+
+Runtime หลัง deploy: rebuild/restart backend สำเร็จ ตรวจผ่าน nginx GET /api/health ได้ 200 healthy และ dist ใน container มี HousingRefundService/refundedAmount; frontend build เป็น index-CHAO-zRe.js ไม่ใช้ health หรือการมีไฟล์เป็นหลักฐานว่า browser acceptance ผ่าน
+
+
+## Login ใหม่ยกเลิก session เก่า — 18 ต.ค. 2569
+
+ผู้ใช้กำหนดให้บัญชีมี session จาก login ล่าสุดเท่านั้น ใช้กับ Admin/User เพิ่ม authSessionVersion และ lastLogin แบบ atomic โดยตรวจ password hash เดิมใน WHERE ก่อนออก JWT จากค่าที่ฐานข้อมูลคืน ไม่ใช้ค่า version ที่อ่านก่อนตรวจรหัสผ่าน และไม่กระทบ User.version ของ OCC ล็อกอินผิดไม่ยกเลิก session เดิม รหัสผ่านเปลี่ยนขณะตรวจให้ 401
+
+REST ใช้การตรวจ session เดิมเพื่อตอบ 401 กับ token เก่า Socket ตัดเฉพาะรุ่นเก่าของ owner และตรวจซ้ำหลังเชื่อมเพื่อปิดช่อง handshake ชนกับ login ใหม่; ไม่ตัดรุ่นใหม่กว่าที่อาจเชื่อมแล้วระหว่าง login พร้อมกัน หลายแท็บ browser เดียวกันยังใช้ cookie ร่วมกัน จึงยังต้องใช้ OCC/locks/idempotency เดิม
+
+ผล: Backend unit/mock 193/193 ผ่าน รวม HTTP login สองครั้ง cookie แรก 401/cookie ล่าสุด 200, รหัสผิดไม่ตัด session เดิม, concurrent login และ Socket รุ่นเก่า/ใหม่แบบ mock; PostgreSQL แยก 12/12 ผ่าน รวม login จริงสองคำขอพร้อมกันเหลือ token ที่ใช้ได้หนึ่งชุด version เพิ่ม 2 และ User.version ไม่เปลี่ยน รวมปฏิเสธ password hash ที่เปลี่ยนแล้ว Build/test:typecheck และ targeted ESLint ผ่าน ยังไม่ใช่การทดลองล็อกอินสองอุปกรณ์ผ่าน browser จริง
+
+Deploy นโยบาย login ล่าสุด: rebuild/restart backend สำเร็จ และตรวจ nginx /api/health ได้ 200 healthy หลังเปลี่ยน image ไม่ได้ใช้บัญชีผู้ใช้จริงทดสอบการออกจากระบบสองเครื่อง
+
+
+## Modal แจ้ง login ซ้อน — 18 ต.ค. 2569
+
+เพิ่ม native dialog ระดับ AuthProvider มี X สีแดงขนาดใหญ่ตรงกลาง ข้อความบัญชีนี้มีการเข้าสู่ระบบจากที่อื่น และปุ่มเข้าสู่ระบบอีกครั้ง รับ sessionReplaced จาก Socket ก่อนตัดการเชื่อมต่อ ล้างสิทธิ์ทันทีและคง Modal หลัง protected route เปลี่ยนหน้า คำขอ 401 ซ้ำไม่สร้างหลายกล่อง/ไม่ลดระดับข้อความ login ซ้อน ล็อกอินใหม่สำเร็จล้าง Modal ได้ รองรับโฟกัส native dialog และ Escape กลับหน้า login
+
+401 ของ API ยังคงเดิม ไม่เปลี่ยนเป็น 200 Middleware รักษาข้อความ session revoked เพื่อให้เว็บแยกจากหมดอายุได้ แต่ไม่กล่าวว่าเป็น login ซ้อนหากไม่มี event ยืนยัน เพราะ logout/reset password ก็ยกเลิก session ได้ ขณะ login/register/reset สาธารณะตอบ 401 จะไม่เปิด session Modal โดยไม่เกี่ยวกับบัญชีที่กำลังใช้อยู่
+
+ผลทดสอบ: frontend 135/135, backend 193/193 ผ่าน รวม event replacement, HTTP 401 reason, wrong login ไม่ล้าง session และ Modal คงอยู่เมื่อมี 401 ซ้ำ Build/TypeScript ทั้งสอง repository, backend test:typecheck และ lint ผ่าน Deploy backend และ build frontend ใหม่แล้ว ยังไม่ได้ยืนยันภาพ/การคลิกด้วยสอง browser จริง
+
+
+## ตรวจ type safety และคำสั่งปิดการตรวจ — 18 ต.ค. 2569
+
+ขอบเขต: ซอร์ส TypeScript ของทั้งสอง repository, config TypeScript/ESLint, ชุดทดสอบ และตรวจสคริปต์เก่าที่พบ ไม่เพิ่มฟีเจอร์หรือเปลี่ยน schema ในรอบนี้
+
+| ตรวจ | ผลหลังแก้ |
+|---|---|
+| explicit any ใน AST ของ src ทั้งสอง repo | 0 |
+| as unknown as / as never ใน src | 0 |
+| @ts-ignore / @ts-nocheck / @ts-expect-error / eslint-disable ใน src | 0 |
+| TypeScript strict | Backend มีอยู่แล้ว; เปิดถาวรใน frontend app/node config ตรวจผ่าน |
+| ป้องกันกลับมาปิดการตรวจ | ESLint noInlineConfig, ban-ts-comment และห้าม double assertion ผ่าน unknown ใน src; unused ตัวแปร backend ยกระดับเป็น error |
+
+การแก้: AcademicRequestDto ใช้ชนิดตรงคำขอแทน cast จาก DTO string; notification ตรวจค่า channel/type เทียบ enum ก่อน query ไม่บังคับ string เป็น enum; webhook ตรวจชนิดเลขอ้างอิง; catch ใช้ Error narrowing; catalogue และ Prometheus ตรวจโครงสร้าง JSON จริงก่อนอ่าน ไม่เปลี่ยนข้อมูลผิดรูปเป็นยอดศูนย์; hook โหลดข้อมูลใช้ callback/dependencies ที่แน่นอน; ตารางใช้ core model กับ pagination/filter ที่ React ควบคุม จึงไม่ต้องปิด incompatibility warning หรือ React Compiler; สคริปต์ clear-face-data เปลี่ยน catch any เป็นตรวจ Error/code โดยไม่ได้รันสคริปต์ล้างข้อมูล
+
+นำ fallback ที่มีไว้รองรับ mock ไม่ครบออกจาก notification audit/dead-letter และ housing refund queries หากระบบบันทึกจริงไม่ได้ต้องเกิด error; เพิ่ม mock delegates ให้ตรงสิ่งที่ใช้งาน แทนคืน record สำเร็จปลอมในโค้ดจริง
+
+ข้อจำกัดที่เปิดเผย: unknown เป็นชนิดที่ต้องตรวจค่าก่อนใช้ ไม่ใช่คำสั่งปิด error จึงยังเก็บ unknown ตามขอบเขตข้อมูล/ข้อผิดพลาด ใน tests ยังมี double assertion 83 จุดสำหรับ partial Prisma/Express fixtures ไม่ได้เปลี่ยนเป็น any หรือซ่อนไว้ใน helper และไม่อ้างว่า mock เหล่านี้มี type safety เท่ากับ client จริง ตรวจเก็บกรณีฐานข้อมูลแยกเสริมไว้ การสแกน explicit any ไม่ได้แปลว่า implicit any จาก default generic ของไลบรารีทุกจุดถูกพิสูจน์ว่าหมดแล้ว skipLibCheck ยังตรวจข้าม declaration ของ dependency ตามเดิม ไม่ใช่การยกเว้นไฟล์ src
+
+หลักฐาน: frontend 136/136 รวม table model จริงกรณีค้นหา เปลี่ยนหน้า ข้อมูลลดและไม่มีข้อมูล; PostgreSQL แยก 12/12 รวม login พร้อมกัน/จองห้อง/คืนส่วนเกินและ purge ผ่าน (cache/provider จำลอง) Build strict ทั้งสองฝั่งผ่านและ lint ไม่มี warnings/errors รายการนี้ไม่แทน browser acceptance ครบทุกหน้า
+
+ผลตรวจสุดท้ายของรอบ type safety: backend 196/196 ผ่าน รวม malformed catalogue/metrics และ enum validation; frontend 136/136; PostgreSQL แยก 12/12; build/test:typecheck ผ่าน, ESLint backend --max-warnings 0 และ frontend lint ไม่มี warning/error Deploy backend แล้ว nginx health 200 โดยไม่เปลี่ยนข้อมูลผู้ใช้จริงหรือรันสคริปต์ล้างข้อมูล
+
+
+## คำขอคืนเครดิตจากใบสมัคร — 19 ต.ค. 2569
+
+เพิ่มขั้นให้ผู้สมัครส่งคำขอคืนเครดิตทั้งหมดจากหน้าใบสมัคร โดยยอด PAID ยังคงเป็นเครดิตจนกว่าจะมีการคืนเงินจริง ผู้สมัครเลือกเก็บเครดิตไว้สมัครต่อได้ หากส่งคำขอ ระบบปล่อยห้องและพักการแก้ไข อัปโหลด ชำระ และยื่นใบสมัครระหว่างรอ Admin
+
+Admin จัดการในกล่อง “คำขอคืนเงินจากใบสมัคร” ที่หน้า **จัดการผู้พักอาศัย** รายการมาจาก HousingApplicationDraft จึงเห็นผู้สมัครที่ยังไม่มี Tenant/เอกสารได้ Admin ปฏิเสธพร้อมเหตุผล หรือบันทึกยอดอ้างอิง หลักฐาน และยืนยันหลังคืนเงินจริงแล้วเท่านั้น รายงานธุรกิจสะท้อนยอดคืนจากรายการที่บันทึกจริง
+
+ตรวจแล้ว: Prisma schema validate/generate, Backend build/test:typecheck, Frontend production build, ESLint ไฟล์ที่แก้ และ AccountRetention unit 23/23 ผ่าน; เพิ่มกรณี PostgreSQL แยกสำหรับส่งคำขอ เครดิตถูกพักระหว่างรอ ปฏิเสธแล้วใช้เครดิตต่อ และคืนเงินจริงแล้วหักยอด แต่ยังไม่ได้รัน integration test นี้กับฐานข้อมูลทดสอบ Full `npm test` ยังติด 3 OCR flow cases เพราะ credentials ของฐานข้อมูล test ไม่ผ่าน ยังไม่ได้ browser acceptance หรือ deploy migration จึงยังไม่ยืนยันการทำงาน end-to-end ในระบบที่กำลังใช้งาน

@@ -1,4 +1,5 @@
-import { Prisma, NotificationChannel, NotificationType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { parseNotificationChannel, parseNotificationType } from './notification.dto';
 import { prisma, type DbClient } from '../../database/db';
 
 export class NotificationRepository {
@@ -70,21 +71,23 @@ export class NotificationRepository {
   }
 
   static async findPreference(userId: number, channel: string, db: DbClient = prisma) {
-    return db.notificationPreference.findFirst({ where: { userId, channel: channel as unknown as NotificationChannel } });
+    return db.notificationPreference.findFirst({ where: { userId, channel: parseNotificationChannel(channel) } });
   }
 
   static async upsertPreference(data: { userId?: number; channel: string; type?: string; optedOut: boolean }, db: DbClient = prisma) {
-    const existing = await db.notificationPreference.findFirst({ where: { userId: data.userId, channel: data.channel as unknown as NotificationChannel, ...(data.type ? { type: data.type as unknown as NotificationType } : {}) } });
+    const channel = parseNotificationChannel(data.channel);
+    const type = data.type ? parseNotificationType(data.type) : undefined;
+    const existing = await db.notificationPreference.findFirst({ where: { userId: data.userId, channel, ...(type ? { type } : {}) } });
 
     if (existing) {
       return db.notificationPreference.update({ where: { id: existing.id }, data: { optedOut: data.optedOut } });
     }
 
-    return db.notificationPreference.create({ data: { userId: data.userId, channel: data.channel as unknown as NotificationChannel, optedOut: data.optedOut, ...(data.type ? { type: data.type as unknown as NotificationType } : {}) } });
+    return db.notificationPreference.create({ data: { userId: data.userId, channel, optedOut: data.optedOut, ...(type ? { type } : {}) } });
   }
 
   static async findNotificationProvider(channel: string, db: DbClient = prisma) {
-    return db.notificationProvider.findFirst({ where: { channel: channel as unknown as NotificationChannel, isActive: true } });
+    return db.notificationProvider.findFirst({ where: { channel: parseNotificationChannel(channel), isActive: true } });
   }
 
   static async findNotificationTemplate(id: number, db: DbClient = prisma) {
@@ -92,25 +95,12 @@ export class NotificationRepository {
   }
 
   static async createAuditLog(notificationId: number, eventType: string, payload: Record<string, unknown>, db: DbClient = prisma) {
-    if (db.notificationAuditLog && typeof db.notificationAuditLog.create === 'function') {
-      return db.notificationAuditLog.create({ data: { notificationId, eventType, payload: JSON.stringify(payload) } });
-    }
-
-    // Fallback for test mocks without audit log table
-    return { notificationId, eventType, payload: JSON.stringify(payload) };
+    return db.notificationAuditLog.create({ data: { notificationId, eventType, payload: JSON.stringify(payload) } });
   }
 
   static async createDeadLetter(notificationId: number, reason: string, details: Record<string, unknown>, db: DbClient = prisma) {
-    if (db.notificationDeadLetter && typeof db.notificationDeadLetter.findFirst === 'function') {
-      const existing = await db.notificationDeadLetter.findFirst({ where: { notificationId } });
-      if (existing) return existing;
-
-      if (typeof db.notificationDeadLetter.create === 'function') {
-        return db.notificationDeadLetter.create({ data: { notificationId, reason, details: JSON.stringify(details) } });
-      }
-    }
-
-    // Fallback for test mocks without dead letter table
-    return { notificationId, reason, details: JSON.stringify(details) };
+    const existing = await db.notificationDeadLetter.findFirst({ where: { notificationId } });
+    if (existing) return existing;
+    return db.notificationDeadLetter.create({ data: { notificationId, reason, details: JSON.stringify(details) } });
   }
 }
