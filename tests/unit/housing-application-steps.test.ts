@@ -13,7 +13,7 @@ import { AppError } from '../../src/middlewares/error-handler';
 import { HousingDraftService } from '../../src/modules/tenants/housing-draft.service';
 import type { Prisma } from '@prisma/client';
 
-function rejectedDraftFixture(status = 'REJECTED', paymentOverrides: Record<string, unknown> = {}) {
+function rejectedDraftFixture(status: string | null = 'REJECTED', paymentOverrides: Record<string, unknown> = {}) {
   let draft = { id: 3, userId: 25, status: 'SUBMITTED', version: 8, roomId: 1,
     data: { activeStep: 3, personalInformation: { firstName: 'fixture' } } };
   const payment = { payerUserId: 25, housingTenantId: 7 as number | null, housingApprovedAt: null,
@@ -21,7 +21,7 @@ function rejectedDraftFixture(status = 'REJECTED', paymentOverrides: Record<stri
   const writes: unknown[] = [];
   const tx = {
     $queryRaw: async () => [], user: { findUnique: async () => ({ id: 25 }) },
-    tenant: { findUnique: async () => ({ id: 7, userId: 25, status }) },
+    tenant: { findUnique: async () => status === null ? null : ({ id: 7, userId: 25, status }) },
     housingApplicationDraft: { findUnique: async () => draft,
       update: async ({ data }: { data: { status: string; data: typeof draft.data } }) => {
         writes.push(data); draft = { ...draft, status: data.status, data: data.data, version: draft.version + 1 }; return draft;
@@ -55,6 +55,19 @@ test('pending and approved applications cannot reopen their submitted draft', as
     assert.equal((await HousingDraftService.locked(env.tx, 25)).status, 'SUBMITTED');
     assert.equal(env.writes.length, 0); assert.equal(env.payment.housingTenantId, 7);
   }
+});
+
+test('a purged prior stay reopens the submitted draft only when no payment remains consumed', async () => {
+  const env = rejectedDraftFixture(null, { housingTenantId: null });
+  const reopened = await HousingDraftService.locked(env.tx, 25);
+  assert.equal(reopened.status, 'OPEN');
+  assert.equal((env.writes[0] as { roomHoldExpiresAt: Date | null }).roomHoldExpiresAt, null);
+  assert.deepEqual(reopened.data, { activeStep: 0, personalInformation: { firstName: 'fixture' } });
+
+  const inconsistent = rejectedDraftFixture(null);
+  await assert.rejects(HousingDraftService.locked(inconsistent.tx, 25),
+    (error: unknown) => error instanceof AppError && error.statusCode === 409);
+  assert.equal(inconsistent.writes.length, 0);
 });
 
 test('Admin cannot approve an old rejected application while its owner is editing the reopened draft', async () => {

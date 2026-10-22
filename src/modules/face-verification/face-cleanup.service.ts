@@ -69,6 +69,27 @@ export class FaceCleanupService {
     logger.info({ userId }, 'Face enrollment restored after clean new application approval');
   }
 
+  static async restoreForReEnrollment(tx: Prisma.TransactionClient, userId: number) {
+    const owner = await tx.user.findUnique({
+      where: { id: userId },
+      select: { faceRevokedAt: true, tenant: { select: { id: true, status: true } } },
+    });
+    if (!owner?.tenant || !['APPROVED', 'ACTIVE'].includes(owner.tenant.status)) {
+      throw new AppError('Face re-enrollment is only available to an approved resident', 409);
+    }
+    if (!owner.faceRevokedAt) return;
+    const row = await tx.systemSetting.findUnique({ where: { key: `face-cleanup:user:${userId}` } });
+    const job = row?.category === FACE_CLEANUP_CATEGORY ? this.parse(row.value) : null;
+    if (!job || job.kind !== 'user' || job.id !== userId || job.phase !== 'DONE'
+      || await tx.faceEnrollmentPhoto.count({ where: { userId } }) !== 0
+      || await tx.faceEmbedding.count({ where: { userId } }) !== 0) {
+      throw new AppError('Old face data cleanup is still pending', 409);
+    }
+    await tx.accessLog.deleteMany({ where: { path: `/api/tenants/${owner.tenant.id}/face-enrollment/complete` } });
+    await tx.user.update({ where: { id: userId }, data: { faceRevokedAt: null } });
+    logger.info({ userId, tenantId: owner.tenant.id }, 'Face access restored for clean re-enrollment');
+  }
+
   static async status(taskKey: string, db: typeof prisma = prisma): Promise<CleanupTask> {
     if (/^retention-file:[a-f0-9]{64}$/u.test(taskKey)) {
       const file = await db.systemSetting.findUnique({ where: { key: taskKey } });

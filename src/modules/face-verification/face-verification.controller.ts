@@ -167,6 +167,20 @@ export class FaceVerificationController {
     }
   }
 
+  static async requestUserReEnrollment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = Number(req.params.userId);
+      if (!Number.isSafeInteger(userId) || userId <= 0 || userId >= 1000000) {
+        return res.status(400).json(createResponse(400, 'Invalid user ID'));
+      }
+      const data = await FaceVerificationService.requestUserReEnrollment(userId);
+      const status = data.reEnrollmentReady ? 200 : 202;
+      return res.status(status).json(createResponse(status, data.message, data));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ── New FaceGate.Edge Integration Endpoints ──
 
   static async embeddings(req: Request, res: Response, next: NextFunction) {

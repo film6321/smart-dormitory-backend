@@ -100,6 +100,7 @@ router.post('/history/clear', verifyToken, requireRole(['ADMIN']), FaceVerificat
 router.get('/events', verifyToken, requireRole(['ADMIN']), FaceVerificationController.events);
 
 // ── Template Management Endpoints ──
+router.post('/users/:userId/re-enrollment', verifyToken, requireRole(['ADMIN']), FaceVerificationController.requestUserReEnrollment);
 router.get('/cleanup', verifyToken, requireRole(['ADMIN']), FaceVerificationController.pendingCleanup);
 router.get('/cleanup/:taskKey', verifyToken, requireRole(['ADMIN']), FaceVerificationController.cleanupStatus);
 router.get('/:templateId', verifyToken, requireRole(['ADMIN']), FaceVerificationController.getTemplate);

@@ -90,6 +90,18 @@ export class HousingDraftService {
         const saved = draft.data && typeof draft.data === 'object' && !Array.isArray(draft.data) ? draft.data : {};
         draft = await tx.housingApplicationDraft.update({ where: { id: draft.id },
           data: { status: 'OPEN', version: { increment: 1 }, data: { ...saved, activeStep: 0 } } });
+      } else if (!tenant) {
+        // Admin purge removes the prior stay record and its consumed payments.
+        // Reopen only when any remaining draft credit is still owned by this user
+        // and is not linked to a bill, approved deposit, or prior tenant.
+        const payments = await tx.payment.findMany({ where: { housingDraftId: draft.id } });
+        if (payments.some(payment => payment.payerUserId !== userId || payment.billId !== null
+          || payment.housingApprovedAt !== null || payment.housingTenantId !== null)) {
+          throw new AppError('ข้อมูลชำระเงินเดิมต้องให้ผู้ดูแลตรวจสอบก่อนสมัครใหม่', 409);
+        }
+        const saved = draft.data && typeof draft.data === 'object' && !Array.isArray(draft.data) ? draft.data : {};
+        draft = await tx.housingApplicationDraft.update({ where: { id: draft.id },
+          data: { status: 'OPEN', roomHoldExpiresAt: null, version: { increment: 1 }, data: { ...saved, activeStep: 0 } } });
       }
     }
     if (draft.status === 'OPEN') {

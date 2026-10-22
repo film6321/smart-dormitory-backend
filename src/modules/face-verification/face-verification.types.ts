@@ -36,4 +36,5 @@ export interface FaceDeleteResponse {
   success: boolean;
   message: string;
   cleanup?: CleanupReceipt;
+  reEnrollmentReady?: boolean;
 }

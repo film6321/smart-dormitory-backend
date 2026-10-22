@@ -574,6 +574,40 @@ export class FaceVerificationService {
     return { success: true, message: task.status === 'COMPLETE' ? 'Face access revoked and enrollment data deleted' : 'Face access revoked; deletion pending retry', cleanup };
   }
 
+  static async requestUserReEnrollment(userId: number): Promise<FaceDeleteResponse> {
+    if (!Number.isSafeInteger(userId) || userId <= 0 || userId >= 1000000) {
+      throw new AppError('Invalid user ID', 400);
+    }
+    const tenant = await db.tenant.findUnique({ where: { userId }, select: { id: true, status: true } });
+    if (!tenant || !['APPROVED', 'ACTIVE'].includes(tenant.status)) {
+      throw new AppError('Face re-enrollment is only available to an approved resident', 409);
+    }
+    const taskKey = await db.$transaction(
+      tx => FaceCleanupService.enqueue(tx, { kind: 'user', id: userId }),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    let task = { taskKey, status: 'PENDING' as 'PENDING' | 'COMPLETE' };
+    let reEnrollmentReady = false;
+    try {
+      task = await FaceCleanupService.process(taskKey);
+      if (task.status === 'COMPLETE') {
+        await db.$transaction(tx => FaceCleanupService.restoreForReEnrollment(tx, userId));
+        reEnrollmentReady = true;
+      }
+    } catch (error) {
+      logger.warn({ error, userId, taskKey }, 'Face re-enrollment cleanup deferred');
+    }
+    const cleanup = { status: task.status, tasks: [task] };
+    return {
+      success: true,
+      reEnrollmentReady,
+      message: reEnrollmentReady
+        ? 'Old face data deleted; resident can register again'
+        : 'Face access revoked; old data cleanup is pending retry',
+      cleanup,
+    };
+  }
+
   // ── C# Edge integrations ──
 
   /**
